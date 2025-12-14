@@ -1,0 +1,31 @@
+# This file configures the analyzer for the PUSHIN MVP project.
+# https://dart.dev/guides/language/analysis-options
+
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - node_modules/**
+    - bmad-agents/**
+    - .bmad/**
+  
+  language:
+    strict-casts: false
+    strict-inference: false
+    strict-raw-types: false
+
+linter:
+  rules:
+    # Enabled rules
+    - prefer_const_constructors
+    - prefer_const_literals_to_create_immutables
+    - prefer_final_fields
+    - prefer_single_quotes
+    - sort_child_properties_last
+    - use_key_in_widget_constructors
+    - avoid_print
+    - prefer_const_constructors_in_immutables
+    
+    # Disabled rules (for MVP development)
+    # These can be re-enabled for production
+
