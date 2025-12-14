@@ -67,7 +67,7 @@ void main() {
       );
 
       controller.startWorkout(workout, baseTime);
-      
+
       // Simulate completing all reps
       for (int i = 0; i < 10; i++) {
         workoutService.recordRep(baseTime.add(Duration(seconds: i)));
@@ -78,8 +78,14 @@ void main() {
       expect(controller.currentState, equals(PushinState.unlocked));
       expect(unlockService.getCurrentSession(), isNotNull);
       expect(unlockService.getCurrentSession()!.durationSeconds, equals(180));
-      expect(controller.getBlockedTargets(baseTime.add(const Duration(seconds: 10))), isEmpty);
-      expect(controller.getAccessibleTargets(baseTime.add(const Duration(seconds: 10))), isNotEmpty);
+      expect(
+          controller
+              .getBlockedTargets(baseTime.add(const Duration(seconds: 10))),
+          isEmpty);
+      expect(
+          controller
+              .getAccessibleTargets(baseTime.add(const Duration(seconds: 10))),
+          isNotEmpty);
     });
 
     test('UnlockSession.durationSeconds equals Workout.earnedTimeSeconds', () {
@@ -91,7 +97,7 @@ void main() {
       );
 
       controller.startWorkout(workout, baseTime);
-      
+
       for (int i = 0; i < 10; i++) {
         workoutService.recordRep(baseTime.add(Duration(seconds: i)));
       }
@@ -113,7 +119,7 @@ void main() {
 
       final startTime = baseTime;
       controller.startWorkout(workout, startTime);
-      
+
       // Complete workout
       for (int i = 0; i < 10; i++) {
         workoutService.recordRep(startTime.add(Duration(seconds: i)));
@@ -121,7 +127,8 @@ void main() {
       controller.completeWorkout(startTime.add(const Duration(seconds: 10)));
 
       // Simulate time passing beyond unlock duration (180 seconds)
-      final expiredTime = startTime.add(const Duration(seconds: 191)); // 10s workout + 181s elapsed
+      final expiredTime = startTime
+          .add(const Duration(seconds: 191)); // 10s workout + 181s elapsed
       controller.tick(expiredTime);
 
       expect(controller.currentState, equals(PushinState.expired));
@@ -139,7 +146,7 @@ void main() {
 
       final startTime = baseTime;
       controller.startWorkout(workout, startTime);
-      
+
       for (int i = 0; i < 10; i++) {
         workoutService.recordRep(startTime.add(Duration(seconds: i)));
       }
@@ -174,7 +181,7 @@ void main() {
 
       final startTime = baseTime;
       controller.startWorkout(workout, startTime);
-      
+
       for (int i = 0; i < 10; i++) {
         workoutService.recordRep(startTime.add(Duration(seconds: i)));
       }
@@ -274,8 +281,14 @@ void main() {
       }
       controller.completeWorkout(baseTime.add(const Duration(seconds: 10)));
       expect(controller.currentState, equals(PushinState.unlocked));
-      expect(controller.getBlockedTargets(baseTime.add(const Duration(seconds: 10))), isEmpty);
-      expect(controller.getAccessibleTargets(baseTime.add(const Duration(seconds: 10))), isNotEmpty);
+      expect(
+          controller
+              .getBlockedTargets(baseTime.add(const Duration(seconds: 10))),
+          isEmpty);
+      expect(
+          controller
+              .getAccessibleTargets(baseTime.add(const Duration(seconds: 10))),
+          isNotEmpty);
 
       // EXPIRED state
       final expiredTime = baseTime.add(const Duration(seconds: 191));
@@ -294,17 +307,107 @@ void main() {
       );
 
       controller.startWorkout(workout, baseTime);
-      
+
       for (int i = 0; i < 10; i++) {
         workoutService.recordRep(baseTime.add(Duration(seconds: i)));
       }
       controller.completeWorkout(baseTime.add(const Duration(seconds: 10)));
 
       expect(controller.currentState, equals(PushinState.unlocked));
-      expect(controller.getBlockedTargets(baseTime.add(const Duration(seconds: 10))), isEmpty);
-      expect(controller.getAccessibleTargets(baseTime.add(const Duration(seconds: 10))), isNotEmpty);
-      expect(controller.getAccessibleTargets(baseTime.add(const Duration(seconds: 10))).length, equals(blockTargets.length));
+      expect(
+          controller
+              .getBlockedTargets(baseTime.add(const Duration(seconds: 10))),
+          isEmpty);
+      expect(
+          controller
+              .getAccessibleTargets(baseTime.add(const Duration(seconds: 10))),
+          isNotEmpty);
+      expect(
+          controller
+              .getAccessibleTargets(baseTime.add(const Duration(seconds: 10)))
+              .length,
+          equals(blockTargets.length));
+    });
+
+    test('getGracePeriodRemaining() returns correct countdown in EXPIRED state',
+        () {
+      final workout = Workout(
+        id: 'workout-1',
+        type: 'jumping_jacks',
+        targetReps: 10,
+        earnedTimeSeconds: 180,
+      );
+
+      // Complete workout and unlock
+      controller.startWorkout(workout, baseTime);
+      for (int i = 0; i < 10; i++) {
+        workoutService.recordRep(baseTime.add(Duration(seconds: i)));
+      }
+      controller.completeWorkout(baseTime.add(const Duration(seconds: 10)));
+
+      // Grace period returns 0 before entering EXPIRED state
+      expect(
+          controller.getGracePeriodRemaining(
+              baseTime.add(const Duration(seconds: 10))),
+          equals(0));
+
+      // Transition to EXPIRED (after 180 seconds unlock + 1 second)
+      final expiredTime = baseTime.add(const Duration(seconds: 191));
+      controller.tick(expiredTime);
+      expect(controller.currentState, equals(PushinState.expired));
+
+      // Grace period should be 5 seconds (full grace period)
+      expect(controller.getGracePeriodRemaining(expiredTime), equals(5));
+
+      // After 2 seconds into grace period
+      final gracePeriodTime2 = expiredTime.add(const Duration(seconds: 2));
+      expect(controller.getGracePeriodRemaining(gracePeriodTime2), equals(3));
+
+      // After 4 seconds into grace period
+      final gracePeriodTime4 = expiredTime.add(const Duration(seconds: 4));
+      expect(controller.getGracePeriodRemaining(gracePeriodTime4), equals(1));
+
+      // After 5 seconds (grace period fully elapsed)
+      final gracePeriodTime5 = expiredTime.add(const Duration(seconds: 5));
+      expect(controller.getGracePeriodRemaining(gracePeriodTime5), equals(0));
+
+      // After grace period ends, should still return 0 (clamped)
+      final gracePeriodTime6 = expiredTime.add(const Duration(seconds: 6));
+      expect(controller.getGracePeriodRemaining(gracePeriodTime6), equals(0));
+
+      // Transition to LOCKED should clear grace period
+      controller.tick(gracePeriodTime5);
+      expect(controller.currentState, equals(PushinState.locked));
+      expect(controller.getGracePeriodRemaining(gracePeriodTime5), equals(0));
+    });
+
+    test('getGracePeriodRemaining() returns 0 when not in EXPIRED state', () {
+      final workout = Workout(
+        id: 'workout-1',
+        type: 'jumping_jacks',
+        targetReps: 10,
+        earnedTimeSeconds: 180,
+      );
+
+      // LOCKED state
+      expect(controller.getGracePeriodRemaining(baseTime), equals(0));
+
+      // EARNING state
+      controller.startWorkout(workout, baseTime);
+      expect(
+          controller.getGracePeriodRemaining(
+              baseTime.add(const Duration(seconds: 5))),
+          equals(0));
+
+      // UNLOCKED state
+      for (int i = 0; i < 10; i++) {
+        workoutService.recordRep(baseTime.add(Duration(seconds: i)));
+      }
+      controller.completeWorkout(baseTime.add(const Duration(seconds: 10)));
+      expect(
+          controller.getGracePeriodRemaining(
+              baseTime.add(const Duration(seconds: 50))),
+          equals(0));
     });
   });
 }
-

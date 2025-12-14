@@ -112,4 +112,16 @@ class PushinController {
 
   int getUnlockTimeRemaining(DateTime now) =>
       _unlockService.getRemainingSeconds(now);
+
+  /// Get remaining grace period time in seconds
+  /// Returns 0 if not in EXPIRED state or grace period has elapsed
+  /// Derived from internal _expiredAt and _gracePeriodSeconds tracking
+  int getGracePeriodRemaining(DateTime now) {
+    if (_expiredAt == null) return 0;
+
+    final elapsedSeconds = now.difference(_expiredAt!).inSeconds;
+    final remaining = _gracePeriodSeconds - elapsedSeconds;
+
+    return remaining > 0 ? remaining : 0;
+  }
 }
