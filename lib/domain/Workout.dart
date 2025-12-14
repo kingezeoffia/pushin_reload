@@ -13,9 +13,9 @@ class Workout {
     required this.targetReps,
     required this.earnedTimeSeconds,
     this.metadata,
-  }) : assert(targetReps > 0, 'targetReps must be positive'),
-       assert(earnedTimeSeconds > 0, 'earnedTimeSeconds must be positive'),
-       assert(type.isNotEmpty, 'type cannot be empty');
+  })  : assert(targetReps > 0, 'targetReps must be positive'),
+        assert(earnedTimeSeconds > 0, 'earnedTimeSeconds must be positive'),
+        assert(type.isNotEmpty, 'type cannot be empty');
 
   factory Workout.fromJson(Map<String, dynamic> json) {
     return Workout(
@@ -38,14 +38,14 @@ class Workout {
   }
 
   @override
-  String toString() => 'Workout(id: $id, type: $type, targetReps: $targetReps, earnedTimeSeconds: $earnedTimeSeconds)';
+  String toString() =>
+      'Workout(id: $id, type: $type, targetReps: $targetReps, earnedTimeSeconds: $earnedTimeSeconds)';
 
   @override
-  bool operator ==(Object other) => 
-    identical(this, other) || 
-    other is Workout && runtimeType == other.runtimeType && id == other.id;
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Workout && runtimeType == other.runtimeType && id == other.id;
 
   @override
   int get hashCode => id.hashCode;
 }
-

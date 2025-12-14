@@ -11,17 +11,17 @@ class UnlockSession {
     required this.startTime,
     required this.durationSeconds,
     required this.reason,
-  }) : assert(durationSeconds > 0, 'durationSeconds must be positive'),
-       assert(reason.isNotEmpty, 'reason cannot be empty');
+  })  : assert(durationSeconds > 0, 'durationSeconds must be positive'),
+        assert(reason.isNotEmpty, 'reason cannot be empty');
 
   // Pure calculations - no side effects
   DateTime get endTime => startTime.add(Duration(seconds: durationSeconds));
-  
+
   int getRemainingSeconds(DateTime now) {
     final remaining = endTime.difference(now).inSeconds;
     return remaining > 0 ? remaining : 0;
   }
-  
+
   bool isExpired(DateTime now) => now.isAfter(endTime);
 
   factory UnlockSession.fromJson(Map<String, dynamic> json) {
@@ -43,14 +43,16 @@ class UnlockSession {
   }
 
   @override
-  String toString() => 'UnlockSession(id: $id, durationSeconds: $durationSeconds, reason: $reason)';
+  String toString() =>
+      'UnlockSession(id: $id, durationSeconds: $durationSeconds, reason: $reason)';
 
   @override
-  bool operator ==(Object other) => 
-    identical(this, other) || 
-    other is UnlockSession && runtimeType == other.runtimeType && id == other.id;
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is UnlockSession &&
+          runtimeType == other.runtimeType &&
+          id == other.id;
 
   @override
   int get hashCode => id.hashCode;
 }
-

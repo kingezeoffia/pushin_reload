@@ -7,7 +7,8 @@ class MockUnlockService implements UnlockService {
   UnlockSession? _currentSession;
 
   @override
-  void recordUnlockStart(int durationSeconds, String reason, DateTime startTime) {
+  void recordUnlockStart(
+      int durationSeconds, String reason, DateTime startTime) {
     _currentSession = UnlockSession(
       id: 'session-${startTime.millisecondsSinceEpoch}',
       startTime: startTime,
@@ -36,4 +37,3 @@ class MockUnlockService implements UnlockService {
   @override
   UnlockSession? getCurrentSession() => _currentSession;
 }
-

@@ -28,7 +28,8 @@ class MockWorkoutTrackingService implements WorkoutTrackingService {
 
   @override
   bool isCompleted(DateTime now) {
-    return _currentWorkout != null && _completedReps >= _currentWorkout!.targetReps;
+    return _currentWorkout != null &&
+        _completedReps >= _currentWorkout!.targetReps;
   }
 
   @override
@@ -40,4 +41,3 @@ class MockWorkoutTrackingService implements WorkoutTrackingService {
   @override
   Workout? getCurrentWorkout() => _currentWorkout;
 }
-
