@@ -1,0 +1,28 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+pubspec.lock
+build/
+ios/Pods/
+android/.gradle/
+*.jks
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# BMAD Method
+.cursor/
