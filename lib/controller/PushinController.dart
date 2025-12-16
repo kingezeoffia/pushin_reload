@@ -113,6 +113,9 @@ class PushinController {
   int getUnlockTimeRemaining(DateTime now) =>
       _unlockService.getRemainingSeconds(now);
 
+  /// Expose workout service for manual rep recording
+  WorkoutTrackingService get workoutService => _workoutService;
+
   /// Get remaining grace period time in seconds
   /// Returns 0 if not in EXPIRED state or grace period has elapsed
   /// Derived from internal _expiredAt and _gracePeriodSeconds tracking

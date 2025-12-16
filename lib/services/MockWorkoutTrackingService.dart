@@ -20,6 +20,13 @@ class MockWorkoutTrackingService implements WorkoutTrackingService {
     }
   }
 
+  /// Record multiple reps at once (for manual completion)
+  void recordReps(int count, DateTime timestamp) {
+    if (_currentWorkout != null) {
+      _completedReps += count;
+    }
+  }
+
   @override
   double getProgress(DateTime now) {
     if (_currentWorkout == null) return 0.0;

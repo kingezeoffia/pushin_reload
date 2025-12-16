@@ -45,5 +45,30 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSFamilyControlsUsageDescription</key>
+	<string>PUSHIN uses Screen Time to help you manage app usage and achieve your fitness goals. Your data stays private on your device.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>PUSHIN uses the camera to detect your push-up workouts and track your progress.</string>
+
+	<!-- Deep Link Configuration -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.pushin.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>pushinapp</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- Associated Domains for Universal Links -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:pushin-production.up.railway.app</string>
+	</array>
 </dict>
 </plist>
