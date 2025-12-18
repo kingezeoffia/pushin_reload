@@ -19,7 +19,12 @@ const app = express();
 // PostgreSQL connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+});
+
+// Log successful database connection
+pool.on('connect', () => {
+  console.log('✅ Connected to Railway PostgreSQL database');
 });
 
 // JWT configuration
@@ -95,7 +100,7 @@ async function initDatabase() {
       )
     `);
 
-    console.log('✅ Database tables initialized');
+    console.log('✅ Database connected and tables initialized');
   } catch (error) {
     console.error('❌ Database initialization error:', error);
   }
