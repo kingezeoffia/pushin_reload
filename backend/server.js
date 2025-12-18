@@ -72,7 +72,7 @@ app.use(cors({
 }));
 
 // JSON parser for most routes
-app.use(bodyParser.json());
+app.use(express.json());
 
 // Initialize database tables
 async function initDatabase() {
@@ -165,6 +165,7 @@ initDatabase();
 // Register with email and password
 app.post('/api/auth/register', async (req, res) => {
   try {
+    console.log('Register request body:', req.body);
     const { email, password, name } = req.body;
 
     if (!email || !password) {
@@ -229,6 +230,7 @@ app.post('/api/auth/register', async (req, res) => {
 // Login with email and password
 app.post('/api/auth/login', async (req, res) => {
   try {
+    console.log('Login request body:', req.body);
     const { email, password } = req.body;
 
     if (!email || !password) {

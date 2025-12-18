@@ -1,6 +1,6 @@
 [build]
 builder = "NIXPACKS"
-root = "."
+root = "backend"
 
 [deploy]
 startCommand = "npm start"
@@ -15,6 +15,3 @@ NODE_ENV = "production"
 [environments.production.variables]
 NODE_ENV = "production"
 PORT = "3000"
-
-
-
