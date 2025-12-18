@@ -43,6 +43,8 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
   bool _isDetecting = false;
   int _detectedReps = 0;
   bool _showInstructions = true;
+  bool _hasCompleted = false;
+  CameraLensDirection _currentCameraDirection = CameraLensDirection.front;
 
   // Mock push-up detection for demo
   static const int _targetReps = 3;
@@ -89,14 +91,14 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
         return;
       }
 
-      // Use front camera for push-up detection
-      final frontCamera = cameras.firstWhere(
-        (camera) => camera.lensDirection == CameraLensDirection.front,
+      // Use selected camera direction
+      final selectedCamera = cameras.firstWhere(
+        (camera) => camera.lensDirection == _currentCameraDirection,
         orElse: () => cameras.first,
       );
 
       _cameraController = CameraController(
-        frontCamera,
+        selectedCamera,
         ResolutionPreset.medium,
         enableAudio: false,
       );
@@ -118,7 +120,23 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
       _isDetecting = false;
       _detectedReps = 0;
       _showInstructions = true;
+      _hasCompleted = false;
     });
+  }
+
+  void _switchCamera() async {
+    // Dispose current camera
+    await _cameraController?.dispose();
+    setState(() => _isCameraInitialized = false);
+
+    // Toggle camera direction
+    _currentCameraDirection =
+        _currentCameraDirection == CameraLensDirection.front
+            ? CameraLensDirection.back
+            : CameraLensDirection.front;
+
+    // Initialize new camera
+    await _initializeCamera();
   }
 
   void _startDetection() {
@@ -153,15 +171,14 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
     await Future.delayed(const Duration(milliseconds: 800));
 
     // Stop detection and navigate to success screen
-    if (mounted) {
+    if (mounted && !_hasCompleted) {
+      _hasCompleted = true;
       setState(() => _isDetecting = false);
       _showSuccessScreen();
     }
   }
 
   void _showSuccessScreen() {
-    HapticFeedback.heavyImpact();
-
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -179,10 +196,10 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
   void _manualRepCount() async {
     if (_detectedReps < _targetReps) {
       setState(() => _detectedReps++);
-      HapticFeedback.lightImpact();
     }
 
-    if (_detectedReps >= _targetReps) {
+    if (_detectedReps >= _targetReps && !_hasCompleted) {
+      _hasCompleted = true;
       // Brief pause to let user register the final "3" rep
       await Future.delayed(const Duration(milliseconds: 800));
       if (mounted) {
@@ -218,12 +235,20 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
     final previewSize = _cameraController!.value.previewSize!;
 
     return Positioned.fill(
-      child: FittedBox(
-        fit: BoxFit.cover, // Fill width, crop top/bottom to avoid side bars
-        child: SizedBox(
-          width: previewSize.height, // Swapped due to camera sensor orientation
-          height: previewSize.width,
-          child: CameraPreview(_cameraController!),
+      child: AspectRatio(
+        aspectRatio: previewSize.width / previewSize.height,
+        child: ClipRect(
+          child: OverflowBox(
+            alignment: Alignment.center,
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: previewSize.height,
+                height: previewSize.width,
+                child: CameraPreview(_cameraController!),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -365,17 +390,17 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                           ),
                                           const SizedBox(height: 16),
                                           Text(
-                                            'Position your phone',
+                                            'Get in Push-Up position',
                                             style: TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w600,
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.w700,
                                               color: Colors.white,
                                               letterSpacing: -0.3,
                                             ),
                                           ),
-                                          const SizedBox(height: 8),
+                                          const SizedBox(height: 1),
                                           Text(
-                                            'Place phone 2-3 feet away, angled up slightly',
+                                            'Place phone angled up slightly',
                                             style: TextStyle(
                                               fontSize: 14,
                                               color:
@@ -383,28 +408,6 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                               letterSpacing: -0.2,
                                             ),
                                             textAlign: TextAlign.center,
-                                          ),
-                                          const SizedBox(height: 24),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 16,
-                                              vertical: 8,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  Colors.white.withOpacity(0.1),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                            ),
-                                            child: Text(
-                                              'Get in push-up position',
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                color: Colors.white
-                                                    .withOpacity(0.8),
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
                                           ),
                                         ],
                                       ),
@@ -460,39 +463,27 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                 if (_isCameraInitialized)
                                   Positioned(
                                     top: 16,
-                                    left: 16,
                                     right: 16,
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Icon(
-                                          Icons.camera_alt_rounded,
-                                          color: Colors.white.withOpacity(0.5),
-                                          size: 20,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.5),
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Text(
+                                        _currentCameraDirection ==
+                                                CameraLensDirection.front
+                                            ? 'Front Camera'
+                                            : 'Back Camera',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.white.withOpacity(0.8),
+                                          fontWeight: FontWeight.w500,
                                         ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 6,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color:
-                                                Colors.black.withOpacity(0.5),
-                                            borderRadius:
-                                                BorderRadius.circular(16),
-                                          ),
-                                          child: Text(
-                                            'Front Camera',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color:
-                                                  Colors.white.withOpacity(0.8),
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                      ),
                                     ),
                                   ),
                               ],
@@ -532,9 +523,9 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                               ),
                             ),
                             const SizedBox(width: 12),
-                            // Manual Count Button
+                            // Camera Switch Button
                             GestureDetector(
-                              onTap: _manualRepCount,
+                              onTap: _switchCamera,
                               child: Container(
                                 width: 52,
                                 height: 52,
@@ -542,8 +533,8 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                   color: Colors.white.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(26),
                                 ),
-                                child: const Icon(
-                                  Icons.add,
+                                child: Icon(
+                                  Icons.flip_camera_ios,
                                   color: Colors.white,
                                   size: 24,
                                 ),
@@ -552,36 +543,15 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                           ],
                         )
                       else
-                        // Progress indicator
+                        // Manual Count Button
                         Container(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Detecting push-ups...',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.white.withOpacity(0.8),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    const Color(0xFF6060FF).withOpacity(0.8),
-                                  ),
-                                ),
-                              ),
-                            ],
+                          padding: const EdgeInsets.only(top: 8, bottom: 8),
+                          child: Center(
+                            child: _ManualCountButton(onTap: _manualRepCount),
                           ),
                         ),
 
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 8),
 
                       // Info text
                       if (!_isCameraInitialized)
@@ -620,7 +590,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
               // Skip for now button (minimal, non-prominent)
               Center(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.only(top: 8, bottom: 12),
                   child: GestureDetector(
                     onTap: _continueToNextScreen,
                     child: Text(
@@ -693,6 +663,63 @@ class _BackButton extends StatelessWidget {
           Icons.arrow_back,
           color: Colors.white,
           size: 22,
+        ),
+      ),
+    );
+  }
+}
+
+/// Manual Count Button with light-up effect
+class _ManualCountButton extends StatefulWidget {
+  final VoidCallback onTap;
+
+  const _ManualCountButton({required this.onTap});
+
+  @override
+  State<_ManualCountButton> createState() => _ManualCountButtonState();
+}
+
+class _ManualCountButtonState extends State<_ManualCountButton> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) => setState(() => _isPressed = false),
+      onTapCancel: () => setState(() => _isPressed = false),
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        widget.onTap();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        width: 48,
+        height: 48,
+        transform: Matrix4.identity()..scale(_isPressed ? 0.95 : 1.0),
+        transformAlignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _isPressed
+              ? Colors.white.withOpacity(0.3) // Brighter when pressed
+              : Colors.white.withOpacity(0.1), // Normal state
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: _isPressed
+              ? [
+                  BoxShadow(
+                    color: Colors.white.withOpacity(0.4),
+                    blurRadius: 12,
+                    spreadRadius: 2,
+                  ),
+                ]
+              : null,
+        ),
+        child: const Center(
+          child: Icon(
+            Icons.add,
+            size: 28,
+            color: Colors.white,
+          ),
         ),
       ),
     );

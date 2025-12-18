@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../services/OnboardingService.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 
@@ -147,8 +148,7 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
                     _RuleItem(
                       icon: Icons.timer,
                       title: 'Temporary Access',
-                      description:
-                          'Customizable duration',
+                      description: 'Customizable duration',
                     ),
                     const SizedBox(height: 16),
                     _RuleItem(
@@ -166,12 +166,10 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
                 child: _ContinueButton(
-                  onTap: () {
-                    Navigator.pushNamedAndRemoveUntil(
-                      context,
-                      '/home',
-                      (route) => false, // Remove all previous routes
-                    );
+                  onTap: () async {
+                    // Mark onboarding as completed - this will trigger the callback
+                    // that switches the app to main app mode
+                    await OnboardingService.markOnboardingCompleted();
                   },
                 ),
               ),

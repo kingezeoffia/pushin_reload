@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../services/StripeCheckoutService.dart';
+import '../../../services/OnboardingService.dart';
 import '../../../controller/PushinAppController.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../HomeScreen.dart';
@@ -353,13 +354,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
     );
   }
 
-  void _skipTrial() {
-    // Navigate to home screen without subscription
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const HomeScreen()),
-      (route) => false,
-    );
+  void _skipTrial() async {
+    // Mark onboarding as completed before transitioning to main app
+    await OnboardingService.markOnboardingCompleted();
+    // The callback will handle switching to main app
   }
 
   void _handleSubscribe(BuildContext context) async {
@@ -889,17 +887,15 @@ class _PaymentSuccessOverlay extends StatelessWidget {
                 ),
                 const SizedBox(height: 48),
                 GestureDetector(
-                  onTap: () {
+                  onTap: () async {
                     context
                         .read<PushinAppController>()
                         .paymentSuccessState
                         .value = null;
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => const HomeScreen()),
-                      (route) => false,
-                    );
+
+                    // Mark onboarding as completed before transitioning to main app
+                    await OnboardingService.markOnboardingCompleted();
+                    // The callback will handle switching to main app
                   },
                   child: Container(
                     width: double.infinity,

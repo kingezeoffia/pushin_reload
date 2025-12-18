@@ -9,7 +9,7 @@ import 'HowItWorksBlockAppsScreen.dart';
 ///
 /// BMAD V6 Spec:
 /// - Question: How long have you been working out?
-/// - Options: Just starting, Few months, 1+ year, Since forever
+/// - Options: Just starting, Few months, 1 year, Since forever
 class OnboardingWorkoutHistoryScreen extends StatefulWidget {
   final String fitnessLevel;
   final List<String> goals;
@@ -129,10 +129,10 @@ class _OnboardingWorkoutHistoryScreenState
                         const SizedBox(width: 16),
                         Expanded(
                           child: SelectionButton(
-                            label: 'Few months',
-                            isSelected: _selectedHistory == 'few_months',
+                            label: '3-6 months',
+                            isSelected: _selectedHistory == '3_6_months',
                             onTap: () =>
-                                setState(() => _selectedHistory = 'few_months'),
+                                setState(() => _selectedHistory = '3_6_months'),
                           ),
                         ),
                       ],
@@ -142,19 +142,19 @@ class _OnboardingWorkoutHistoryScreenState
                       children: [
                         Expanded(
                           child: SelectionButton(
-                            label: '1+ year',
-                            isSelected: _selectedHistory == '1_year',
-                            onTap: () =>
-                                setState(() => _selectedHistory = '1_year'),
+                            label: '6-12 months',
+                            isSelected: _selectedHistory == '6_12_months',
+                            onTap: () => setState(
+                                () => _selectedHistory = '6_12_months'),
                           ),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
                           child: SelectionButton(
-                            label: 'Since forever',
-                            isSelected: _selectedHistory == 'forever',
-                            onTap: () =>
-                                setState(() => _selectedHistory = 'forever'),
+                            label: '1+ years',
+                            isSelected: _selectedHistory == '1_plus_years',
+                            onTap: () => setState(
+                                () => _selectedHistory = '1_plus_years'),
                           ),
                         ),
                       ],

@@ -16,3 +16,11 @@ Add your custom workout icons here as PNG files:
 
 ## Current Fallback:
 If an icon file is missing, the app will show a default fitness icon as fallback.
+
+
+
+
+
+
+
+

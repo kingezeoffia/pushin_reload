@@ -112,11 +112,12 @@ class _HowItWorksExerciseScreenState extends State<HowItWorksExerciseScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Choose your workout',
+                      'Choose your workout to earn screen time',
                       style: TextStyle(
                         fontSize: 15,
                         color: Colors.white.withOpacity(0.6),
                         letterSpacing: -0.2,
+                        height: 1.4,
                       ),
                     ),
                   ],

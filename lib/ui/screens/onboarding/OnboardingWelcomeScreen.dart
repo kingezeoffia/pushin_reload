@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import 'OnboardingFitnessLevelScreen.dart';
+import '../auth/SignUpScreen.dart';
 
 /// Screen 1: Welcome to PUSHIN'
 ///
@@ -135,8 +135,7 @@ class OnboardingWelcomeScreen extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) =>
-                            const OnboardingFitnessLevelScreen(),
+                        builder: (context) => const SignUpScreen(),
                       ),
                     );
                   },

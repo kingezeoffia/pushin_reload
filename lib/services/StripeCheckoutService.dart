@@ -15,12 +15,13 @@ class StripeCheckoutService {
   final String baseUrl;
   final bool isTestMode;
 
-  // Replace with your backend URL
+  // Backend API URLs
   // Dev: http://localhost:3000/api
   // Test: https://your-test-backend.up.railway.app/api
-  // Prod: https://api.pushinapp.com/api
+  // Prod: Set via environment or update this URL after deployment
   StripeCheckoutService({
-    this.baseUrl = 'https://pushin-production.up.railway.app/api',
+    this.baseUrl =
+        'https://pushin-production.up.railway.app/api', // Update with your Railway domain
     this.isTestMode = false,
   });
 

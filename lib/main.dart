@@ -1,19 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'controller/PushinAppController.dart';
-import 'domain/AppBlockTarget.dart';
-import 'services/MockWorkoutTrackingService.dart';
-import 'services/MockUnlockService.dart';
-import 'services/MockAppBlockingService.dart';
 import 'services/DailyUsageTracker.dart';
-import 'services/WorkoutRewardCalculator.dart';
-import 'ui/screens/HomeScreen.dart';
-import 'ui/screens/onboarding/OnboardingWelcomeScreen.dart';
-import 'ui/screens/workout/WorkoutSelectionScreen.dart';
-import 'ui/screens/settings/SettingsScreen.dart';
-import 'ui/screens/settings/ManageAppsScreen.dart';
-import 'ui/screens/paywall/PaywallScreen.dart';
-import 'ui/theme/pushin_theme.dart';
+import 'services/AuthStateProvider.dart';
+import 'ui/AppRouter.dart';
 
 /// PUSHIN MVP - Main Entry Point
 ///
@@ -22,6 +11,7 @@ import 'ui/theme/pushin_theme.dart';
 /// - Daily usage tracking with plan-based caps
 /// - Workout reward calculation
 /// - GO Club-inspired dark theme
+/// - Proper onboarding separation from main app
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -32,7 +22,7 @@ void main() async {
   runApp(PushinApp(usageTracker: usageTracker));
 }
 
-class PushinApp extends StatelessWidget {
+class PushinApp extends StatefulWidget {
   final DailyUsageTracker? usageTracker;
 
   const PushinApp({
@@ -41,58 +31,52 @@ class PushinApp extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<PushinApp> createState() => _PushinAppState();
+}
+
+class _PushinAppState extends State<PushinApp> {
+  late final AuthStateProvider _authProvider;
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _authProvider = AuthStateProvider();
+    // Initialize auth provider on app startup
+    _initializeAuth();
+  }
+
+  Future<void> _initializeAuth() async {
+    await _authProvider.initialize();
+    if (mounted) {
+      setState(() {
+        _isInitialized = true;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Initialize services (mock implementations for MVP)
-    final workoutService = MockWorkoutTrackingService();
-    final unlockService = MockUnlockService();
-    final blockingService = MockAppBlockingService();
-    final rewardCalculator = WorkoutRewardCalculator();
-
-    // Define block targets
-    final blockTargets = [
-      AppBlockTarget(
-        id: 'target-1',
-        name: 'Instagram',
-        type: 'app',
-        platformAgnosticIdentifier: 'com.instagram.android',
-      ),
-      AppBlockTarget(
-        id: 'target-2',
-        name: 'TikTok',
-        type: 'app',
-        platformAgnosticIdentifier: 'com.tiktok.app',
-      ),
-    ];
-
-    // Create PushinAppController
-    final appController = PushinAppController(
-      workoutService: workoutService,
-      unlockService: unlockService,
-      blockingService: blockingService,
-      blockTargets: blockTargets,
-      usageTracker: usageTracker,
-      rewardCalculator: rewardCalculator,
-      gracePeriodSeconds: 30, // Free plan: 30 seconds
-    );
-
-    // Initialize controller
-    appController.initialize();
-
-    return ChangeNotifierProvider.value(
-      value: appController,
-      child: MaterialApp(
-        title: 'PUSHIN\'',
+    // Show loading screen until auth is initialized
+    if (!_isInitialized) {
+      return const MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: PushinTheme.darkTheme,
-        initialRoute: '/onboarding',
-        routes: {
-          '/onboarding': (context) => OnboardingWelcomeScreen(),
-          '/home': (context) => HomeScreen(),
-          '/workout-selection': (context) => WorkoutSelectionScreen(),
-          '/settings': (context) => SettingsScreen(),
-          '/paywall': (context) => PaywallScreen(),
-        },
-      ),
+        home: Scaffold(
+          backgroundColor: Colors.black,
+          body: Center(
+            child: CircularProgressIndicator(
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: _authProvider),
+      ],
+      child: AppRouter(usageTracker: widget.usageTracker),
     );
   }
 }

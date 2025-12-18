@@ -8,9 +8,9 @@ import 'HowItWorksEmergencyUnlockScreen.dart';
 /// Step 3: Unlock Duration
 ///
 /// BMAD V6 Spec:
-/// - Slider with range from 15 minutes to 60 minutes (1 hour max)
+/// - Slider with range from 5 minutes to 60 minutes (1 hour max)
 /// - Controls unlock duration (NOT tied to rep count)
-/// - Updated recommendation: 15-30 or 30-45 minutes
+/// - Updated recommendation: 5-30 or 30-45 minutes
 class HowItWorksUnlockDurationScreen extends StatefulWidget {
   final String fitnessLevel;
   final List<String> goals;
@@ -36,7 +36,7 @@ class HowItWorksUnlockDurationScreen extends StatefulWidget {
 
 class _HowItWorksUnlockDurationScreenState
     extends State<HowItWorksUnlockDurationScreen> {
-  double _unlockDuration = 15.0; // Start at minimum (15 minutes)
+  double _unlockDuration = 5.0; // Start at minimum (5 minutes)
 
   String get _durationText {
     final minutes = _unlockDuration.round();
@@ -174,17 +174,18 @@ class _HowItWorksUnlockDurationScreenState
                       ),
                       child: Slider(
                         value: _unlockDuration,
-                        min: 15,
+                        min: 5,
                         max: 60, // Max 1 hour
-                        divisions: 9, // 15-minute intervals (15, 30, 45, 60)
+                        divisions:
+                            11, // 5-minute intervals (5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60)
                         onChanged: (value) {
-                          // Snap to nearest 15 minutes
-                          final snapped = (value / 15).round() * 15.0;
+                          // Snap to nearest 5 minutes
+                          final snapped = (value / 5).round() * 5.0;
                           if (snapped != _unlockDuration) {
                             HapticFeedback.selectionClick();
                           }
                           setState(
-                              () => _unlockDuration = snapped.clamp(15, 60));
+                              () => _unlockDuration = snapped.clamp(5, 60));
                         },
                       ),
                     ),
@@ -195,7 +196,7 @@ class _HowItWorksUnlockDurationScreenState
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            '15 min',
+                            '5 min',
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.white.withOpacity(0.4),

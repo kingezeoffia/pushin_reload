@@ -5,6 +5,7 @@ import '../../domain/PushinState.dart';
 import '../../services/StripeCheckoutService.dart';
 import '../theme/pushin_theme.dart';
 import '../widgets/AppBlockOverlay.dart';
+import '../widgets/DevTools.dart'; // TEMPORARY: Remove before production
 import 'paywall/PaywallScreen.dart';
 
 /// Home screen showing current state and actions.
@@ -52,6 +53,9 @@ class HomeScreen extends StatelessWidget {
               return const SizedBox.shrink();
             },
           ),
+
+          // TEMPORARY: Development tools - REMOVE BEFORE PRODUCTION
+          const DevTools(),
 
           // Payment success overlay
           ValueListenableBuilder<SubscriptionStatus?>(
