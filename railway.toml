@@ -2,5 +2,6 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "node index.js"
+# Start Railway from backend folder
+startCommand = "node backend/index.js"
 healthcheckPath = "/api/health"
