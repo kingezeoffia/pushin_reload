@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../services/OnboardingService.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
+import 'HowItWorksReviewScreen.dart';
 
 /// Step 4: Emergency Unlock
 ///
@@ -29,6 +29,7 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
     required this.selectedWorkout,
     required this.unlockDuration,
   });
+
 
   @override
   Widget build(BuildContext context) {
@@ -166,10 +167,22 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
                 child: _ContinueButton(
-                  onTap: () async {
-                    // Mark onboarding as completed - this will trigger the callback
-                    // that switches the app to main app mode
-                    await OnboardingService.markOnboardingCompleted();
+                  onTap: () {
+                    // Navigate to review screen
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => HowItWorksReviewScreen(
+                          fitnessLevel: fitnessLevel,
+                          goals: goals,
+                          otherGoal: otherGoal,
+                          workoutHistory: workoutHistory,
+                          blockedApps: blockedApps,
+                          selectedWorkout: selectedWorkout,
+                          unlockDuration: unlockDuration,
+                        ),
+                      ),
+                    );
                   },
                 ),
               ),
