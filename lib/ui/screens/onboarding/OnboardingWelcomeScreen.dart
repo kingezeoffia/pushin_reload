@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
+import '../auth/SignUpScreen.dart';
 
 /// Screen 1: Welcome to PUSHIN'
 ///
@@ -135,17 +136,14 @@ class OnboardingWelcomeScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(32),
                 child: _PrimaryButton(
                   label: 'Get Started',
-                  onTap: () {
-                    if (onGetStarted != null) {
-                      onGetStarted!();
-                    } else {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const SignUpScreen(),
-                        ),
-                      );
-                    }
+                  onTap: onGetStarted ?? () {
+                    // Default behavior for first-time users: go to Sign Up
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SignUpScreen(),
+                      ),
+                    );
                   },
                 ),
               ),
