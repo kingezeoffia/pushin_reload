@@ -1,11 +1,9 @@
 {
-  "name": "pushin-stripe-api",
+  "name": "pushin_stripe_api",
   "version": "1.0.0",
-  "description": "PUSHIN' Stripe Web Checkout Backend API",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node server.js"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -13,39 +11,12 @@
   "dependencies": {
     "express": "^4.18.2",
     "stripe": "^14.9.0",
-    "body-parser": "^1.20.2",
     "cors": "^2.8.5",
+    "body-parser": "^1.20.2",
     "pg": "^8.11.3",
     "jsonwebtoken": "^9.0.2",
     "bcrypt": "^5.1.1",
     "jwk-to-pem": "^2.0.5",
     "axios": "^1.6.2"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
-  },
-  "keywords": ["stripe", "subscription", "checkout", "pushin"],
-  "author": "PUSHIN' Team",
-  "license": "MIT"
+  }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
