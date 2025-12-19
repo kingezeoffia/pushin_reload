@@ -16,10 +16,7 @@ const cors = require('cors');
 
 const app = express();
 
-// PostgreSQL connection
-console.log('🔍 DATABASE_URL present:', !!process.env.DATABASE_URL);
-console.log('🔍 DATABASE_URL starts with:', process.env.DATABASE_URL?.substring(0, 20) + '...');
-
+// PostgreSQL connection - Always use Railway's DATABASE_URL
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
@@ -27,15 +24,15 @@ const pool = new Pool({
   }
 });
 
-// Log successful database connection
-pool.on('connect', () => {
-  console.log('✅ Connected to Railway PostgreSQL database');
-});
-
-// Log connection errors
-pool.on('error', (err) => {
-  console.error('❌ Unexpected error on idle client:', err);
-});
+// Test database connection on startup
+pool.connect()
+  .then(client => {
+    console.log("✅ Connected to PostgreSQL");
+    client.release();
+  })
+  .catch(err => {
+    console.error("❌ PostgreSQL connection error:", err);
+  });
 
 // JWT configuration
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
