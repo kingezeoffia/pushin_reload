@@ -1,7 +1,7 @@
 [build]
 builder = "NIXPACKS"
-root = "backend"
 
 [deploy]
+# Da Railway nun im backend/ arbeitet, ändert sich der Einstieg
 startCommand = "npm start"
 healthcheckPath = "/api/health"
