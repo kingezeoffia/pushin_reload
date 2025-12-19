@@ -3,8 +3,6 @@ import 'package:provider/provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../../services/AuthStateProvider.dart';
-import '../onboarding/OnboardingFitnessLevelScreen.dart';
-import '../HomeScreen.dart';
 import 'SignUpScreen.dart';
 
 /// Sign In Screen - Email/Password authentication
@@ -354,34 +352,6 @@ class _SignInScreenState extends State<SignInScreen> {
                   ),
                 ),
 
-                // Skip Sign In (minimal, non-prominent) - matches SignUpScreen spacing
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: GestureDetector(
-                      onTap: () {
-                        // TODO: Implement skip functionality similar to SignUpScreen
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const OnboardingFitnessLevelScreen(),
-                          ),
-                        );
-                      },
-                      child: Text(
-                        'Skip Sign In',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white.withOpacity(0.35),
-                          fontWeight: FontWeight.w500,
-                          decoration: TextDecoration.underline,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
