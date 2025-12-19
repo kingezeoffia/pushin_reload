@@ -17,6 +17,9 @@ const cors = require('cors');
 const app = express();
 
 // PostgreSQL connection
+console.log('🔍 DATABASE_URL present:', !!process.env.DATABASE_URL);
+console.log('🔍 DATABASE_URL starts with:', process.env.DATABASE_URL?.substring(0, 20) + '...');
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
@@ -25,6 +28,11 @@ const pool = new Pool({
 // Log successful database connection
 pool.on('connect', () => {
   console.log('✅ Connected to Railway PostgreSQL database');
+});
+
+// Log connection errors
+pool.on('error', (err) => {
+  console.error('❌ Unexpected error on idle client:', err);
 });
 
 // JWT configuration
@@ -77,6 +85,13 @@ app.use(express.json());
 // Initialize database tables
 async function initDatabase() {
   try {
+    console.log('🔄 Attempting database connection and table initialization...');
+
+    // Test connection first
+    const client = await pool.connect();
+    console.log('✅ Database connection successful');
+    client.release();
+
     // Create users table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -103,6 +118,22 @@ async function initDatabase() {
     console.log('✅ Database connected and tables initialized');
   } catch (error) {
     console.error('❌ Database initialization error:', error);
+    console.error('❌ Error details:', {
+      message: error.message,
+      code: error.code,
+      errno: error.errno,
+      syscall: error.syscall,
+      hostname: error.hostname,
+      host: error.host,
+      port: error.port
+    });
+
+    // If it's a connection error, suggest Railway configuration
+    if (error.code === 'ECONNREFUSED') {
+      console.error('💡 This looks like a Railway PostgreSQL connection issue.');
+      console.error('💡 Make sure DATABASE_URL is set in Railway service variables.');
+      console.error('💡 Railway should provide DATABASE_URL automatically from your PostgreSQL service.');
+    }
   }
 }
 
