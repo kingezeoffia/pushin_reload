@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import '../auth/SignUpScreen.dart';
 
 /// Screen 1: Welcome to PUSHIN'
 ///
@@ -12,7 +11,12 @@ import '../auth/SignUpScreen.dart';
 /// - Three value proposition points
 /// - Get Started button aligned with Next button position (bottom fixed)
 class OnboardingWelcomeScreen extends StatelessWidget {
-  const OnboardingWelcomeScreen({super.key});
+  final VoidCallback? onGetStarted;
+
+  const OnboardingWelcomeScreen({
+    super.key,
+    this.onGetStarted,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -132,12 +136,16 @@ class OnboardingWelcomeScreen extends StatelessWidget {
                 child: _PrimaryButton(
                   label: 'Get Started',
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SignUpScreen(),
-                      ),
-                    );
+                    if (onGetStarted != null) {
+                      onGetStarted!();
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SignUpScreen(),
+                        ),
+                      );
+                    }
                   },
                 ),
               ),

@@ -11,8 +11,10 @@ import '../services/OnboardingService.dart';
 import '../services/AuthStateProvider.dart';
 import './theme/pushin_theme.dart';
 import 'screens/HomeScreen.dart';
-import 'screens/onboarding/OnboardingWelcomeScreen.dart';
 import 'screens/auth/SignInScreen.dart';
+import 'screens/auth/NewUserWelcomeScreen.dart';
+import 'screens/onboarding/OnboardingFitnessLevelScreen.dart';
+import 'screens/onboarding/OnboardingWelcomeScreen.dart';
 
 /// Root app router that handles onboarding vs main app routing
 ///
@@ -33,6 +35,7 @@ class AppRouter extends StatefulWidget {
 
 class _AppRouterState extends State<AppRouter> {
   bool? _isOnboardingCompleted;
+  bool? _hasSeenIntro;
   bool _isLoading = true;
 
   @override
@@ -60,10 +63,12 @@ class _AppRouterState extends State<AppRouter> {
     final authenticated = authProvider.isAuthenticated;
     final onboardingCompleted =
         authenticated ? await OnboardingService.isOnboardingCompleted() : false;
+    final hasSeenIntro = await OnboardingService.hasSeenIntroScreen();
 
     if (mounted) {
       setState(() {
         _isOnboardingCompleted = onboardingCompleted;
+        _hasSeenIntro = hasSeenIntro;
         _isLoading = false;
       });
     }
@@ -102,9 +107,37 @@ class _AppRouterState extends State<AppRouter> {
 
     final isAuthenticated = authProvider.isAuthenticated;
 
-    if (!isAuthenticated) {
+    if (_hasSeenIntro == false) {
+      // Show intro screen for first-time users
+      return IntroApp(
+        onIntroCompleted: () async {
+          await OnboardingService.markIntroScreenShown();
+          // Re-check app status to show auth flow
+          _checkAppStatus();
+        },
+      );
+    } else if (!isAuthenticated) {
       // Show authentication flow
       return AuthApp();
+    } else if (authProvider.justRegistered) {
+      // Show new user welcome screen (only for newly registered users)
+      // Use a single MaterialApp for both welcome and onboarding to ensure proper navigation
+      return MaterialApp(
+        title: 'PUSHIN\' - Welcome',
+        debugShowCheckedModeBanner: false,
+        theme: PushinTheme.darkTheme,
+        home: NewUserWelcomeScreen(
+          onWelcomeCompleted: () {
+            // Clear the just registered flag
+            authProvider.clearJustRegisteredFlag();
+            // Set onboarding callback for when user completes onboarding
+            OnboardingService.setOnboardingCompletedCallback(
+                _handleOnboardingCompleted);
+            // Re-check app status to ensure proper state
+            _checkAppStatus();
+          },
+        ),
+      );
     } else if (_isOnboardingCompleted == false) {
       // Show onboarding flow
       return OnboardingApp(
@@ -162,7 +195,30 @@ class _OnboardingAppState extends State<OnboardingApp> {
       title: 'PUSHIN\' - Setup',
       debugShowCheckedModeBanner: false,
       theme: PushinTheme.darkTheme,
-      home: const OnboardingWelcomeScreen(),
+      home:
+          const OnboardingFitnessLevelScreen(), // Start directly with onboarding questions
+    );
+  }
+}
+
+/// Intro app for first-time users (shown before authentication)
+class IntroApp extends StatelessWidget {
+  final VoidCallback onIntroCompleted;
+
+  const IntroApp({
+    super.key,
+    required this.onIntroCompleted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'PUSHIN\' - Intro',
+      debugShowCheckedModeBanner: false,
+      theme: PushinTheme.darkTheme,
+      home: OnboardingWelcomeScreen(
+        onGetStarted: onIntroCompleted,
+      ),
     );
   }
 }
@@ -227,6 +283,3 @@ class MainApp extends StatelessWidget {
     );
   }
 }
-
-
-

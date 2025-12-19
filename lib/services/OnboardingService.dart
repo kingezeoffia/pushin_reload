@@ -8,6 +8,7 @@ class OnboardingService {
   static const String _onboardingCompletedKey = 'onboarding_completed';
   static const String _onboardingDataKey = 'onboarding_data';
   static const String _forceOnboardingKey = 'force_onboarding_show';
+  static const String _introShownKey = 'intro_screen_shown';
 
   // Static callback for when onboarding completes
   static VoidCallback? _onOnboardingCompleted;
@@ -25,6 +26,18 @@ class OnboardingService {
     }
 
     return prefs.getBool(_onboardingCompletedKey) ?? false;
+  }
+
+  /// Check if intro screen has been shown (for first-time users)
+  static Future<bool> hasSeenIntroScreen() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_introShownKey) ?? false;
+  }
+
+  /// Mark intro screen as shown
+  static Future<void> markIntroScreenShown() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_introShownKey, true);
   }
 
   static Future<void> markOnboardingCompleted() async {
@@ -50,6 +63,7 @@ class OnboardingService {
     await prefs.remove(_onboardingCompletedKey);
     await prefs.remove(_onboardingDataKey);
     await prefs.remove(_forceOnboardingKey);
+    await prefs.remove(_introShownKey);
     print('🔄 Onboarding state reset - you can now access onboarding again');
   }
 

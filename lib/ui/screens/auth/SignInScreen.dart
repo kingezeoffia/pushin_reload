@@ -320,8 +320,9 @@ class _SignInScreenState extends State<SignInScreen> {
 
                           // Google Sign In Button
                           _RoundThirdPartyButton(
-                            icon: Icons
-                                .g_mobiledata, // Placeholder - will be replaced with Google logo
+                            icon: Icons.g_translate, // Better Google-like icon
+                            backgroundColor: Colors.white,
+                            iconColor: const Color(0xFF4285F4), // Google blue
                             onTap: () => _handleThirdPartySignIn('google'),
                           ),
                         ],

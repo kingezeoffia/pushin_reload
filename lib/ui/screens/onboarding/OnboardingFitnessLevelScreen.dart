@@ -55,7 +55,7 @@ class _OnboardingFitnessLevelScreenState
                       width: 80,
                       height: 80,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF6060FF).withOpacity(0.2),
+                        color: const Color(0xFF6060FF).withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(24),
                       ),
                       child: const Icon(
@@ -196,7 +196,7 @@ class _BackButton extends StatelessWidget {
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha: 0.1),
           shape: BoxShape.circle,
         ),
         child: const Icon(
@@ -230,13 +230,13 @@ class _NextButton extends StatelessWidget {
         height: 52,
         decoration: BoxDecoration(
           color: enabled
-              ? Colors.white.withOpacity(0.95)
-              : Colors.white.withOpacity(0.12),
+              ? Colors.white.withValues(alpha: 0.95)
+              : Colors.white.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(100),
           boxShadow: enabled
               ? [
                   BoxShadow(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     blurRadius: 20,
                     offset: const Offset(0, 8),
                   ),
@@ -251,7 +251,7 @@ class _NextButton extends StatelessWidget {
               fontWeight: FontWeight.w700,
               color: enabled
                   ? const Color(0xFF2A2A6A)
-                  : Colors.white.withOpacity(0.4),
+                  : Colors.white.withValues(alpha: 0.4),
               letterSpacing: -0.3,
             ),
             child: const Text('Next'),
