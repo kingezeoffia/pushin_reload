@@ -22,7 +22,9 @@ console.log('🔍 DATABASE_URL starts with:', process.env.DATABASE_URL?.substrin
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 // Log successful database connection
@@ -112,6 +114,21 @@ async function initDatabase() {
         token VARCHAR(500) UNIQUE NOT NULL,
         expires_at TIMESTAMP NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create subscriptions table for Stripe
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        customer_id VARCHAR(255),
+        subscription_id VARCHAR(255) UNIQUE,
+        plan_id VARCHAR(50),
+        current_period_end TIMESTAMP,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -710,16 +727,20 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
 
     if (session.payment_status === 'paid') {
       const subscription = session.subscription;
-      
-      // Store subscription in your database (using Map for demo)
-      users.set(userId, {
-        customerId: session.customer,
-        subscriptionId: subscription.id,
-        planId: session.metadata.planId,
-        currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-        isActive: true,
-        updatedAt: new Date(),
-      });
+
+      // Store subscription in database
+      await pool.query(
+        `INSERT INTO subscriptions (user_id, customer_id, subscription_id, plan_id, current_period_end, is_active, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (subscription_id)
+         DO UPDATE SET
+           plan_id = EXCLUDED.plan_id,
+           current_period_end = EXCLUDED.current_period_end,
+           is_active = EXCLUDED.is_active,
+           updated_at = EXCLUDED.updated_at`,
+        [userId, session.customer, subscription.id, session.metadata.planId,
+         new Date(subscription.current_period_end * 1000), true, new Date()]
+      );
 
       console.log('✅ Payment verified and stored');
 
@@ -757,8 +778,12 @@ app.get('/api/stripe/subscription-status', async (req, res) => {
       return res.status(400).json({ error: 'Missing userId parameter' });
     }
     
-    const userData = users.get(userId);
-    if (!userData || !userData.subscriptionId) {
+    const subscriptionResult = await pool.query(
+      'SELECT * FROM subscriptions WHERE user_id = $1 AND is_active = true ORDER BY updated_at DESC LIMIT 1',
+      [userId]
+    );
+
+    if (subscriptionResult.rows.length === 0) {
       console.log('No subscription found');
       return res.json({
         isActive: false,
@@ -769,18 +794,26 @@ app.get('/api/stripe/subscription-status', async (req, res) => {
       });
     }
 
+    const userData = subscriptionResult.rows[0];
+
     // Fetch latest subscription status from Stripe
-    const subscription = await stripe.subscriptions.retrieve(userData.subscriptionId);
-    
+    const subscription = await stripe.subscriptions.retrieve(userData.subscription_id);
+
     const isActive = subscription.status === 'active';
-    
+
+    // Update database with latest status
+    await pool.query(
+      'UPDATE subscriptions SET is_active = $1, current_period_end = $2, updated_at = $3 WHERE subscription_id = $4',
+      [isActive, new Date(subscription.current_period_end * 1000), new Date(), userData.subscription_id]
+    );
+
     console.log('Subscription status:', subscription.status);
 
     res.json({
       isActive,
-      planId: userData.planId,
-      customerId: userData.customerId,
-      subscriptionId: userData.subscriptionId,
+      planId: userData.plan_id,
+      customerId: userData.customer_id,
+      subscriptionId: userData.subscription_id,
       currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
     });
   } catch (error) {
@@ -806,6 +839,12 @@ app.post('/api/stripe/cancel-subscription', async (req, res) => {
     const subscription = await stripe.subscriptions.update(subscriptionId, {
       cancel_at_period_end: true,
     });
+
+    // Update database to reflect cancellation
+    await pool.query(
+      'UPDATE subscriptions SET is_active = false, updated_at = $1 WHERE subscription_id = $2',
+      [new Date(), subscriptionId]
+    );
 
     console.log('✅ Subscription will cancel at period end');
 
