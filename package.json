@@ -1,0 +1,20 @@
+{
+  "name": "pushin-reload-db",
+  "version": "1.0.0",
+  "description": "Database setup for Pushin Reload app",
+  "main": "create_all_tables.js",
+  "scripts": {
+    "db:create": "node create_all_tables.js",
+    "db:setup": "node create_all_tables.js",
+    "db:test": "node test-db-connection.js"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
+  },
+  "optionalDependencies": {
+    "dotenv": "^16.4.7"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

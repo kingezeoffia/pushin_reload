@@ -31,7 +31,6 @@ class AuthenticationService {
         body: jsonEncode({
           'email': email,
           'password': password,
-          'name': name,
         }),
       );
 
@@ -334,4 +333,3 @@ class User {
     };
   }
 }
-
