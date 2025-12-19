@@ -47,9 +47,9 @@ function authenticateToken(req, res, next) {
  */
 router.post('/register', async (req, res) => {
   try {
-    console.log('📝 Register request:', { email: req.body.email });
+    console.log('📝 Register request:', { email: req.body.email, name: req.body.name });
 
-    const { email, password } = req.body;
+    const { email, password, name } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({
@@ -62,7 +62,7 @@ router.post('/register', async (req, res) => {
     // Get pool from app locals (set in main server.js)
     const pool = req.app.locals.pool;
 
-    const result = await auth.registerUser(pool, email, password);
+    const result = await auth.registerUser(pool, email, password, name);
 
     console.log('✅ User registered successfully:', result.user.id);
 

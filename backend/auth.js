@@ -122,7 +122,7 @@ async function verifyGoogleToken(idToken) {
  * @param {string} password - User password
  * @returns {Promise<Object>} User data and tokens
  */
-async function registerUser(pool, email, password) {
+async function registerUser(pool, email, password, firstname = null) {
   // Check if user already exists
   const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
   if (existingUser.rows.length > 0) {
@@ -132,8 +132,8 @@ async function registerUser(pool, email, password) {
   // Hash password and create user
   const passwordHash = await hashPassword(password);
   const result = await pool.query(
-    'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at',
-    [email, passwordHash]
+    'INSERT INTO users (email, firstname, password_hash) VALUES ($1, $2, $3) RETURNING id, email, firstname, created_at',
+    [email, firstname, passwordHash]
   );
 
   const user = result.rows[0];
@@ -148,8 +148,10 @@ async function registerUser(pool, email, password) {
     user: {
       id: user.id,
       email: user.email,
+      firstname: user.firstname,
       createdAt: user.created_at
     },
+    isNewUser: true, // Always true for registration
     accessToken,
     refreshToken
   };
@@ -193,8 +195,10 @@ async function loginUser(pool, email, password) {
     user: {
       id: user.id,
       email: user.email,
+      firstname: user.firstname,
       createdAt: user.created_at
     },
+    isNewUser: false, // Always false for login
     accessToken,
     refreshToken
   };
@@ -218,6 +222,7 @@ async function loginWithGoogle(pool, idToken) {
 
   // Check if user exists with this Google ID
   let user = await pool.query('SELECT * FROM users WHERE google_id = $1', [googleId]);
+  let isNewUser = false;
 
   if (user.rows.length === 0) {
     // Check if user exists with this email (link accounts)
@@ -229,11 +234,13 @@ async function loginWithGoogle(pool, idToken) {
       user = await pool.query('SELECT * FROM users WHERE id = $1', [existingUser.rows[0].id]);
     } else {
       // Create new user
+      const firstname = googleUser.given_name || googleUser.name?.split(' ')[0] || null;
       const result = await pool.query(
-        'INSERT INTO users (email, google_id) VALUES ($1, $2) RETURNING *',
-        [email, googleId]
+        'INSERT INTO users (email, firstname, google_id) VALUES ($1, $2, $3) RETURNING *',
+        [email, firstname, googleId]
       );
       user = result;
+      isNewUser = true;
     }
   }
 
@@ -250,8 +257,10 @@ async function loginWithGoogle(pool, idToken) {
     user: {
       id: userData.id,
       email: userData.email,
+      firstname: userData.firstname,
       createdAt: userData.created_at
     },
+    isNewUser,
     accessToken,
     refreshToken
   };
@@ -286,6 +295,7 @@ async function loginWithApple(pool, identityToken, userData = {}) {
 
   // Check if user exists with this Apple ID
   let user = await pool.query('SELECT * FROM users WHERE apple_id = $1', [appleId]);
+  let isNewUser = false;
 
   if (user.rows.length === 0) {
     // Check if user exists with this email (link accounts)
@@ -297,11 +307,13 @@ async function loginWithApple(pool, identityToken, userData = {}) {
       user = await pool.query('SELECT * FROM users WHERE id = $1', [existingUser.rows[0].id]);
     } else {
       // Create new user
+      const firstname = userData?.name?.firstName || null;
       const result = await pool.query(
-        'INSERT INTO users (email, apple_id) VALUES ($1, $2) RETURNING *',
-        [email, appleId]
+        'INSERT INTO users (email, firstname, apple_id) VALUES ($1, $2, $3) RETURNING *',
+        [email, firstname, appleId]
       );
       user = result;
+      isNewUser = true;
     }
   }
 
@@ -318,8 +330,10 @@ async function loginWithApple(pool, identityToken, userData = {}) {
     user: {
       id: userRecord.id,
       email: userRecord.email,
+      firstname: userRecord.firstname,
       createdAt: userRecord.created_at
     },
+    isNewUser,
     accessToken,
     refreshToken
   };
@@ -371,7 +385,7 @@ async function refreshAccessToken(pool, refreshToken) {
  */
 async function getUserProfile(pool, userId) {
   const result = await pool.query(
-    'SELECT id, email, created_at FROM users WHERE id = $1',
+    'SELECT id, email, firstname, created_at FROM users WHERE id = $1',
     [userId]
   );
 
