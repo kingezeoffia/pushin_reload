@@ -10,6 +10,7 @@ class AuthStateProvider extends ChangeNotifier {
   User? _currentUser;
   bool _isLoading = true;
   String? _errorMessage;
+  bool _justRegistered = false; // Track if user just completed registration
 
   AuthStateProvider({
     AuthenticationService? authService,
@@ -22,6 +23,7 @@ class AuthStateProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _currentUser != null;
+  bool get justRegistered => _justRegistered;
 
   /// Initialize auth state on app startup
   Future<void> initialize() async {
@@ -59,6 +61,7 @@ class AuthStateProvider extends ChangeNotifier {
   }) async {
     _isLoading = true;
     _errorMessage = null;
+    _justRegistered = false; // Reset flag
     notifyListeners();
 
     try {
@@ -70,6 +73,7 @@ class AuthStateProvider extends ChangeNotifier {
 
       if (result.success && result.data != null) {
         _currentUser = result.data!.user;
+        _justRegistered = true; // Always true for registration (new users)
         _isLoading = false;
         notifyListeners();
         return true;
@@ -94,6 +98,7 @@ class AuthStateProvider extends ChangeNotifier {
   }) async {
     _isLoading = true;
     _errorMessage = null;
+    _justRegistered = false; // Ensure flag is cleared for login
     notifyListeners();
 
     try {
@@ -104,6 +109,7 @@ class AuthStateProvider extends ChangeNotifier {
 
       if (result.success && result.data != null) {
         _currentUser = result.data!.user;
+        _justRegistered = result.data!.isNewUser; // Use backend response
         _isLoading = false;
         notifyListeners();
         return true;
@@ -132,6 +138,7 @@ class AuthStateProvider extends ChangeNotifier {
 
       if (result.success && result.data != null) {
         _currentUser = result.data!.user;
+        _justRegistered = result.data!.isNewUser; // Use backend response
         _isLoading = false;
         notifyListeners();
         return true;
@@ -160,6 +167,7 @@ class AuthStateProvider extends ChangeNotifier {
 
       if (result.success && result.data != null) {
         _currentUser = result.data!.user;
+        _justRegistered = result.data!.isNewUser; // Use backend response
         _isLoading = false;
         notifyListeners();
         return true;
@@ -202,6 +210,12 @@ class AuthStateProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Clear the just registered flag (call after showing welcome screen)
+  void clearJustRegisteredFlag() {
+    _justRegistered = false;
+    notifyListeners();
+  }
+
   /// Refresh user data from server
   Future<void> refreshUser() async {
     if (!isAuthenticated) return;
@@ -218,6 +232,3 @@ class AuthStateProvider extends ChangeNotifier {
     }
   }
 }
-
-
-
