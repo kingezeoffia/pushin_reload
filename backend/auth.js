@@ -397,6 +397,62 @@ async function getUserProfile(pool, userId) {
 }
 
 /**
+ * Update user profile
+ * @param {Object} pool - PostgreSQL pool
+ * @param {number} userId - User ID
+ * @param {Object} updates - Object containing fields to update (email, firstname, password)
+ * @returns {Object} Updated user data
+ */
+async function updateUserProfile(pool, userId, updates) {
+  const updateFields = [];
+  const updateValues = [];
+  let paramIndex = 1;
+
+  // Build dynamic update query
+  if (updates.email !== undefined) {
+    updateFields.push(`email = $${paramIndex}`);
+    updateValues.push(updates.email);
+    paramIndex++;
+  }
+
+  if (updates.firstname !== undefined) {
+    updateFields.push(`firstname = $${paramIndex}`);
+    updateValues.push(updates.firstname);
+    paramIndex++;
+  }
+
+  if (updates.password !== undefined) {
+    // Hash the new password
+    const hashedPassword = await hashPassword(updates.password);
+    updateFields.push(`password_hash = $${paramIndex}`);
+    updateValues.push(hashedPassword);
+    paramIndex++;
+  }
+
+  if (updateFields.length === 0) {
+    throw new Error('No valid fields to update');
+  }
+
+  // Add userId at the end
+  updateValues.push(userId);
+
+  const query = `
+    UPDATE users
+    SET ${updateFields.join(', ')}, updated_at = NOW()
+    WHERE id = $${paramIndex}
+    RETURNING id, email, firstname, created_at, updated_at
+  `;
+
+  const result = await pool.query(query, updateValues);
+
+  if (result.rows.length === 0) {
+    throw new Error('User not found or update failed');
+  }
+
+  return result.rows[0];
+}
+
+/**
  * Logout user (invalidate refresh tokens)
  * @param {Object} pool - PostgreSQL pool
  * @param {number} userId - User ID
@@ -427,9 +483,22 @@ module.exports = {
   loginWithApple,
   refreshAccessToken,
   getUserProfile,
+  updateUserProfile,
   logoutUser,
 
   // JWT configuration
   JWT_SECRET,
   JWT_REFRESH_SECRET
 };
+
+
+
+
+
+
+
+
+
+
+
+

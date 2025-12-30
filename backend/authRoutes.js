@@ -302,6 +302,90 @@ router.get('/me', authenticateToken, async (req, res) => {
 });
 
 /**
+ * PUT /api/auth/me
+ * Update current user profile
+ */
+router.put('/me', authenticateToken, async (req, res) => {
+  try {
+    console.log('✏️ Update user profile request:', req.user.userId);
+
+    const { email, name, password } = req.body;
+    const updates = {};
+
+    // Validate and prepare updates
+    if (email !== undefined) {
+      if (!email || !email.includes('@')) {
+        return res.status(400).json({
+          success: false,
+          error: 'Valid email is required',
+          code: 'INVALID_EMAIL'
+        });
+      }
+      updates.email = email;
+    }
+
+    if (name !== undefined) {
+      if (typeof name !== 'string' || name.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Valid name is required',
+          code: 'INVALID_NAME'
+        });
+      }
+      updates.firstname = name.trim();
+    }
+
+    if (password !== undefined) {
+      if (!password || password.length < 6) {
+        return res.status(400).json({
+          success: false,
+          error: 'Password must be at least 6 characters',
+          code: 'INVALID_PASSWORD'
+        });
+      }
+      updates.password = password;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid fields to update',
+        code: 'NO_UPDATES'
+      });
+    }
+
+    const pool = req.app.locals.pool;
+    const updatedUser = await auth.updateUserProfile(pool, req.user.userId, updates);
+
+    console.log('✅ User profile updated successfully:', updatedUser.id);
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: {
+        user: updatedUser
+      }
+    });
+  } catch (error) {
+    console.error('❌ Update user error:', error.message);
+
+    let statusCode = 500;
+    let errorCode = 'UPDATE_USER_ERROR';
+
+    if (error.message.includes('already exists')) {
+      statusCode = 409;
+      errorCode = 'EMAIL_EXISTS';
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      error: error.message,
+      code: errorCode
+    });
+  }
+});
+
+/**
  * POST /api/auth/logout
  * Logout user (invalidate refresh tokens)
  */
@@ -330,3 +414,16 @@ router.post('/logout', authenticateToken, async (req, res) => {
 });
 
 module.exports = router;
+
+
+
+
+
+
+
+
+
+
+
+
+
