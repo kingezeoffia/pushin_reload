@@ -57,15 +57,21 @@ class StripeCheckoutService {
       print('   URL: $baseUrl/stripe/create-checkout-session');
       print('   Request body: $requestBody');
 
-      final response = await http.post(
-        Uri.parse('$baseUrl/stripe/create-checkout-session'),
-        headers: {
-          'Content-Type': 'application/json',
-          // Add auth token if needed
-          // 'Authorization': 'Bearer $authToken',
-        },
-        body: jsonEncode(requestBody),
-      );
+      http.Response response;
+      try {
+        print('🔵 StripeCheckoutService: Sending HTTP POST...');
+        response = await http.post(
+          Uri.parse('$baseUrl/stripe/create-checkout-session'),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode(requestBody),
+        ).timeout(const Duration(seconds: 30));
+        print('🔵 StripeCheckoutService: HTTP POST completed');
+      } catch (httpError) {
+        print('❌ StripeCheckoutService: HTTP POST FAILED: $httpError');
+        return false;
+      }
 
       print('📡 StripeCheckoutService: Response status: ${response.statusCode}');
       print('   Response body: ${response.body}');

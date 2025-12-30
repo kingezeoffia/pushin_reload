@@ -464,9 +464,12 @@ class _PaywallScreenState extends State<PaywallScreen>
   }
 
   void _handleSubscribe(BuildContext context) async {
+    print('🔴🔴🔴 _handleSubscribe CALLED! 🔴🔴🔴');
+
     setState(() => _isLoading = true);
 
     try {
+      print('🟡 Creating StripeCheckoutService...');
       final stripeService = StripeCheckoutService(
         baseUrl: 'https://pushin-production.up.railway.app/api',
         isTestMode: true,
@@ -486,10 +489,13 @@ class _PaywallScreenState extends State<PaywallScreen>
       print('   - isAuthenticated: ${authProvider.isAuthenticated}');
       print('   - isGuestMode: ${authProvider.isGuestMode}');
 
-      // Launch checkout with plan ID ('pro' or 'advanced') and billing period ('monthly' or 'yearly')
+      // Launch checkout with plan ID ('standard' or 'advanced') and billing period ('monthly' or 'yearly')
+      // Note: 'pro' plan is sent as 'standard' to backend for compatibility
+      final backendPlanId = _selectedPlan == 'pro' ? 'standard' : 'advanced';
+
       final success = await stripeService.launchCheckout(
         userId: userId,
-        planId: _selectedPlan, // 'pro' or 'advanced'
+        planId: backendPlanId, // 'standard' or 'advanced' (backend naming)
         billingPeriod: _billingPeriod, // 'monthly' or 'yearly'
         userEmail: userEmail,
       );
