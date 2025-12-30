@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../services/StripeCheckoutService.dart';
-import '../../../services/OnboardingService.dart';
-import '../../../controller/PushinAppController.dart';
+import '../../../state/auth_state_provider.dart';
+import '../../../state/pushin_app_controller.dart';
 import '../../widgets/GOStepsBackground.dart';
-import '../HomeScreen.dart';
+import '../auth/SignUpScreen.dart';
 
-/// Paywall Screen - 3-Day Trial with Standard or Advanced plan
+/// Paywall Screen - Free Trial with Standard or Advanced plan
 ///
 /// BMAD V6 Spec:
-/// - 3-Day Free Trial
+/// - 3-Day Free Trial (Monthly) / 5-Day Free Trial (Yearly)
 /// - Standard — 9.99 €: 3 App Blockages, 3 Workouts
 /// - Advanced — 14.99 €: 5 App Blockages, 5 Workouts
 /// - GO Steps style design
@@ -26,9 +26,17 @@ class PaywallScreen extends StatefulWidget {
   State<PaywallScreen> createState() => _PaywallScreenState();
 }
 
-class _PaywallScreenState extends State<PaywallScreen> {
-  String _selectedPlan = 'standard';
+class _PaywallScreenState extends State<PaywallScreen>
+    with SingleTickerProviderStateMixin {
+  String _selectedPlan = 'pro'; // 'pro' or 'advanced'
+  String _billingPeriod = 'monthly'; // 'monthly' or 'yearly'
   bool _isLoading = false;
+
+  void _onBillingPeriodChanged(String newPeriod) {
+    if (newPeriod == _billingPeriod) return;
+    HapticFeedback.mediumImpact();
+    setState(() => _billingPeriod = newPeriod);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,25 +50,53 @@ class _PaywallScreenState extends State<PaywallScreen> {
             child: SafeArea(
               child: Column(
                 children: [
-                  // Header
+                  // Header with Billing Toggle
                   Padding(
                     padding: const EdgeInsets.only(left: 8, right: 16, top: 8),
-                    child: Row(
-                      children: [
-                        _BackButton(onTap: () => Navigator.pop(context)),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: _showRestorePurchasesDialog,
-                          child: Text(
-                            'Restore',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white.withOpacity(0.7),
+                    child: SizedBox(
+                      height: 44, // Fixed height to prevent overflow
+                      child: Stack(
+                        children: [
+                          // Left side: Back button
+                          Positioned(
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            child: Center(
+                              child: _BackButton(
+                                  onTap: () => Navigator.pop(context)),
                             ),
                           ),
-                        ),
-                      ],
+
+                          // Center: Billing toggle (perfectly centered)
+                          Center(
+                            child: _BillingPeriodToggle(
+                              selectedPeriod: _billingPeriod,
+                              onPeriodChanged: _onBillingPeriodChanged,
+                            ),
+                          ),
+
+                          // Right side: Restore button
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            bottom: 0,
+                            child: Center(
+                              child: TextButton(
+                                onPressed: _showRestorePurchasesDialog,
+                                child: Text(
+                                  'Restore',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white.withOpacity(0.7),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
 
@@ -72,46 +108,6 @@ class _PaywallScreenState extends State<PaywallScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           SizedBox(height: screenHeight * 0.02),
-
-                          // Trial Badge
-                          Center(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF10B981).withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(100),
-                                border: Border.all(
-                                  color:
-                                      const Color(0xFF10B981).withOpacity(0.4),
-                                ),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.celebration,
-                                    color: Color(0xFF10B981),
-                                    size: 18,
-                                  ),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    '3-Day Free Trial',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                      color: Color(0xFF10B981),
-                                      letterSpacing: -0.2,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          SizedBox(height: screenHeight * 0.03),
 
                           // Heading
                           Center(
@@ -154,23 +150,66 @@ class _PaywallScreenState extends State<PaywallScreen> {
                             ),
                           ),
 
-                          SizedBox(height: screenHeight * 0.04),
+                          SizedBox(height: screenHeight * 0.03),
+
+                          // Trial Badge - Perfectly centered
+                          Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(100),
+                                border: Border.all(
+                                  color:
+                                      const Color(0xFF10B981).withOpacity(0.4),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.celebration,
+                                    color: Color(0xFF10B981),
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _billingPeriod == 'yearly'
+                                        ? '5-Day Free Trial'
+                                        : '3-Day Free Trial',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF10B981),
+                                      letterSpacing: -0.2,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          SizedBox(height: screenHeight * 0.03),
 
                           // Plan Cards
                           _PlanCard(
-                            planName: 'Standard',
-                            price: '9.99 €',
-                            period: '/month',
+                            planName: 'Pro',
+                            monthlyPrice: '9.99 €',
+                            yearlyPrice: '49.99 €',
+                            isYearly: _billingPeriod == 'yearly',
                             features: const [
                               '3 App Blockages',
                               '3 Workouts',
                               'Basic Progress Tracking',
                             ],
-                            isSelected: _selectedPlan == 'standard',
+                            isSelected: _selectedPlan == 'pro',
                             isPopular: true,
                             onTap: () {
                               HapticFeedback.lightImpact();
-                              setState(() => _selectedPlan = 'standard');
+                              setState(() => _selectedPlan = 'pro');
                             },
                           ),
 
@@ -178,8 +217,9 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
                           _PlanCard(
                             planName: 'Advanced',
-                            price: '14.99 €',
-                            period: '/month',
+                            monthlyPrice: '14.99 €',
+                            yearlyPrice: '79.99 €',
+                            isYearly: _billingPeriod == 'yearly',
                             features: const [
                               '5 App Blockages',
                               '5 Workouts',
@@ -230,7 +270,9 @@ class _PaywallScreenState extends State<PaywallScreen> {
                                 const SizedBox(height: 12),
                                 _TrialStep(
                                   step: '1',
-                                  text: 'Start your free 3-day trial today',
+                                  text: _billingPeriod == 'yearly'
+                                      ? 'Start your free 5-day trial today'
+                                      : 'Start your free 3-day trial today',
                                 ),
                                 const SizedBox(height: 8),
                                 _TrialStep(
@@ -284,20 +326,25 @@ class _PaywallScreenState extends State<PaywallScreen> {
                 children: [
                   _StartTrialButton(
                     isLoading: _isLoading,
-                    planName:
-                        _selectedPlan == 'standard' ? 'Standard' : 'Advanced',
+                    planName: _selectedPlan == 'pro' ? 'Pro' : 'Advanced',
                     onTap: () => _handleSubscribe(context),
                   ),
                   const SizedBox(height: 12),
                   GestureDetector(
                     onTap: _skipTrial,
-                    child: Text(
-                      'Skip to Free Plan',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.5),
-                        fontWeight: FontWeight.w500,
-                      ),
+                    child: FutureBuilder<String>(
+                      future: _getCurrentPlanDisplayName(),
+                      builder: (context, snapshot) {
+                        final displayText = snapshot.data ?? 'Free Plan';
+                        return Text(
+                          'Continue with $displayText',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white.withOpacity(0.5),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -355,9 +402,65 @@ class _PaywallScreenState extends State<PaywallScreen> {
   }
 
   void _skipTrial() async {
-    // Mark onboarding as completed before transitioning to main app
-    await OnboardingService.markOnboardingCompleted();
-    // The callback will handle switching to main app
+    final authProvider = context.read<AuthStateProvider>();
+
+    // Check if user is logged in
+    if (!authProvider.isAuthenticated) {
+      // NOT logged in → Navigate to SignUp screen
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => const SignUpScreen(),
+          ),
+        );
+      }
+    } else {
+      // Logged in → Complete onboarding and go to home (original behavior)
+      await authProvider.completeOnboardingFlow();
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
+  Future<String> _getCurrentPlanDisplayName() async {
+    try {
+      // Get current user
+      final authProvider = context.read<AuthStateProvider>();
+      final currentUser = authProvider.currentUser;
+
+      if (currentUser != null) {
+        // Check subscription status using Stripe service
+        final stripeService = StripeCheckoutService(
+          baseUrl: 'https://pushin-production.up.railway.app/api',
+          isTestMode: true,
+        );
+
+        final subscriptionStatus = await stripeService.checkSubscriptionStatus(
+          userId: currentUser.id,
+        );
+
+        if (subscriptionStatus != null && subscriptionStatus.isActive) {
+          switch (subscriptionStatus.planId) {
+            case 'pro':
+            case 'standard': // Legacy support
+              return 'Pro Plan';
+            case 'advanced':
+              return 'Advanced Plan';
+            case 'free':
+            default:
+              return 'Free Plan';
+          }
+        }
+      }
+
+      // Default to Free Plan if no user or no active subscription
+      return 'Free Plan';
+    } catch (e) {
+      print('Error checking subscription status: $e');
+      // Default to Free Plan on error
+      return 'Free Plan';
+    }
   }
 
   void _handleSubscribe(BuildContext context) async {
@@ -369,12 +472,25 @@ class _PaywallScreenState extends State<PaywallScreen> {
         isTestMode: true,
       );
 
-      const userId = 'test_user_123';
-      const userEmail = 'test@example.com';
+      // Get current user info (fallback to test values if not authenticated)
+      final authProvider = context.read<AuthStateProvider>();
+      final currentUser = authProvider.currentUser;
+      final userId = currentUser?.id.toString() ?? 'test_user_123';
+      final userEmail = currentUser?.email ?? 'test@example.com';
 
+      print('🛒 PaywallScreen: Starting checkout');
+      print('   - userId: $userId');
+      print('   - userEmail: $userEmail');
+      print('   - planId: $_selectedPlan');
+      print('   - billingPeriod: $_billingPeriod');
+      print('   - isAuthenticated: ${authProvider.isAuthenticated}');
+      print('   - isGuestMode: ${authProvider.isGuestMode}');
+
+      // Launch checkout with plan ID ('pro' or 'advanced') and billing period ('monthly' or 'yearly')
       final success = await stripeService.launchCheckout(
         userId: userId,
-        planId: _selectedPlan,
+        planId: _selectedPlan, // 'pro' or 'advanced'
+        billingPeriod: _billingPeriod, // 'monthly' or 'yearly'
         userEmail: userEmail,
       );
 
@@ -553,11 +669,12 @@ class _BackButton extends StatelessWidget {
   }
 }
 
-/// Plan Card Widget
-class _PlanCard extends StatelessWidget {
+/// Plan Card Widget with smooth animated price transition
+class _PlanCard extends StatefulWidget {
   final String planName;
-  final String price;
-  final String period;
+  final String monthlyPrice;
+  final String yearlyPrice;
+  final bool isYearly;
   final List<String> features;
   final bool isSelected;
   final bool isPopular;
@@ -565,8 +682,9 @@ class _PlanCard extends StatelessWidget {
 
   const _PlanCard({
     required this.planName,
-    required this.price,
-    required this.period,
+    required this.monthlyPrice,
+    required this.yearlyPrice,
+    required this.isYearly,
     required this.features,
     required this.isSelected,
     required this.isPopular,
@@ -574,22 +692,90 @@ class _PlanCard extends StatelessWidget {
   });
 
   @override
+  State<_PlanCard> createState() => _PlanCardState();
+}
+
+class _PlanCardState extends State<_PlanCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _slideAnimation;
+  late Animation<double> _fadeOutAnimation;
+  late Animation<double> _fadeInAnimation;
+
+  bool _showYearly = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _showYearly = widget.isYearly;
+
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 350),
+      vsync: this,
+    );
+
+    _slideAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+
+    _fadeOutAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+      ),
+    );
+
+    _fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.4, 1.0, curve: Curves.easeOut),
+      ),
+    );
+  }
+
+  @override
+  void didUpdateWidget(_PlanCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isYearly != widget.isYearly) {
+      _controller.forward(from: 0.0).then((_) {
+        if (mounted) {
+          setState(() => _showYearly = widget.isYearly);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final currentPrice = _showYearly ? widget.yearlyPrice : widget.monthlyPrice;
+    final targetPrice =
+        widget.isYearly ? widget.yearlyPrice : widget.monthlyPrice;
+    final currentPeriod = _showYearly ? '/year' : '/month';
+    final targetPeriod = widget.isYearly ? '/year' : '/month';
+
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.white.withOpacity(0.1),
+          color:
+              widget.isSelected ? Colors.white : Colors.white.withOpacity(0.1),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: isSelected
+            color: widget.isSelected
                 ? Colors.transparent
                 : Colors.white.withOpacity(0.15),
             width: 1.5,
           ),
-          boxShadow: isSelected
+          boxShadow: widget.isSelected
               ? [
                   BoxShadow(
                     color: Colors.white.withOpacity(0.1),
@@ -599,145 +785,233 @@ class _PlanCard extends StatelessWidget {
                 ]
               : null,
         ),
-        child: Stack(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            // Plan Name & Price Row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Plan Name & Price Row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          planName,
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: isSelected
-                                ? const Color(0xFF2A2A6A)
-                                : Colors.white,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Text(
-                              price,
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w800,
-                                color: isSelected
-                                    ? const Color(0xFF3535A0)
-                                    : Colors.white,
-                              ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Plan name with badges
+                      Row(
+                        children: [
+                          Text(
+                            widget.planName,
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: widget.isSelected
+                                  ? const Color(0xFF2A2A6A)
+                                  : Colors.white,
+                              letterSpacing: -0.5,
                             ),
-                            Text(
-                              period,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: isSelected
-                                    ? const Color(0xFF3535A0).withOpacity(0.7)
-                                    : Colors.white.withOpacity(0.6),
+                          ),
+                          if (widget.isPopular) ...[
+                            const SizedBox(width: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981),
+                                borderRadius: BorderRadius.circular(100),
+                              ),
+                              child: const Text(
+                                'POPULAR',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
                               ),
                             ),
                           ],
-                        ),
-                      ],
-                    ),
-                    // Selection indicator
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? const Color(0xFF3535A0)
-                            : Colors.transparent,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isSelected
-                              ? const Color(0xFF3535A0)
-                              : Colors.white.withOpacity(0.3),
-                          width: 2,
+                          // Animated savings badge - smooth transition both ways
+                          AnimatedScale(
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeOutCubic,
+                            scale: widget.isYearly ? 1.0 : 0.0,
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOutCubic,
+                              opacity: widget.isYearly ? 1.0 : 0.0,
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 10),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF59E0B),
+                                    borderRadius: BorderRadius.circular(100),
+                                  ),
+                                  child: const Text(
+                                    '-60%',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      // Animated price display
+                      SizedBox(
+                        height: 36,
+                        child: AnimatedBuilder(
+                          animation: _controller,
+                          builder: (context, child) {
+                            final isAnimating = _controller.isAnimating;
+                            final slideOffset = _slideAnimation.value;
+
+                            return Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                // Outgoing price (current)
+                                if (isAnimating)
+                                  Opacity(
+                                    opacity: _fadeOutAnimation.value,
+                                    child: Transform.translate(
+                                      offset: Offset(
+                                        widget.isYearly
+                                            ? -30 * slideOffset
+                                            : 30 * slideOffset,
+                                        0,
+                                      ),
+                                      child: _buildPriceRow(
+                                          currentPrice, currentPeriod),
+                                    ),
+                                  ),
+                                // Incoming price (target)
+                                if (isAnimating)
+                                  Opacity(
+                                    opacity: _fadeInAnimation.value,
+                                    child: Transform.translate(
+                                      offset: Offset(
+                                        widget.isYearly
+                                            ? 30 * (1 - slideOffset)
+                                            : -30 * (1 - slideOffset),
+                                        0,
+                                      ),
+                                      child: _buildPriceRow(
+                                          targetPrice, targetPeriod),
+                                    ),
+                                  ),
+                                // Static price when not animating
+                                if (!isAnimating)
+                                  _buildPriceRow(currentPrice, currentPeriod),
+                              ],
+                            );
+                          },
                         ),
                       ),
-                      child: isSelected
-                          ? const Icon(
-                              Icons.check,
-                              color: Colors.white,
-                              size: 18,
-                            )
-                          : null,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-
-                const SizedBox(height: 16),
-
-                // Features
-                ...features.map(
-                  (feature) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.check_circle,
-                          size: 18,
-                          color: isSelected
-                              ? const Color(0xFF10B981)
-                              : const Color(0xFF10B981).withOpacity(0.8),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          feature,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: isSelected
-                                ? const Color(0xFF2A2A6A).withOpacity(0.8)
-                                : Colors.white.withOpacity(0.8),
-                          ),
-                        ),
-                      ],
+                // Selection indicator
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: widget.isSelected
+                        ? const Color(0xFF3535A0)
+                        : Colors.transparent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: widget.isSelected
+                          ? const Color(0xFF3535A0)
+                          : Colors.white.withOpacity(0.3),
+                      width: 2,
                     ),
+                  ),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: widget.isSelected
+                        ? const Icon(
+                            Icons.check,
+                            key: ValueKey('check'),
+                            color: Colors.white,
+                            size: 18,
+                          )
+                        : const SizedBox.shrink(key: ValueKey('empty')),
                   ),
                 ),
               ],
             ),
 
-            // Popular Badge
-            if (isPopular)
-              Positioned(
-                top: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981),
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                  child: const Text(
-                    'POPULAR',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: 0.5,
+            const SizedBox(height: 16),
+
+            // Features
+            ...widget.features.map(
+              (feature) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle,
+                      size: 18,
+                      color: widget.isSelected
+                          ? const Color(0xFF10B981)
+                          : const Color(0xFF10B981).withOpacity(0.8),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    Text(
+                      feature,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: widget.isSelected
+                            ? const Color(0xFF2A2A6A).withOpacity(0.8)
+                            : Colors.white.withOpacity(0.8),
+                      ),
+                    ),
+                  ],
                 ),
               ),
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPriceRow(String price, String period) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Text(
+          price,
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w800,
+            color: widget.isSelected ? const Color(0xFF3535A0) : Colors.white,
+          ),
+        ),
+        const SizedBox(width: 2),
+        Text(
+          period,
+          style: TextStyle(
+            fontSize: 14,
+            color: widget.isSelected
+                ? const Color(0xFF3535A0).withOpacity(0.7)
+                : Colors.white.withOpacity(0.6),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -893,9 +1167,12 @@ class _PaymentSuccessOverlay extends StatelessWidget {
                         .paymentSuccessState
                         .value = null;
 
-                    // Mark onboarding as completed before transitioning to main app
-                    await OnboardingService.markOnboardingCompleted();
-                    // The callback will handle switching to main app
+                    // Complete onboarding flow before transitioning to main app (BMAD v6 canonical method)
+                    await context
+                        .read<AuthStateProvider>()
+                        .completeOnboardingFlow();
+                    // Pop the paywall screen to let AppRouter handle navigation
+                    Navigator.of(context).pop();
                   },
                   child: Container(
                     width: double.infinity,
@@ -919,6 +1196,120 @@ class _PaymentSuccessOverlay extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Billing Period Toggle Widget - Clean, smooth sliding toggle
+class _BillingPeriodToggle extends StatelessWidget {
+  final String selectedPeriod;
+  final Function(String) onPeriodChanged;
+
+  const _BillingPeriodToggle({
+    required this.selectedPeriod,
+    required this.onPeriodChanged,
+  });
+
+  static const double _toggleWidth = 180.0;
+  static const double _toggleHeight = 40.0;
+  static const double _indicatorPadding = 3.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final isYearly = selectedPeriod == 'yearly';
+
+    return GestureDetector(
+      onHorizontalDragEnd: (details) {
+        final velocity = details.primaryVelocity ?? 0;
+        if (velocity > 100) {
+          onPeriodChanged('yearly');
+        } else if (velocity < -100) {
+          onPeriodChanged('monthly');
+        }
+      },
+      child: Container(
+        width: _toggleWidth,
+        height: _toggleHeight,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(_toggleHeight / 2),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.12),
+            width: 1,
+          ),
+        ),
+        child: Stack(
+          children: [
+            // Animated sliding indicator
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
+              left: isYearly
+                  ? _toggleWidth / 2 - _indicatorPadding
+                  : _indicatorPadding,
+              top: _indicatorPadding,
+              bottom: _indicatorPadding,
+              width: _toggleWidth / 2,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(
+                      (_toggleHeight - _indicatorPadding * 2) / 2),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.1),
+                    width: 1,
+                  ),
+                ),
+              ),
+            ),
+
+            // Labels
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onPeriodChanged('monthly'),
+                    child: Center(
+                      child: AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 200),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight:
+                              !isYearly ? FontWeight.w700 : FontWeight.w500,
+                          color:
+                              Colors.white.withOpacity(!isYearly ? 1.0 : 0.5),
+                          letterSpacing: -0.2,
+                        ),
+                        child: const Text('Monthly'),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onPeriodChanged('yearly'),
+                    child: Center(
+                      child: AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 200),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight:
+                              isYearly ? FontWeight.w700 : FontWeight.w500,
+                          color: Colors.white.withOpacity(isYearly ? 1.0 : 0.5),
+                          letterSpacing: -0.2,
+                        ),
+                        child: const Text('Yearly'),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

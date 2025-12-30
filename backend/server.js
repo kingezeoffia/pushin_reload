@@ -172,30 +172,54 @@ app.get('/api/health', (req, res) => {
 // 1. Create Checkout Session
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   try {
-    const { userId, planId, userEmail, successUrl, cancelUrl } = req.body;
+    const { userId, planId, billingPeriod, userEmail, successUrl, cancelUrl } = req.body;
 
-    console.log('Creating checkout session:', { userId, planId, userEmail });
+    console.log('Creating checkout session:', { userId, planId, billingPeriod, userEmail });
 
     // Validate inputs
     if (!userId || !planId || !userEmail) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: userId, planId, userEmail' 
+      return res.status(400).json({
+        error: 'Missing required fields: userId, planId, userEmail'
       });
     }
 
-    // Determine price ID based on plan (test or live mode)
+    // Default billingPeriod to 'monthly' if not provided
+    const period = billingPeriod || 'monthly';
+
+    // Validate planId and billingPeriod
+    if (!['pro', 'advanced'].includes(planId)) {
+      return res.status(400).json({
+        error: `Invalid plan ID: ${planId}. Must be 'pro' or 'advanced'`
+      });
+    }
+
+    if (!['monthly', 'yearly'].includes(period)) {
+      return res.status(400).json({
+        error: `Invalid billing period: ${period}. Must be 'monthly' or 'yearly'`
+      });
+    }
+
+    // Determine price ID based on plan and billing period (test or live mode)
+    // Supports 4 combinations: pro_monthly, pro_yearly, advanced_monthly, advanced_yearly
     const priceIds = process.env.NODE_ENV === 'test' ? {
-      standard: process.env.STRIPE_TEST_PRICE_STANDARD || 'price_test_standard_placeholder',
-      advanced: process.env.STRIPE_TEST_PRICE_ADVANCED || 'price_test_advanced_placeholder',
+      'pro_monthly': process.env.STRIPE_TEST_PRICE_PRO_MONTHLY || 'price_test_pro_monthly_placeholder',
+      'pro_yearly': process.env.STRIPE_TEST_PRICE_PRO_YEARLY || 'price_test_pro_yearly_placeholder',
+      'advanced_monthly': process.env.STRIPE_TEST_PRICE_ADVANCED_MONTHLY || 'price_test_advanced_monthly_placeholder',
+      'advanced_yearly': process.env.STRIPE_TEST_PRICE_ADVANCED_YEARLY || 'price_test_advanced_yearly_placeholder',
     } : {
-      standard: process.env.STRIPE_PRICE_STANDARD,
-      advanced: process.env.STRIPE_PRICE_ADVANCED,
+      'pro_monthly': process.env.STRIPE_PRICE_PRO_MONTHLY,
+      'pro_yearly': process.env.STRIPE_PRICE_PRO_YEARLY,
+      'advanced_monthly': process.env.STRIPE_PRICE_ADVANCED_MONTHLY,
+      'advanced_yearly': process.env.STRIPE_PRICE_ADVANCED_YEARLY,
     };
 
-    const priceId = priceIds[planId];
+    // Create planKey from planId and billingPeriod (e.g., "pro_monthly")
+    const planKey = `${planId}_${period}`;
+    const priceId = priceIds[planKey];
+
     if (!priceId) {
-      return res.status(400).json({ 
-        error: `Invalid plan ID: ${planId}. Must be 'standard' or 'advanced'` 
+      return res.status(400).json({
+        error: `Invalid plan/billing combination: ${planKey}. Check that STRIPE_PRICE_${planId.toUpperCase()}_${period.toUpperCase()} is set.`
       });
     }
 
@@ -214,6 +238,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       metadata: {
         userId,
         planId,
+        billingPeriod: period,
       },
     });
 

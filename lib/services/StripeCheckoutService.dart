@@ -31,17 +31,32 @@ class StripeCheckoutService {
   /// In test mode without real keys, simulates the flow
   Future<bool> launchCheckout({
     required String userId,
-    required String planId, // 'standard' or 'advanced'
+    required String planId, // 'pro' or 'advanced'
+    required String billingPeriod, // 'monthly' or 'yearly'
     required String userEmail,
   }) async {
     // TEST MODE SIMULATION: If no real Stripe keys, simulate the flow
     if (isTestMode && !baseUrl.contains('railway.app')) {
-      return await _simulateTestCheckout(userId, planId, userEmail);
+      return await _simulateTestCheckout(userId, planId, billingPeriod, userEmail);
     }
 
     // REAL STRIPE INTEGRATION
     try {
       // 1. Call your backend to create Stripe Checkout session
+      final requestBody = {
+        'userId': userId,
+        'planId': planId,
+        'billingPeriod': billingPeriod,
+        'userEmail': userEmail,
+        'successUrl':
+            'pushinapp://payment-success?session_id={CHECKOUT_SESSION_ID}',
+        'cancelUrl': 'pushinapp://payment-cancel',
+      };
+
+      print('🔵 StripeCheckoutService: Creating checkout session');
+      print('   URL: $baseUrl/stripe/create-checkout-session');
+      print('   Request body: $requestBody');
+
       final response = await http.post(
         Uri.parse('$baseUrl/stripe/create-checkout-session'),
         headers: {
@@ -49,15 +64,11 @@ class StripeCheckoutService {
           // Add auth token if needed
           // 'Authorization': 'Bearer $authToken',
         },
-        body: jsonEncode({
-          'userId': userId,
-          'planId': planId,
-          'userEmail': userEmail,
-          'successUrl':
-              'pushinapp://payment-success?session_id={CHECKOUT_SESSION_ID}',
-          'cancelUrl': 'pushinapp://payment-cancel',
-        }),
+        body: jsonEncode(requestBody),
       );
+
+      print('📡 StripeCheckoutService: Response status: ${response.statusCode}');
+      print('   Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -248,9 +259,9 @@ class StripeCheckoutService {
 
   /// Simulate Stripe Checkout for testing without real keys
   Future<bool> _simulateTestCheckout(
-      String userId, String planId, String userEmail) async {
+      String userId, String planId, String billingPeriod, String userEmail) async {
     try {
-      print('TEST MODE: Simulating Stripe Checkout for $planId plan');
+      print('TEST MODE: Simulating Stripe Checkout for $planId plan ($billingPeriod)');
 
       // Simulate network delay
       await Future.delayed(const Duration(seconds: 2));
@@ -294,13 +305,14 @@ class SubscriptionStatus {
   });
 
   bool get isPaid => planId != 'free' && isActive;
-  bool get isStandard => planId == 'standard' && isActive;
+  bool get isPro => (planId == 'pro' || planId == 'standard') && isActive;
   bool get isAdvanced => planId == 'advanced' && isActive;
 
   String get displayName {
     switch (planId) {
-      case 'standard':
-        return 'Standard Plan';
+      case 'pro':
+      case 'standard': // Legacy support
+        return 'Pro Plan';
       case 'advanced':
         return 'Advanced Plan';
       default:
