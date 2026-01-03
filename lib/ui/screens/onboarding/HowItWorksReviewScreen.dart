@@ -56,14 +56,13 @@ class _HowItWorksReviewScreenState extends State<HowItWorksReviewScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Back Button & Step Indicator
+              // Step Indicator
               Padding(
-                padding: const EdgeInsets.only(left: 8, right: 16, top: 8),
+                padding: const EdgeInsets.only(right: 16, top: 8),
                 child: Row(
                   children: [
-                    _BackButton(onTap: () => Navigator.pop(context)),
                     const Spacer(),
-                    _StepIndicator(currentStep: 6, totalSteps: 6),
+                    _StepIndicator(currentStep: 5, totalSteps: 5),
                   ],
                 ),
               ),
@@ -312,32 +311,6 @@ class _StepIndicator extends StatelessWidget {
   }
 }
 
-/// Back Button Widget
-class _BackButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _BackButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.arrow_back,
-          color: Colors.white,
-          size: 22,
-        ),
-      ),
-    );
-  }
-}
 
 /// Continue Button Widget
 class _ContinueButton extends StatelessWidget {

@@ -4,7 +4,28 @@ import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../theme/pushin_theme.dart';
 import 'HowItWorksPushUpTestScreen.dart';
-import 'HowItWorksUnlockDurationScreen.dart';
+import 'HowItWorksEmergencyUnlockScreen.dart';
+
+/// Custom route that disables swipe back gesture on iOS
+class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
+  _NoSwipeBackRoute({
+    required WidgetBuilder builder,
+    RouteSettings? settings,
+  }) : super(builder: builder, settings: settings);
+
+  @override
+  bool get hasScopedWillPopCallback => true;
+
+  @override
+  bool get canPop => false;
+
+  @override
+  Widget buildTransitions(BuildContext context, Animation<double> animation,
+      Animation<double> secondaryAnimation, Widget child) {
+    // Disable the default iOS swipe back transition
+    return child;
+  }
+}
 
 /// Step 2: Exercise to Unlock Screen Time
 ///
@@ -12,7 +33,7 @@ import 'HowItWorksUnlockDurationScreen.dart';
 /// - Duolingo-style card layout with modern Apple-style icons
 /// - Only Push-Ups available now (1 out of 5 workouts)
 /// - Locked exercises shown as disabled cards with "Premium feature" label
-/// - "More exercises coming soon" reminder at bottom
+/// - "More Workouts coming soon" reminder at bottom
 class HowItWorksExerciseScreen extends StatefulWidget {
   final String fitnessLevel;
   final List<String> goals;
@@ -58,14 +79,13 @@ class _HowItWorksExerciseScreenState extends State<HowItWorksExerciseScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Back Button & Step Indicator
+              // Step Indicator
               Padding(
-                padding: const EdgeInsets.only(left: 8, right: 16, top: 8),
+                padding: const EdgeInsets.only(right: 16, top: 8),
                 child: Row(
                   children: [
-                    _BackButton(onTap: () => Navigator.pop(context)),
                     const Spacer(),
-                    _StepIndicator(currentStep: 2, totalSteps: 6),
+                    _StepIndicator(currentStep: 2, totalSteps: 5),
                   ],
                 ),
               ),
@@ -163,7 +183,7 @@ class _HowItWorksExerciseScreenState extends State<HowItWorksExerciseScreen> {
 
                       const SizedBox(height: 20),
 
-                      // More exercises coming soon reminder
+                      // More Workouts coming soon reminder
                       Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
@@ -179,7 +199,7 @@ class _HowItWorksExerciseScreenState extends State<HowItWorksExerciseScreen> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'More exercises coming soon!',
+                              'More Workouts coming soon!',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
@@ -204,7 +224,7 @@ class _HowItWorksExerciseScreenState extends State<HowItWorksExerciseScreen> {
                       // Navigate to push-up test screen for Push-Ups
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
+                        _NoSwipeBackRoute(
                           builder: (context) => HowItWorksPushUpTestScreen(
                             fitnessLevel: widget.fitnessLevel,
                             goals: widget.goals,
@@ -215,17 +235,18 @@ class _HowItWorksExerciseScreenState extends State<HowItWorksExerciseScreen> {
                         ),
                       );
                     } else {
-                      // Navigate directly to unlock duration for other workouts
+                      // Navigate directly to emergency unlock for other workouts
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (context) => HowItWorksUnlockDurationScreen(
+                        _NoSwipeBackRoute(
+                          builder: (context) => HowItWorksEmergencyUnlockScreen(
                             fitnessLevel: widget.fitnessLevel,
                             goals: widget.goals,
                             otherGoal: widget.otherGoal,
                             workoutHistory: widget.workoutHistory,
                             blockedApps: widget.blockedApps,
                             selectedWorkout: _selectedWorkout!,
+                            unlockDuration: 15, // Default 15 minutes
                           ),
                         ),
                       );
@@ -434,32 +455,6 @@ class _StepIndicator extends StatelessWidget {
   }
 }
 
-/// Back Button Widget
-class _BackButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _BackButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.arrow_back,
-          color: Colors.white,
-          size: 22,
-        ),
-      ),
-    );
-  }
-}
 
 /// Continue Button Widget
 class _ContinueButton extends StatelessWidget {

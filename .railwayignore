@@ -1,0 +1,20 @@
+# Ignore Flutter files for Railway backend deployment
+# Keep: package.json, backend/, and other backend files
+
+pubspec.yaml
+pubspec.lock
+lib/
+android/
+ios/
+web/
+macos/
+linux/
+windows/
+build/
+.dart_tool/
+.idea/
+.vscode/
+*.iml
+flutter_*.log
+integration_test/
+test/

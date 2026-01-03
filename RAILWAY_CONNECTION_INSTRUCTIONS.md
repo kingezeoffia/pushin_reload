@@ -363,3 +363,15 @@ node debug-connection.js
 | Local Development | `hopper.proxy.rlwy.net:25708` | Yes | Development on local machine |
 | Railway Production | `postgres.railway.internal:5432` | Yes | Deployed Railway applications |
 | CLI Tunnel | `localhost:5432` | No | When public proxy fails |
+
+
+
+
+
+
+
+
+
+
+
+

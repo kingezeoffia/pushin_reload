@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../../../state/auth_state_provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import 'SkipUnlockDurationScreen.dart';
-import 'SkipPushUpTestScreen.dart';
 
 /// Skip Flow: Exercise to Unlock Screen Time
 ///
@@ -35,6 +35,11 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthStateProvider>(context);
+    print('🧪 SkipExerciseScreen - justRegistered=${authProvider.justRegistered}, '
+          'isGuestMode=${authProvider.isGuestMode}, '
+          'guestCompletedSetup=${authProvider.guestCompletedSetup}');
+
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
@@ -45,11 +50,6 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Back Button (no step indicator for skip flow)
-              Padding(
-                padding: const EdgeInsets.only(left: 8, right: 16, top: 8),
-                child: _BackButton(onTap: () => Navigator.pop(context)),
-              ),
 
               SizedBox(height: screenHeight * 0.08),
 
@@ -143,7 +143,7 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
 
                       const SizedBox(height: 20),
 
-                      // More exercises coming soon reminder
+                      // More Workouts coming soon reminder
                       Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
@@ -159,7 +159,7 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'More exercises coming soon!',
+                              'More Workouts coming soon!',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
@@ -181,29 +181,9 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
                   enabled: _selectedWorkout != null,
                   onTap: () {
                     if (_selectedWorkout != null) {
-                      // If Push-Ups selected, go to test screen first
-                      if (_selectedWorkout == 'Push-Ups') {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => SkipPushUpTestScreen(
-                              blockedApps: widget.blockedApps,
-                              selectedWorkout: _selectedWorkout!,
-                            ),
-                          ),
-                        );
-                      } else {
-                        // For other workouts, skip test and go directly to duration
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => SkipUnlockDurationScreen(
-                              blockedApps: widget.blockedApps,
-                              selectedWorkout: _selectedWorkout!,
-                            ),
-                          ),
-                        );
-                      }
+                      final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
+                      authProvider.setSelectedWorkout(_selectedWorkout!);
+                      authProvider.advanceGuestSetupStep();
                     }
                   },
                 ),
@@ -369,31 +349,6 @@ class _WorkoutCard extends StatelessWidget {
 }
 
 /// Back Button Widget
-class _BackButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _BackButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.arrow_back,
-          color: Colors.white,
-          size: 22,
-        ),
-      ),
-    );
-  }
-}
 
 /// Continue Button Widget
 class _ContinueButton extends StatelessWidget {
@@ -446,6 +401,10 @@ class _ContinueButton extends StatelessWidget {
     );
   }
 }
+
+
+
+
 
 
 

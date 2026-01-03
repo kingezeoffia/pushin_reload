@@ -1,9 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../../../state/auth_state_provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/SelectionButton.dart';
 import 'OnboardingGoalsScreen.dart';
+
+/// Custom route that disables swipe back gesture on iOS
+class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
+  _NoSwipeBackRoute({
+    required WidgetBuilder builder,
+    RouteSettings? settings,
+  }) : super(builder: builder, settings: settings);
+
+  @override
+  bool get hasScopedWillPopCallback => true;
+
+  @override
+  bool get canPop => false;
+
+  @override
+  Widget buildTransitions(BuildContext context, Animation<double> animation,
+      Animation<double> secondaryAnimation, Widget child) {
+    // Disable the default iOS swipe back transition
+    return child;
+  }
+}
 
 /// Screen 2: Current Fitness Level
 ///
@@ -25,6 +48,12 @@ class _OnboardingFitnessLevelScreenState
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthStateProvider>(context);
+    print(
+        '🧪 OnboardingFitnessLevelScreen - justRegistered=${authProvider.justRegistered}, '
+        'isGuestMode=${authProvider.isGuestMode}, '
+        'guestCompletedSetup=${authProvider.guestCompletedSetup}');
+
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
@@ -35,12 +64,6 @@ class _OnboardingFitnessLevelScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Back Button
-              Padding(
-                padding: const EdgeInsets.only(left: 8, top: 8),
-                child: _BackButton(onTap: () => Navigator.pop(context)),
-              ),
-
               // Consistent spacing with other screens
               SizedBox(height: screenHeight * 0.08),
 
@@ -164,7 +187,7 @@ class _OnboardingFitnessLevelScreenState
                     if (_selectedLevel != null) {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
+                        _NoSwipeBackRoute(
                           builder: (context) => OnboardingGoalsScreen(
                             fitnessLevel: _selectedLevel!,
                           ),
@@ -183,31 +206,6 @@ class _OnboardingFitnessLevelScreenState
 }
 
 /// Back Button Widget
-class _BackButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _BackButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.1),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.arrow_back,
-          color: Colors.white,
-          size: 22,
-        ),
-      ),
-    );
-  }
-}
 
 /// Next Button Widget
 class _NextButton extends StatelessWidget {

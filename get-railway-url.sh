@@ -33,3 +33,16 @@ echo "   postgresql://...@something.proxy.rlwy.net:PORT/railway"
 echo "                     ^^^^^^^^^^^^^^^^^^^^^^^^"
 echo "                     Public proxy - works everywhere"
 echo ""
+
+
+
+
+
+
+
+
+
+
+
+
+

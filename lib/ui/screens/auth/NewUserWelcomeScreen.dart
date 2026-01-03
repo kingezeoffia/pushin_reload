@@ -1,36 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import '../../../services/AuthStateProvider.dart';
+import '../../../state/auth_state_provider.dart';
 
-/// New User Welcome Screen - Personalized welcome for newly registered users
+/// New User Welcome Screen - Welcome screen for newly registered users
 ///
 /// BMAD V6 Spec:
-/// - ONLY shown after successful registration (not login)
-/// - NEVER shown more than once per user
-/// - Personalized with user's firstname
-/// - Same visual system as onboarding screens
+/// - Same visual system as onboarding screens (GOStepsBackground, consistent styling)
 /// - Clean, premium, minimal design
+/// - Continue button handles navigation to onboarding welcome screen
+/// - NO navigation logic - routing handled by AppRouter state changes
 class NewUserWelcomeScreen extends StatelessWidget {
-  final VoidCallback? onWelcomeCompleted;
+  final bool isReturningUser;
 
   const NewUserWelcomeScreen({
     super.key,
-    this.onWelcomeCompleted,
+    this.isReturningUser = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
     final authProvider = Provider.of<AuthStateProvider>(context);
-    final user = authProvider.currentUser;
 
-    // Get user's firstname or use fallback
-    final firstname = user?.firstname?.trim();
-    final displayName = (firstname != null && firstname.isNotEmpty)
-        ? firstname
-        : null; // Will show fallback message
+    print('🎨 NewUserWelcomeScreen: Building screen');
+    print('   - isReturningUser: $isReturningUser');
+    print('🧪 NewUserWelcomeScreen - justRegistered=${authProvider.justRegistered}, '
+        'isGuestMode=${authProvider.isGuestMode}, '
+        'guestCompletedSetup=${authProvider.guestCompletedSetup}');
+
+    final user = authProvider.currentUser;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -38,99 +39,141 @@ class NewUserWelcomeScreen extends StatelessWidget {
         blackRatio: 0.25,
         child: SafeArea(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Scrollable content area
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(height: screenHeight * 0.15),
+              // Consistent spacing with other screens
+              SizedBox(height: screenHeight * 0.08),
 
-                      // Personalized welcome message
-                      Center(
-                        child: Column(
-                          children: [
-                            // Main headline
-                            ShaderMask(
-                              shaderCallback: (bounds) => const LinearGradient(
-                                colors: [Colors.white, Color(0xFFB0B8FF)],
-                              ).createShader(
-                                Rect.fromLTWH(
-                                    0, 0, bounds.width, bounds.height * 1.3),
-                              ),
-                              blendMode: BlendMode.srcIn,
-                              child: const Text(
-                                'Welcome to the Family,',
-                                style: TextStyle(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                  letterSpacing: -0.5,
-                                  height: 1.2,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-
-                            SizedBox(height: screenHeight * 0.03),
-
-                            // User's firstname (only show if exists)
-                            displayName != null
-                                ? ShaderMask(
-                                    shaderCallback: (bounds) =>
-                                        const LinearGradient(
-                                      colors: [
-                                        Color(0xFF6060FF),
-                                        Color(0xFF9090FF)
-                                      ],
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                    ).createShader(
-                                      Rect.fromLTWH(0, 0, bounds.width,
-                                          bounds.height * 1.3),
-                                    ),
-                                    blendMode: BlendMode.srcIn,
-                                    child: Text(
-                                      displayName,
-                                      style: const TextStyle(
-                                        fontSize: 42,
-                                        fontWeight: FontWeight.w800,
-                                        color: Colors.white,
-                                        letterSpacing: -0.5,
-                                        height: 1.1,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  )
-                                : const SizedBox.shrink(),
-
-                            SizedBox(height: screenHeight * 0.04),
-
-                            // Warm intro text
-                            Text(
-                              'You\'re now part of a community committed to building healthier digital habits. Let\'s get you set up!',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.white.withOpacity(0.8),
-                                letterSpacing: -0.2,
-                                height: 1.4,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
+              // Heading - consistent positioning
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Welcome icon
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF60A5FA).withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: const Icon(
+                        Icons.family_restroom_rounded,
+                        size: 40,
+                        color: Color(0xFF60A5FA),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Color(0xFF60A5FA), Color(0xFF93C5FD)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ).createShader(
+                        Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                      ),
+                      blendMode: BlendMode.srcIn,
+                      child: const Text(
+                        'Welcome to the',
+                        style: TextStyle(
+                          fontSize: 44,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          height: 1.1,
+                          letterSpacing: -0.5,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Color(0xFF60A5FA), Color(0xFF93C5FD)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ).createShader(
+                        Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                      ),
+                      blendMode: BlendMode.srcIn,
+                      child: const Text(
+                        'FAMILY',
+                        style: TextStyle(
+                          fontSize: 44,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          height: 1.1,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "You're now part of something special",
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Colors.white.withOpacity(0.6),
+                        letterSpacing: -0.2,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
-              // Fixed bottom CTA button
+              SizedBox(height: screenHeight * 0.04),
+
+              // Welcome message
               Padding(
-                padding: const EdgeInsets.all(32),
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.celebration_rounded,
+                            size: 48,
+                            color: Colors.white.withOpacity(0.8),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            '🎉 Welcome to the PUSHIN\' Family! 🎉',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white.withOpacity(0.9),
+                              height: 1.4,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            user?.name != null
+                                ? 'Great to have you here, ${user!.name}!'
+                                : 'Great to have you here!',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.white.withOpacity(0.7),
+                              height: 1.4,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const Spacer(),
+
+              // Continue Button
+              Padding(
+                padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
                 child: _ContinueButton(
                   onTap: () => _handleContinue(context),
                 ),
@@ -143,13 +186,24 @@ class NewUserWelcomeScreen extends StatelessWidget {
   }
 
   void _handleContinue(BuildContext context) {
-    // Call completion callback (clears justRegistered flag and triggers AppRouter rebuild)
-    onWelcomeCompleted?.call();
-    // Navigation is handled automatically by AppRouter when justRegistered flag is cleared
+    // Handle continue based on user type
+    final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
+
+    print('🎯 NewUserWelcomeScreen: Continue button tapped');
+    print('   - isReturningUser: $isReturningUser');
+    print('   - current justRegistered flag: ${authProvider.justRegistered}');
+    print('   - user email: ${authProvider.currentUser?.email ?? "none"}');
+
+    // This screen should only be shown to new users (isReturningUser = false)
+    // The routing logic in AppRouter ensures returning users go directly to onboarding
+    print('   → New user: Clearing justRegistered flag to start onboarding flow');
+    // For new users, clear the justRegistered flag to proceed directly to onboarding
+    authProvider.clearJustRegisteredFlag();
+    print('   ✓ Just registered flag cleared - router will show onboarding flow');
   }
 }
 
-/// Continue button with press animation
+/// Continue Button Widget
 class _ContinueButton extends StatelessWidget {
   final VoidCallback onTap;
 

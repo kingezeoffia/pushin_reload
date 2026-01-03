@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:uni_links/uni_links.dart';
@@ -27,10 +28,10 @@ class DeepLinkHandler {
   Future<void> initialize() async {
     print('Initializing deep link handler...');
 
-    // Deep links are not supported on web platform
-    if (kIsWeb) {
+    // Deep links are not supported on web platform or test environment
+    if (kIsWeb || Platform.environment.containsKey('FLUTTER_TEST')) {
       print(
-          'Deep links not supported on web platform - deep link functionality disabled');
+          'Deep links not supported on web platform or test environment - deep link functionality disabled');
       return;
     }
 
@@ -45,21 +46,35 @@ class DeepLinkHandler {
       }
     } catch (e) {
       print('Error getting initial link: $e');
+      // If this is a MissingPluginException (likely in test environment), skip deep link functionality
+      if (e.toString().contains('MissingPluginException')) {
+        print('Deep link functionality disabled (likely test environment)');
+        return;
+      }
     }
 
     // Listen for links while app is running
     print('Listening for deep links...');
-    _linkSubscription = uriLinkStream.listen(
-      (Uri? uri) {
-        print('Deep link stream received: $uri');
-        if (uri != null) {
-          _handleDeepLink(uri);
-        }
-      },
-      onError: (err) {
-        print('Deep link stream error: $err');
-      },
-    );
+    try {
+      _linkSubscription = uriLinkStream.listen(
+        (Uri? uri) {
+          print('Deep link stream received: $uri');
+          if (uri != null) {
+            _handleDeepLink(uri);
+          }
+        },
+        onError: (err) {
+          print('Deep link stream error: $err');
+        },
+      );
+    } catch (e) {
+      print('Failed to listen for deep links: $e');
+      // If this is a MissingPluginException (likely in test environment), skip deep link functionality
+      if (e.toString().contains('MissingPluginException')) {
+        print('Deep link functionality disabled (likely test environment)');
+        return;
+      }
+    }
   }
 
   /// Handle incoming deep link

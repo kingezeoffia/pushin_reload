@@ -548,3 +548,15 @@ The internal host provides better performance and doesn't count against egress l
 4. **Verify environment variables:** `echo $DATABASE_URL`
 
 The test script `test-connection.js` will give you specific error messages to diagnose issues.
+
+
+
+
+
+
+
+
+
+
+
+

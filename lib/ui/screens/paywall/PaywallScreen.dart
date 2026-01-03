@@ -7,12 +7,12 @@ import '../../../state/pushin_app_controller.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../auth/SignUpScreen.dart';
 
-/// Paywall Screen - Free Trial with Standard or Advanced plan
+/// Paywall Screen - Free Trial with Pro or Advanced plan
 ///
 /// BMAD V6 Spec:
 /// - 3-Day Free Trial (Monthly) / 5-Day Free Trial (Yearly)
-/// - Standard — 9.99 €: 3 App Blockages, 3 Workouts
-/// - Advanced — 14.99 €: 5 App Blockages, 5 Workouts
+/// - Pro — 9.99 €: 3 App Blockages, 3 Workouts
+/// - Advanced — 14.99 €: Unlimited App Blockages, Unlimited Workouts
 /// - GO Steps style design
 class PaywallScreen extends StatefulWidget {
   final Map<String, dynamic>? onboardingData;
@@ -221,10 +221,10 @@ class _PaywallScreenState extends State<PaywallScreen>
                             yearlyPrice: '79.99 €',
                             isYearly: _billingPeriod == 'yearly',
                             features: const [
-                              '5 App Blockages',
-                              '5 Workouts',
+                              'Unlimited App Blockages',
+                              'Unlimited Workouts',
                               'Advanced Analytics',
-                              'Priority Support',
+                              'Water intake tracking',
                             ],
                             isSelected: _selectedPlan == 'advanced',
                             isPopular: false,
@@ -443,7 +443,6 @@ class _PaywallScreenState extends State<PaywallScreen>
         if (subscriptionStatus != null && subscriptionStatus.isActive) {
           switch (subscriptionStatus.planId) {
             case 'pro':
-            case 'standard': // Legacy support
               return 'Pro Plan';
             case 'advanced':
               return 'Advanced Plan';
@@ -489,13 +488,12 @@ class _PaywallScreenState extends State<PaywallScreen>
       print('   - isAuthenticated: ${authProvider.isAuthenticated}');
       print('   - isGuestMode: ${authProvider.isGuestMode}');
 
-      // Launch checkout with plan ID ('standard' or 'advanced') and billing period ('monthly' or 'yearly')
-      // Note: 'pro' plan is sent as 'standard' to backend for compatibility
-      final backendPlanId = _selectedPlan == 'pro' ? 'standard' : 'advanced';
+      // Launch checkout with plan ID ('pro' or 'advanced') and billing period ('monthly' or 'yearly')
+      final backendPlanId = _selectedPlan; // 'pro' or 'advanced'
 
       final success = await stripeService.launchCheckout(
         userId: userId,
-        planId: backendPlanId, // 'standard' or 'advanced' (backend naming)
+        planId: backendPlanId, // 'pro' or 'advanced'
         billingPeriod: _billingPeriod, // 'monthly' or 'yearly'
         userEmail: userEmail,
       );

@@ -1,59 +1,136 @@
 import 'package:flutter/foundation.dart';
 import 'AuthenticationService.dart';
-import 'TokenManager.dart';
+import 'OnboardingService.dart';
 
 /// Authentication state provider for managing app-wide auth state
+/// Simplified version with only the three core flags plus basic auth state
 class AuthStateProvider extends ChangeNotifier {
-  final AuthenticationService _authService;
-  final TokenManager _tokenManager;
+  final AuthenticationService _authService = AuthenticationService();
 
   User? _currentUser;
-  bool _isLoading = true;
+  bool _isLoading = false;
+  bool _justRegistered = false;
+  bool _isGuestMode = false;
+  bool _guestCompletedSetup = false;
+  bool _isOnboardingCompleted = false;
+  bool _showSignUpScreen = false;
+  bool _showSignInScreen = false;
   String? _errorMessage;
-  bool _justRegistered = false; // Track if user just completed registration
-
-  AuthStateProvider({
-    AuthenticationService? authService,
-    TokenManager? tokenManager,
-  })  : _authService = authService ?? AuthenticationService(),
-        _tokenManager = tokenManager ?? TokenManager();
 
   // Getters
   User? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
-  String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _currentUser != null;
   bool get justRegistered => _justRegistered;
+  bool get isGuestMode => _isGuestMode;
+  bool get guestCompletedSetup => _guestCompletedSetup;
+  bool get isOnboardingCompleted => _isOnboardingCompleted;
+  bool get showSignUpScreen => _showSignUpScreen;
+  bool get showSignInScreen => _showSignInScreen;
+  String? get errorMessage => _errorMessage;
 
-  /// Initialize auth state on app startup
+  /// Initialize auth state (minimal version for simplified provider)
   Future<void> initialize() async {
-    _isLoading = true;
-    _errorMessage = null;
+    // Load onboarding completion status from persistent storage
+    await loadOnboardingStatus();
+
+    // Minimal initialization - no complex auth logic
+    _isLoading = false;
+
+    debugPrint('🔄 AuthStateProvider initialized:');
+    debugPrint('   - justRegistered: $_justRegistered');
+    debugPrint('   - isGuestMode: $_isGuestMode');
+    debugPrint('   - guestCompletedSetup: $_guestCompletedSetup');
+    debugPrint('   - isOnboardingCompleted: $_isOnboardingCompleted');
+
     notifyListeners();
-
-    try {
-      final hasValidTokens = await _tokenManager.hasValidTokens();
-
-      if (hasValidTokens) {
-        // Try to get current user profile
-        _currentUser = await _authService.getCurrentUser();
-
-        if (_currentUser == null) {
-          // Tokens exist but user fetch failed, clear tokens
-          await _tokenManager.clearTokens();
-        }
-      }
-    } catch (e) {
-      // If initialization fails, clear any invalid state
-      await _tokenManager.clearTokens();
-      _currentUser = null;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
   }
 
-  /// Register with email and password
+  /// Load onboarding completion status from SharedPreferences
+  Future<void> loadOnboardingStatus() async {
+    _isOnboardingCompleted = await OnboardingService.isOnboardingCompleted();
+    debugPrint(
+        '📋 AuthStateProvider.loadOnboardingStatus(): loaded $_isOnboardingCompleted');
+  }
+
+  /// Mark onboarding as completed and persist the status
+  Future<void> markOnboardingCompleted() async {
+    await OnboardingService.markOnboardingCompleted();
+    _isOnboardingCompleted = true;
+    debugPrint('✅ AuthStateProvider.markOnboardingCompleted(): set to true');
+    notifyListeners();
+  }
+
+  // State management methods
+  void setJustRegisteredFlag(bool value) {
+    _justRegistered = value;
+    debugPrint('🔄 AuthStateProvider.setJustRegisteredFlag(): $value');
+    notifyListeners();
+  }
+
+  void clearJustRegisteredFlag() {
+    _justRegistered = false;
+    debugPrint('🔄 AuthStateProvider.clearJustRegisteredFlag(): false');
+    notifyListeners();
+  }
+
+  void enterGuestMode() {
+    _isGuestMode = true;
+    _guestCompletedSetup = false;
+    debugPrint(
+        '🔄 AuthStateProvider.enterGuestMode(): guest mode enabled, setup reset');
+    notifyListeners();
+  }
+
+  void setGuestCompletedSetup() {
+    _guestCompletedSetup = true;
+    debugPrint('🔄 AuthStateProvider.setGuestCompletedSetup(): true');
+    notifyListeners();
+  }
+
+  void exitGuestMode() {
+    _isGuestMode = false;
+    _guestCompletedSetup = false;
+    debugPrint(
+        '🔄 AuthStateProvider.exitGuestMode(): guest mode disabled, setup reset');
+    notifyListeners();
+  }
+
+  /// Trigger sign up flow - shows SignUpScreen via state-driven routing
+  void triggerSignUpFlow() {
+    _showSignUpScreen = true;
+    _showSignInScreen = false; // Clear sign in screen when showing sign up
+    debugPrint(
+        '🔄 AuthStateProvider.triggerSignUpFlow(): true - showing SignUpScreen');
+    notifyListeners();
+  }
+
+  /// Trigger sign in flow - shows SignInScreen via state-driven routing
+  void triggerSignInFlow() {
+    _showSignInScreen = true;
+    _showSignUpScreen = false; // Clear sign up screen when showing sign in
+    debugPrint(
+        '🔄 AuthStateProvider.triggerSignInFlow(): true - showing SignInScreen');
+    notifyListeners();
+  }
+
+  /// Clear sign up flow - hides SignUpScreen
+  void clearSignUpFlow() {
+    _showSignUpScreen = false;
+    debugPrint(
+        '🔄 AuthStateProvider.clearSignUpFlow(): false - hiding SignUpScreen');
+    notifyListeners();
+  }
+
+  /// Clear sign in flow - hides SignInScreen
+  void clearSignInFlow() {
+    _showSignInScreen = false;
+    debugPrint(
+        '🔄 AuthStateProvider.clearSignInFlow(): false - hiding SignInScreen');
+    notifyListeners();
+  }
+
+  // Authentication methods
   Future<bool> register({
     required String email,
     required String password,
@@ -61,174 +138,116 @@ class AuthStateProvider extends ChangeNotifier {
   }) async {
     _isLoading = true;
     _errorMessage = null;
-    _justRegistered = false; // Reset flag
     notifyListeners();
 
-    try {
-      final result = await _authService.register(
-        email: email,
-        password: password,
-        name: name,
-      );
+    final result = await _authService.register(
+      email: email,
+      password: password,
+      name: name,
+    );
 
-      if (result.success && result.data != null) {
-        _currentUser = result.data!.user;
-        _justRegistered = true; // Always true for registration (new users)
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _errorMessage = result.error;
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      _errorMessage = 'Registration failed: ${e.toString()}';
-      _isLoading = false;
-      notifyListeners();
-      return false;
+    _isLoading = false;
+
+    if (result.success) {
+      _currentUser = result.data!.user;
+      _justRegistered = true;
+      _errorMessage = null;
+    } else {
+      _errorMessage = result.error;
     }
+
+    notifyListeners();
+    return result.success;
   }
 
-  /// Login with email and password
   Future<bool> login({
     required String email,
     required String password,
   }) async {
     _isLoading = true;
     _errorMessage = null;
-    _justRegistered = false; // Ensure flag is cleared for login
     notifyListeners();
 
-    try {
-      final result = await _authService.login(
-        email: email,
-        password: password,
-      );
+    final result = await _authService.login(
+      email: email,
+      password: password,
+    );
 
-      if (result.success && result.data != null) {
-        _currentUser = result.data!.user;
-        _justRegistered = result.data!.isNewUser; // Use backend response
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _errorMessage = result.error;
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      _errorMessage = 'Login failed: ${e.toString()}';
-      _isLoading = false;
-      notifyListeners();
-      return false;
+    _isLoading = false;
+
+    if (result.success) {
+      _currentUser = result.data!.user;
+      _errorMessage = null;
+    } else {
+      _errorMessage = result.error;
     }
+
+    notifyListeners();
+    return result.success;
   }
 
-  /// Sign in with Google
   Future<bool> signInWithGoogle() async {
     _isLoading = true;
     _errorMessage = null;
+    _justRegistered = false;
     notifyListeners();
 
-    try {
-      final result = await _authService.signInWithGoogle();
+    final result = await _authService.signInWithGoogle();
 
-      if (result.success && result.data != null) {
-        _currentUser = result.data!.user;
-        _justRegistered = result.data!.isNewUser; // Use backend response
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _errorMessage = result.error;
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      _errorMessage = 'Google sign in failed: ${e.toString()}';
-      _isLoading = false;
-      notifyListeners();
-      return false;
+    _isLoading = false;
+
+    if (result.success) {
+      _currentUser = result.data!.user;
+      _justRegistered = true;
+      _errorMessage = null;
+      // Clear auth screen flags since sign-in is complete
+      _showSignUpScreen = false;
+      _showSignInScreen = false;
+    } else {
+      _errorMessage = result.error;
     }
+
+    notifyListeners();
+    return result.success;
   }
 
-  /// Sign in with Apple
   Future<bool> signInWithApple() async {
     _isLoading = true;
     _errorMessage = null;
+    _justRegistered = false;
     notifyListeners();
 
-    try {
-      final result = await _authService.signInWithApple();
+    final result = await _authService.signInWithApple();
 
-      if (result.success && result.data != null) {
-        _currentUser = result.data!.user;
-        _justRegistered = result.data!.isNewUser; // Use backend response
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _errorMessage = result.error;
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      _errorMessage = 'Apple sign in failed: ${e.toString()}';
-      _isLoading = false;
-      notifyListeners();
-      return false;
+    _isLoading = false;
+
+    if (result.success) {
+      _currentUser = result.data!.user;
+      _justRegistered = true;
+      _errorMessage = null;
+      // Clear auth screen flags since sign-in is complete
+      _showSignUpScreen = false;
+      _showSignInScreen = false;
+    } else {
+      _errorMessage = result.error;
     }
+
+    notifyListeners();
+    return result.success;
   }
 
-  /// Logout user
-  Future<void> logout() async {
+  Future<bool> logout() async {
     _isLoading = true;
     notifyListeners();
 
-    try {
-      await _authService.logout();
-      _currentUser = null;
-      _errorMessage = null;
-    } catch (e) {
-      // Even if logout API fails, clear local state
-      _currentUser = null;
-      _errorMessage = null;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
+    final success = await _authService.logout();
 
-  /// Clear error message
-  void clearError() {
-    _errorMessage = null;
-    notifyListeners();
-  }
-
-  /// Clear the just registered flag (call after showing welcome screen)
-  void clearJustRegisteredFlag() {
+    _isLoading = false;
+    _currentUser = null;
     _justRegistered = false;
+    _errorMessage = null;
+
     notifyListeners();
-  }
-
-  /// Refresh user data from server
-  Future<void> refreshUser() async {
-    if (!isAuthenticated) return;
-
-    try {
-      final user = await _authService.getCurrentUser();
-      if (user != null) {
-        _currentUser = user;
-        notifyListeners();
-      }
-    } catch (e) {
-      // If refresh fails, user might be logged out
-      await logout();
-    }
+    return success;
   }
 }

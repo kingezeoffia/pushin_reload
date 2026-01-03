@@ -73,13 +73,16 @@ const tables = [
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
+        firstname VARCHAR(100),
         password_hash VARCHAR(255),
         apple_id VARCHAR(255) UNIQUE,
         google_id VARCHAR(255) UNIQUE,
+  
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `
   },
+  
   {
     name: 'refresh_tokens',
     sql: `

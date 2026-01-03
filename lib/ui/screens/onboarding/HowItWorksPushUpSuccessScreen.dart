@@ -1,7 +1,28 @@
 import 'package:flutter/material.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import 'HowItWorksUnlockDurationScreen.dart';
+import 'HowItWorksEmergencyUnlockScreen.dart';
+
+/// Custom route that disables swipe back gesture on iOS
+class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
+  _NoSwipeBackRoute({
+    required WidgetBuilder builder,
+    RouteSettings? settings,
+  }) : super(builder: builder, settings: settings);
+
+  @override
+  bool get hasScopedWillPopCallback => true;
+
+  @override
+  bool get canPop => false;
+
+  @override
+  Widget buildTransitions(BuildContext context, Animation<double> animation,
+      Animation<double> secondaryAnimation, Widget child) {
+    // Disable the default iOS swipe back transition
+    return child;
+  }
+}
 
 /// Step 2.6: Push-Up Test Success Screen
 ///
@@ -106,43 +127,26 @@ class HowItWorksPushUpSuccessScreen extends StatelessWidget {
 
               const Spacer(),
 
-              // Action Buttons
+              // Action Button
               Padding(
                 padding: const EdgeInsets.all(32),
-                child: Row(
-                  children: [
-                    // Try Again Button
-                    Expanded(
-                      child: _TryAgainButton(
-                        onTap: () {
-                          // Pop back to test screen and let it reset its state
-                          Navigator.pop(context);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    // Continue Button
-                    Expanded(
-                      child: _ContinueButton(
-                        onTap: () {
+                child: _ContinueButton(
+                  onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  HowItWorksUnlockDurationScreen(
+                            _NoSwipeBackRoute(
+                              builder: (context) => HowItWorksEmergencyUnlockScreen(
                                 fitnessLevel: fitnessLevel,
                                 goals: goals,
                                 otherGoal: otherGoal,
                                 workoutHistory: workoutHistory,
                                 blockedApps: blockedApps,
                                 selectedWorkout: 'Push-Ups',
+                                unlockDuration: 15, // Default 15 minutes
                               ),
                             ),
                           );
-                        },
-                      ),
-                    ),
-                  ],
+                  },
                 ),
               ),
             ],
@@ -153,44 +157,6 @@ class HowItWorksPushUpSuccessScreen extends StatelessWidget {
   }
 }
 
-/// Try Again Button Widget
-class _TryAgainButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _TryAgainButton({
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return PressAnimationButton(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        height: 52,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(100),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.2),
-            width: 1,
-          ),
-        ),
-        child: const Center(
-          child: Text(
-            'Try Again',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-              letterSpacing: -0.3,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /// Continue Button Widget
 class _ContinueButton extends StatelessWidget {

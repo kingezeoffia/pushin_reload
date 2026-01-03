@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import 'HowItWorksReviewScreen.dart';
+import '../../../state/auth_state_provider.dart';
 
 /// Step 4: Emergency Unlock
 ///
@@ -30,10 +31,19 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
     required this.unlockDuration,
   });
 
-
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
+    final authProvider = context.watch<AuthStateProvider>();
+
+    // This screen should only be shown when onboarding is not completed
+    // The router handles when to show this vs other screens
+
+    // Debug: Check current state
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      print(
+          '🔍 EmergencyUnlockScreen: Building with state - authenticated=${authProvider.isAuthenticated}, onboardingCompleted=${authProvider.isOnboardingCompleted}, onboardingStep=${authProvider.onboardingStep}');
+    });
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -43,14 +53,13 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Back Button & Step Indicator
+              // Step Indicator
               Padding(
-                padding: const EdgeInsets.only(left: 8, right: 16, top: 8),
+                padding: const EdgeInsets.only(right: 16, top: 8),
                 child: Row(
                   children: [
-                    _BackButton(onTap: () => Navigator.pop(context)),
                     const Spacer(),
-                    _StepIndicator(currentStep: 5, totalSteps: 6),
+                    _StepIndicator(currentStep: 5, totalSteps: 5),
                   ],
                 ),
               ),
@@ -167,22 +176,31 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
                 child: _ContinueButton(
-                  onTap: () {
-                    // Navigate to review screen
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => HowItWorksReviewScreen(
-                          fitnessLevel: fitnessLevel,
-                          goals: goals,
-                          otherGoal: otherGoal,
-                          workoutHistory: workoutHistory,
-                          blockedApps: blockedApps,
-                          selectedWorkout: selectedWorkout,
-                          unlockDuration: unlockDuration,
-                        ),
-                      ),
-                    );
+                  onTap: () async {
+                    try {
+                      debugPrint('🎯 Complete Setup button pressed - using canonical completeOnboardingFlow()');
+
+                      // BMAD v6: ONLY call completeOnboardingFlow() - handles ALL state transitions
+                      await authProvider.completeOnboardingFlow();
+
+                      debugPrint('✅ Emergency Unlock setup completed successfully');
+
+                      // Clear navigation stack and let router take over (BMAD v6: state-driven navigation)
+                      if (context.mounted) {
+                        Navigator.of(context).popUntil((route) => route.isFirst);
+                      }
+                    } catch (e) {
+                      debugPrint('❌ Error completing setup: $e');
+                      // Show error to user
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error completing setup: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
                   },
                 ),
               ),
@@ -292,32 +310,6 @@ class _StepIndicator extends StatelessWidget {
   }
 }
 
-/// Back Button Widget
-class _BackButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _BackButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.arrow_back,
-          color: Colors.white,
-          size: 22,
-        ),
-      ),
-    );
-  }
-}
 
 /// Continue Button Widget
 class _ContinueButton extends StatelessWidget {
@@ -347,7 +339,7 @@ class _ContinueButton extends StatelessWidget {
         ),
         child: const Center(
           child: Text(
-            'Start PUSHIN\'',
+            'Complete Setup',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,

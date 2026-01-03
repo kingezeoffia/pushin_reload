@@ -274,3 +274,16 @@ After tables are created:
 - [Railway Docs - PostgreSQL](https://docs.railway.app/databases/postgresql)
 - [Node.js pg Library](https://node-postgres.com/)
 - [PostgreSQL Connection Strings](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING)
+
+
+
+
+
+
+
+
+
+
+
+
+

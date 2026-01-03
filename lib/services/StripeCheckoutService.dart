@@ -297,7 +297,7 @@ class StripeCheckoutService {
 /// Subscription Status Model
 class SubscriptionStatus {
   final bool isActive;
-  final String planId; // 'free', 'standard', 'advanced'
+  final String planId; // 'free', 'pro', 'advanced'
   final String? customerId;
   final String? subscriptionId;
   final DateTime? currentPeriodEnd;
@@ -311,13 +311,13 @@ class SubscriptionStatus {
   });
 
   bool get isPaid => planId != 'free' && isActive;
-  bool get isPro => (planId == 'pro' || planId == 'standard') && isActive;
+  bool get isPro => planId == 'pro' && isActive;
   bool get isAdvanced => planId == 'advanced' && isActive;
 
   String get displayName {
     switch (planId) {
       case 'pro':
-      case 'standard': // Legacy support
+      case 'pro':
         return 'Pro Plan';
       case 'advanced':
         return 'Advanced Plan';

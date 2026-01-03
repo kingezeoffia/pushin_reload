@@ -16,7 +16,7 @@ class MockPaymentService {
   /// Shows a fake "payment processing" dialog and simulates success
   Future<bool> launchMockCheckout({
     required String userId,
-    required String planId, // 'standard' or 'advanced'
+    required String planId, // 'pro' or 'advanced'
     required String userEmail,
     Duration processingDelay = const Duration(seconds: 3),
   }) async {
@@ -254,7 +254,7 @@ class MockSubscription {
 /// Subscription Status Model (same as in StripeCheckoutService)
 class SubscriptionStatus {
   final bool isActive;
-  final String planId; // 'free', 'standard', 'advanced'
+  final String planId; // 'free', 'pro', 'advanced'
   final String? customerId;
   final String? subscriptionId;
   final DateTime? currentPeriodEnd;
@@ -268,13 +268,13 @@ class SubscriptionStatus {
   });
 
   bool get isPaid => planId != 'free' && isActive;
-  bool get isStandard => planId == 'standard' && isActive;
+  bool get isPro => planId == 'pro' && isActive;
   bool get isAdvanced => planId == 'advanced' && isActive;
 
   String get displayName {
     switch (planId) {
-      case 'standard':
-        return 'Standard Plan';
+      case 'pro':
+        return 'Pro Plan';
       case 'advanced':
         return 'Advanced Plan';
       default:

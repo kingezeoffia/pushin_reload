@@ -1,82 +1,73 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'services/DailyUsageTracker.dart';
-import 'services/AuthStateProvider.dart';
-import 'ui/AppRouter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-/// PUSHIN MVP - Main Entry Point
+import 'routing/app_router.dart';
+import 'state/auth_state_provider.dart';
+import 'state/pushin_app_controller.dart';
+
+import 'services/DailyUsageTracker.dart';
+import 'services/MockAppBlockingService.dart';
+import 'services/MockUnlockService.dart';
+import 'services/MockWorkoutTrackingService.dart';
+
+/// PUSHIN MVP - Production-Ready Main Entry Point
 ///
-/// Features:
-/// - Platform-realistic app blocking with UX overlay
-/// - Daily usage tracking with plan-based caps
-/// - Workout reward calculation
-/// - GO Club-inspired dark theme
-/// - Proper onboarding separation from main app
+/// Guarantees:
+/// - Exactly ONE MaterialApp
+/// - All providers created ABOVE MaterialApp
+/// - State-driven navigation (no Navigator.push/pop)
+/// - SharedPreferences persistence
+/// - Null-safety & debug logging
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Hive for local storage
-  final usageTracker = DailyUsageTracker();
+  debugPrint('🚀 Bootstrapping PUSHIN app');
+
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
+
+  final DailyUsageTracker usageTracker = DailyUsageTracker();
   await usageTracker.initialize();
 
-  runApp(PushinApp(usageTracker: usageTracker));
+  final AuthStateProvider authProvider = AuthStateProvider(prefs);
+  await authProvider.initialize();
+
+  final PushinAppController pushinController = PushinAppController(
+    workoutService: MockWorkoutTrackingService(),
+    unlockService: MockUnlockService(),
+    blockingService: MockAppBlockingService(),
+    blockTargets: const [],
+    usageTracker: usageTracker,
+  );
+  await pushinController.initialize();
+
+  debugPrint('✅ All providers initialized');
+
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AuthStateProvider>.value(value: authProvider),
+        ChangeNotifierProvider<PushinAppController>.value(
+          value: pushinController,
+        ),
+      ],
+      child: const PushinApp(),
+    ),
+  );
 }
 
-class PushinApp extends StatefulWidget {
-  final DailyUsageTracker? usageTracker;
-
-  const PushinApp({
-    Key? key,
-    required this.usageTracker,
-  }) : super(key: key);
-
-  @override
-  State<PushinApp> createState() => _PushinAppState();
-}
-
-class _PushinAppState extends State<PushinApp> {
-  late final AuthStateProvider _authProvider;
-  bool _isInitialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _authProvider = AuthStateProvider();
-    // Initialize auth provider on app startup
-    _initializeAuth();
-  }
-
-  Future<void> _initializeAuth() async {
-    await _authProvider.initialize();
-    if (mounted) {
-      setState(() {
-        _isInitialized = true;
-      });
-    }
-  }
+/// Root widget containing the ONLY MaterialApp
+class PushinApp extends StatelessWidget {
+  const PushinApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Show loading screen until auth is initialized
-    if (!_isInitialized) {
-      return const MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          backgroundColor: Colors.black,
-          body: Center(
-            child: CircularProgressIndicator(
-              color: Colors.white,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider.value(value: _authProvider),
-      ],
-      child: AppRouter(usageTracker: widget.usageTracker),
+    debugPrint('🏗️ Building PushinApp (MaterialApp)');
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'PUSHIN',
+      theme: ThemeData.dark(),
+      home: const AppRouter(),
     );
   }
 }

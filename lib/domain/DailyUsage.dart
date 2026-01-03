@@ -12,7 +12,7 @@ part 'DailyUsage.g.dart';
 ///
 /// Usage:
 /// - Free plan: 1 hour (3600s) daily cap
-/// - Standard plan: 3 hours (10800s) daily cap
+/// - Pro plan: 3 hours (10800s) daily cap
 /// - Advanced plan: Unlimited
 @HiveType(typeId: 0)
 class DailyUsage extends HiveObject {
@@ -52,7 +52,7 @@ class DailyUsage extends HiveObject {
     switch (planTier.toLowerCase()) {
       case 'free':
         return 3600; // 1 hour
-      case 'standard':
+      case 'pro':
         return 10800; // 3 hours
       case 'advanced':
         return -1; // Unlimited
@@ -104,6 +104,18 @@ class DailyUsage extends HiveObject {
     return 'DailyUsage(date: $date, earned: $earnedSeconds, consumed: $consumedSeconds, plan: $planTier)';
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

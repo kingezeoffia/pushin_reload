@@ -1,63 +1,79 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../../controller/PushinAppController.dart';
+import '../../../state/pushin_app_controller.dart';
 import '../../theme/pushin_theme.dart';
 import 'ManageAppsScreen.dart';
 
 /// Settings Screen - User configuration and account management
 ///
-/// Design:
-/// - Section-based layout with cards
-/// - Blocked apps management
-/// - Emergency unlock settings
-/// - Subscription/plan details
-/// - Profile information
-///
-/// Visual Reference: GO Club settings (dark theme, card sections)
+/// Design: Modern, sleek aesthetic matching onboarding screens
+/// - Clean typography hierarchy
+/// - Minimal containers and shadows
+/// - Generous whitespace
+/// - Subtle visual elements
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF0F172A),
-              Color(0xFF1E293B),
+              Color(0xFF0A0A0F),
+              Color(0xFF0F0F18),
+              Color(0xFF12121D),
             ],
+            stops: [0.0, 0.5, 1.0],
           ),
         ),
         child: SafeArea(
           child: CustomScrollView(
+            physics: const BouncingScrollPhysics(),
             slivers: [
-              // Header
-              SliverAppBar(
-                backgroundColor: Colors.transparent,
-                expandedHeight: 120,
-                pinned: true,
-                flexibleSpace: FlexibleSpaceBar(
-                  title: const Text(
-                    'Settings',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+              // Clean Header
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(28, 24, 28, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Settings',
+                        style: TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: -0.5,
+                          height: 1.1,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Customize your experience',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                          color: Colors.white.withOpacity(0.5),
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                    ],
                   ),
-                  titlePadding: const EdgeInsets.only(left: 24, bottom: 16),
                 ),
               ),
-              
+
               // Content
               SliverPadding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
-                    // Plan Card
+                    // Plan Card (KEPT EXACTLY AS IS)
                     Consumer<PushinAppController>(
                       builder: (context, controller, _) {
                         return _PlanCard(
@@ -66,18 +82,19 @@ class SettingsScreen extends StatelessWidget {
                         );
                       },
                     ),
-                    
-                    const SizedBox(height: 24),
-                    
-                    // Blocking Section
+
+                    const SizedBox(height: 36),
+
+                    // App Blocking Section
                     const _SectionHeader(title: 'App Blocking'),
-                    const SizedBox(height: 12),
-                    _SettingsCard(
-                      icon: Icons.block,
-                      iconColor: PushinTheme.errorRed,
+                    const SizedBox(height: 16),
+                    _SettingsItem(
+                      icon: Icons.block_rounded,
+                      iconColor: const Color(0xFFFF6B6B),
                       title: 'Manage Blocked Apps',
                       subtitle: 'Choose which apps require workouts',
                       onTap: () {
+                        HapticFeedback.lightImpact();
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -86,137 +103,132 @@ class SettingsScreen extends StatelessWidget {
                         );
                       },
                     ),
-                    
-                    const SizedBox(height: 12),
-                    
-                    _SettingsCard(
-                      icon: Icons.access_time,
-                      iconColor: PushinTheme.warningYellow,
+
+                    const SizedBox(height: 8),
+
+                    _SettingsItem(
+                      icon: Icons.timer_outlined,
+                      iconColor: const Color(0xFFFFB347),
                       title: 'Emergency Unlock',
                       subtitle: '5 minutes (once per day)',
-                      onTap: () => _showEmergencyUnlockDialog(context),
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        _showEmergencyUnlockDialog(context);
+                      },
                     ),
-                    
-                    const SizedBox(height: 24),
-                    
+
+                    const SizedBox(height: 32),
+
                     // Account Section
                     const _SectionHeader(title: 'Account'),
-                    const SizedBox(height: 12),
-                    _SettingsCard(
-                      icon: Icons.person_outline,
-                      iconColor: PushinTheme.primaryBlue,
+                    const SizedBox(height: 16),
+                    _SettingsItem(
+                      icon: Icons.person_outline_rounded,
+                      iconColor: const Color(0xFF7C8CFF),
                       title: 'Profile',
                       subtitle: 'Edit your information',
                       onTap: () {
+                        HapticFeedback.lightImpact();
                         // Navigate to profile screen
                       },
                     ),
-                    
-                    const SizedBox(height: 12),
-                    
-                    _SettingsCard(
-                      icon: Icons.fitness_center,
-                      iconColor: PushinTheme.successGreen,
+
+                    const SizedBox(height: 8),
+
+                    _SettingsItem(
+                      icon: Icons.fitness_center_rounded,
+                      iconColor: const Color(0xFF4ADE80),
                       title: 'Fitness Level & Goals',
                       subtitle: 'Update your preferences',
                       onTap: () {
+                        HapticFeedback.lightImpact();
                         // Navigate to fitness preferences
                       },
                     ),
-                    
-                    const SizedBox(height: 24),
-                    
-                    // App Section
-                    const _SectionHeader(title: 'App'),
-                    const SizedBox(height: 12),
-                    _SettingsCard(
-                      icon: Icons.notifications_outlined,
-                      iconColor: PushinTheme.primaryBlue,
+
+                    const SizedBox(height: 32),
+
+                    // Support Section
+                    const _SectionHeader(title: 'Support'),
+                    const SizedBox(height: 16),
+                    _SettingsItem(
+                      icon: Icons.notifications_none_rounded,
+                      iconColor: const Color(0xFF60A5FA),
                       title: 'Notifications',
                       subtitle: 'Manage reminders and alerts',
                       onTap: () {
+                        HapticFeedback.lightImpact();
                         // Navigate to notifications settings
                       },
                     ),
-                    
-                    const SizedBox(height: 12),
-                    
-                    _SettingsCard(
-                      icon: Icons.help_outline,
-                      iconColor: PushinTheme.primaryBlue,
+
+                    const SizedBox(height: 8),
+
+                    _SettingsItem(
+                      icon: Icons.help_outline_rounded,
+                      iconColor: const Color(0xFF60A5FA),
                       title: 'Help & Support',
                       subtitle: 'Get help or contact us',
                       onTap: () {
+                        HapticFeedback.lightImpact();
                         // Navigate to help screen
                       },
                     ),
-                    
-                    const SizedBox(height: 12),
-                    
-                    _SettingsCard(
-                      icon: Icons.privacy_tip_outlined,
-                      iconColor: PushinTheme.textSecondary,
+
+                    const SizedBox(height: 32),
+
+                    // Legal Section
+                    const _SectionHeader(title: 'Legal'),
+                    const SizedBox(height: 16),
+                    _SettingsItem(
+                      icon: Icons.shield_outlined,
+                      iconColor: Colors.white.withOpacity(0.5),
                       title: 'Privacy Policy',
                       subtitle: 'View our privacy policy',
+                      showChevron: true,
                       onTap: () {
+                        HapticFeedback.lightImpact();
                         // Open privacy policy
                       },
                     ),
-                    
-                    const SizedBox(height: 12),
-                    
-                    _SettingsCard(
+
+                    const SizedBox(height: 8),
+
+                    _SettingsItem(
                       icon: Icons.description_outlined,
-                      iconColor: PushinTheme.textSecondary,
+                      iconColor: Colors.white.withOpacity(0.5),
                       title: 'Terms of Service',
                       subtitle: 'View terms and conditions',
+                      showChevron: true,
                       onTap: () {
+                        HapticFeedback.lightImpact();
                         // Open terms of service
                       },
                     ),
-                    
-                    const SizedBox(height: 32),
-                    
-                    // Log Out Button
-                    GestureDetector(
+
+                    const SizedBox(height: 40),
+
+                    // Log Out Button - Sleek minimal design
+                    _LogOutButton(
                       onTap: () => _showLogoutDialog(context),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        decoration: BoxDecoration(
-                          color: PushinTheme.errorRed.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: PushinTheme.errorRed.withOpacity(0.3),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: const Center(
-                          child: Text(
-                            'Log Out',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: PushinTheme.errorRed,
-                            ),
-                          ),
-                        ),
-                      ),
                     ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    // App Version
+
+                    const SizedBox(height: 24),
+
+                    // App Version - Clean footer
                     Center(
                       child: Text(
                         'PUSHIN\' v1.0.0',
                         style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.4),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withOpacity(0.25),
+                          letterSpacing: 1.0,
                         ),
                       ),
                     ),
-                    
-                    const SizedBox(height: 32),
+
+                    const SizedBox(height: 40),
                   ]),
                 ),
               ),
@@ -228,61 +240,98 @@ class SettingsScreen extends StatelessWidget {
   }
 
   void _showEmergencyUnlockDialog(BuildContext context) {
+    HapticFeedback.mediumImpact();
     showDialog(
       context: context,
+      barrierColor: Colors.black.withOpacity(0.7),
       builder: (context) => Dialog(
-        backgroundColor: PushinTheme.surfaceDark,
+        backgroundColor: const Color(0xFF1A1A24),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PushinTheme.radiusMd),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(28),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.warning_amber_rounded,
-                size: 56,
-                color: PushinTheme.warningYellow,
+              // Icon with subtle glow
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFB347).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Icon(
+                  Icons.timer_outlined,
+                  size: 32,
+                  color: Color(0xFFFFB347),
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               const Text(
                 'Emergency Unlock',
-                style: PushinTheme.headline3,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: -0.3,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Use this only in genuine emergencies. You\'ll get 5 minutes of access without working out.',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white.withOpacity(0.55),
+                  height: 1.4,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Use this only in genuine emergencies. You\'ll get 5 minutes of access without working out. Limited to once per day.',
-                style: PushinTheme.body2,
+              Text(
+                'Limited to once per day.',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFFFFB347).withOpacity(0.8),
+                ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
+                    child: _DialogButton(
+                      label: 'Cancel',
+                      onTap: () => Navigator.pop(context),
+                      isPrimary: false,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: PushinTheme.warningYellow,
-                      ),
-                      onPressed: () {
+                    child: _DialogButton(
+                      label: 'Unlock',
+                      onTap: () {
                         Navigator.pop(context);
-                        // Trigger emergency unlock
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Emergency unlock activated (5 minutes)'),
-                            backgroundColor: PushinTheme.warningYellow,
+                          SnackBar(
+                            content: const Text(
+                              'Emergency unlock activated (5 minutes)',
+                              style: TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                            backgroundColor: const Color(0xFFFFB347),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                         );
                       },
-                      child: const Text('Unlock'),
+                      isPrimary: true,
+                      primaryColor: const Color(0xFFFFB347),
                     ),
                   ),
                 ],
@@ -295,60 +344,80 @@ class SettingsScreen extends StatelessWidget {
   }
 
   void _showLogoutDialog(BuildContext context) {
+    HapticFeedback.mediumImpact();
     showDialog(
       context: context,
+      barrierColor: Colors.black.withOpacity(0.7),
       builder: (context) => Dialog(
-        backgroundColor: PushinTheme.surfaceDark,
+        backgroundColor: const Color(0xFF1A1A24),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PushinTheme.radiusMd),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(28),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.logout,
-                size: 56,
-                color: PushinTheme.errorRed,
+              // Icon with subtle glow
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF6B6B).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Icon(
+                  Icons.logout_rounded,
+                  size: 30,
+                  color: Color(0xFFFF6B6B),
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               const Text(
                 'Log Out?',
-                style: PushinTheme.headline3,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: -0.3,
+                ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 8),
-              const Text(
+              const SizedBox(height: 10),
+              Text(
                 'Are you sure you want to log out? Your progress will be saved.',
-                style: PushinTheme.body2,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white.withOpacity(0.55),
+                  height: 1.4,
+                ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
+                    child: _DialogButton(
+                      label: 'Cancel',
+                      onTap: () => Navigator.pop(context),
+                      isPrimary: false,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: PushinTheme.errorRed,
-                      ),
-                      onPressed: () {
+                    child: _DialogButton(
+                      label: 'Log Out',
+                      onTap: () {
                         Navigator.pop(context);
-                        // Handle logout
                         Navigator.pushNamedAndRemoveUntil(
                           context,
                           '/onboarding',
                           (route) => false,
                         );
                       },
-                      child: const Text('Log Out'),
+                      isPrimary: true,
+                      primaryColor: const Color(0xFFFF6B6B),
                     ),
                   ),
                 ],
@@ -361,7 +430,67 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-/// Section Header Widget
+/// Sleek Dialog Button
+class _DialogButton extends StatefulWidget {
+  final String label;
+  final VoidCallback onTap;
+  final bool isPrimary;
+  final Color? primaryColor;
+
+  const _DialogButton({
+    required this.label,
+    required this.onTap,
+    required this.isPrimary,
+    this.primaryColor,
+  });
+
+  @override
+  State<_DialogButton> createState() => _DialogButtonState();
+}
+
+class _DialogButtonState extends State<_DialogButton> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.primaryColor ?? Colors.white;
+
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) => setState(() => _isPressed = false),
+      onTapCancel: () => setState(() => _isPressed = false),
+      onTap: () {
+        HapticFeedback.lightImpact();
+        widget.onTap();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: widget.isPrimary
+              ? (color.withOpacity(_isPressed ? 0.85 : 1.0))
+              : Colors.white.withOpacity(_isPressed ? 0.12 : 0.08),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Center(
+          child: Text(
+            widget.label,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: widget.isPrimary
+                  ? const Color(0xFF1A1A24)
+                  : Colors.white.withOpacity(0.8),
+              letterSpacing: -0.2,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Sleek Section Header - Minimal, elegant text styling
 class _SectionHeader extends StatelessWidget {
   final String title;
 
@@ -369,93 +498,170 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        color: Color(0xFF94A3B8),
-        letterSpacing: 1.2,
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Colors.white.withOpacity(0.35),
+          letterSpacing: 1.5,
+        ),
       ),
     );
   }
 }
 
-/// Settings Card Widget
-class _SettingsCard extends StatelessWidget {
+/// Modern Settings Item - Clean, minimal card design
+class _SettingsItem extends StatefulWidget {
   final IconData icon;
   final Color iconColor;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final bool showChevron;
 
-  const _SettingsCard({
+  const _SettingsItem({
     required this.icon,
     required this.iconColor,
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.showChevron = true,
   });
 
   @override
+  State<_SettingsItem> createState() => _SettingsItemState();
+}
+
+class _SettingsItemState extends State<_SettingsItem> {
+  bool _isPressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: PushinTheme.surfaceDark.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(16),
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) => setState(() => _isPressed = false),
+      onTapCancel: () => setState(() => _isPressed = false),
+      onTap: widget.onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: _isPressed
+              ? Colors.white.withOpacity(0.08)
+              : Colors.white.withOpacity(0.04),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: Colors.white.withOpacity(_isPressed ? 0.12 : 0.06),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            // Icon container - subtle, elegant
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: widget.iconColor.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(
+                widget.icon,
+                color: widget.iconColor,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 14),
+            // Text content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.subtitle,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.white.withOpacity(0.45),
+                      letterSpacing: -0.1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Chevron - subtle
+            if (widget.showChevron)
+              Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.white.withOpacity(0.25),
+                size: 20,
+              ),
+          ],
+        ),
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: iconColor,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.6),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  color: Colors.white.withOpacity(0.4),
-                  size: 16,
-                ),
-              ],
+    );
+  }
+}
+
+/// Sleek Log Out Button - Minimal, text-focused design
+class _LogOutButton extends StatefulWidget {
+  final VoidCallback onTap;
+
+  const _LogOutButton({required this.onTap});
+
+  @override
+  State<_LogOutButton> createState() => _LogOutButtonState();
+}
+
+class _LogOutButtonState extends State<_LogOutButton> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) => setState(() => _isPressed = false),
+      onTapCancel: () => setState(() => _isPressed = false),
+      onTap: () {
+        HapticFeedback.lightImpact();
+        widget.onTap();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: _isPressed
+              ? const Color(0xFFFF6B6B).withOpacity(0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: const Color(0xFFFF6B6B).withOpacity(_isPressed ? 0.4 : 0.25),
+            width: 1,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            'Log Out',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFFFF6B6B).withOpacity(_isPressed ? 1.0 : 0.9),
+              letterSpacing: -0.2,
             ),
           ),
         ),
@@ -582,8 +788,8 @@ class _PlanCard extends StatelessWidget {
 
   String _getPlanName() {
     switch (planTier) {
-      case 'standard':
-        return 'Standard Plan';
+      case 'pro':
+        return 'Pro Plan';
       case 'advanced':
         return 'Advanced Plan';
       default:
@@ -593,7 +799,7 @@ class _PlanCard extends StatelessWidget {
 
   String _getPlanDescription() {
     switch (planTier) {
-      case 'standard':
+      case 'pro':
         return '3 workouts • 3 hours daily cap';
       case 'advanced':
         return '5 workouts • Unlimited usage';
@@ -602,6 +808,9 @@ class _PlanCard extends StatelessWidget {
     }
   }
 }
+
+
+
 
 
 

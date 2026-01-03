@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'dart:math' as math;
-import '../../../controller/PushinAppController.dart';
+import '../../../state/pushin_app_controller.dart';
 import '../../theme/pushin_theme.dart';
+import '../../widgets/GOStepsBackground.dart';
+import '../../widgets/PressAnimationButton.dart';
 import 'WorkoutCompletionScreen.dart';
 
 /// Rep Counter Screen - Track workout progress with manual rep counter
@@ -18,11 +20,13 @@ import 'WorkoutCompletionScreen.dart';
 class RepCounterScreen extends StatefulWidget {
   final String workoutType;
   final int targetReps;
+  final int desiredScreenTimeMinutes;
 
   const RepCounterScreen({
     super.key,
     required this.workoutType,
     required this.targetReps,
+    required this.desiredScreenTimeMinutes,
   });
 
   @override
@@ -39,11 +43,12 @@ class _RepCounterScreenState extends State<RepCounterScreen>
   void initState() {
     super.initState();
 
-    // Start workout in controller
+    // Start workout in controller with desired screen time
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<PushinAppController>().startWorkout(
             widget.workoutType,
             widget.targetReps,
+            desiredScreenTimeMinutes: widget.desiredScreenTimeMinutes,
           );
     });
 
@@ -102,64 +107,104 @@ class _RepCounterScreenState extends State<RepCounterScreen>
   }
 
   int _getEarnedMinutes() {
-    final controller = context.read<PushinAppController>();
-    final description = controller.getWorkoutRewardDescription(
-      widget.workoutType,
-      _currentReps,
-    );
-    // Parse minutes from description (e.g., "20 reps = 10 minutes")
-    final match = RegExp(r'(\d+)\s+minute').firstMatch(description);
-    return match != null ? int.parse(match.group(1)!) : 10;
+    // Return the user's desired screen time directly
+    return widget.desiredScreenTimeMinutes;
   }
 
   void _cancelWorkout() {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        backgroundColor: PushinTheme.surfaceDark,
+        backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PushinTheme.radiusMd),
+          borderRadius: BorderRadius.circular(24),
         ),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.warning_amber_rounded,
-                size: 56,
-                color: PushinTheme.warningYellow,
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.warning_amber_rounded,
+                  size: 48,
+                  color: Color(0xFFF59E0B),
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               const Text(
                 'Cancel Workout?',
-                style: PushinTheme.headline3,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Your progress will be lost and you won\'t earn unlock time.',
-                style: PushinTheme.body2,
+              Text(
+                'Your progress will be lost.',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.white.withOpacity(0.6),
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
+                    child: PressAnimationButton(
+                      onTap: () {
                         context.read<PushinAppController>().cancelWorkout();
-                        Navigator.pop(context); // Close dialog
-                        Navigator.pop(context); // Close workout screen
+                        Navigator.pop(context);
+                        Navigator.pop(context);
                       },
-                      child: const Text('Cancel'),
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(100),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white.withOpacity(0.8),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Keep Going'),
+                    child: PressAnimationButton(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.95),
+                          borderRadius: BorderRadius.circular(100),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Keep Going',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2A2A6A),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -177,17 +222,9 @@ class _RepCounterScreenState extends State<RepCounterScreen>
     final isComplete = _currentReps >= widget.targetReps;
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0F172A),
-              Color(0xFF1E293B),
-            ],
-          ),
-        ),
+      backgroundColor: Colors.black,
+      body: GOStepsBackground(
+        blackRatio: 0.25,
         child: SafeArea(
           child: Column(
             children: [
@@ -197,21 +234,21 @@ class _RepCounterScreenState extends State<RepCounterScreen>
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
+                      icon: Icon(Icons.close, color: Colors.white.withOpacity(0.8)),
                       onPressed: _cancelWorkout,
                     ),
                     Expanded(
                       child: Text(
                         _getWorkoutDisplayName(),
-                        style: const TextStyle(
-                          fontSize: 20,
+                        style: TextStyle(
+                          fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                          color: Colors.white.withOpacity(0.8),
                         ),
                         textAlign: TextAlign.center,
                       ),
                     ),
-                    const SizedBox(width: 48), // Balance close button
+                    const SizedBox(width: 48),
                   ],
                 ),
               ),
@@ -236,7 +273,7 @@ class _RepCounterScreenState extends State<RepCounterScreen>
                               height: 280,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: PushinTheme.surfaceDark.withOpacity(0.5),
+                                color: Colors.white.withOpacity(0.05),
                               ),
                             ),
                           ),
@@ -261,11 +298,9 @@ class _RepCounterScreenState extends State<RepCounterScreen>
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 ShaderMask(
-                                  shaderCallback: (bounds) =>
-                                      PushinTheme.primaryGradient.createShader(
-                                    Rect.fromLTWH(0, 0, bounds.width,
-                                        bounds.height * 1.3),
-                                  ),
+                                  shaderCallback: (bounds) => const LinearGradient(
+                                    colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
+                                  ).createShader(bounds),
                                   blendMode: BlendMode.srcIn,
                                   child: Text(
                                     '$_currentReps',
@@ -280,7 +315,7 @@ class _RepCounterScreenState extends State<RepCounterScreen>
                                   'of ${widget.targetReps}',
                                   style: TextStyle(
                                     fontSize: 24,
-                                    color: Colors.white.withOpacity(0.6),
+                                    color: Colors.white.withOpacity(0.5),
                                   ),
                                 ),
                               ],
@@ -313,20 +348,20 @@ class _RepCounterScreenState extends State<RepCounterScreen>
 
               // Add Rep Button
               Padding(
-                padding: const EdgeInsets.all(32),
+                padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
                 child: !isComplete
-                    ? GestureDetector(
+                    ? PressAnimationButton(
                         onTap: _addRep,
                         child: Container(
                           width: double.infinity,
-                          height: 72,
+                          height: 64,
                           decoration: BoxDecoration(
-                            gradient: PushinTheme.primaryGradient,
+                            color: Colors.white.withOpacity(0.95),
                             borderRadius: BorderRadius.circular(100),
                             boxShadow: [
                               BoxShadow(
-                                color: PushinTheme.primaryBlue.withOpacity(0.5),
-                                blurRadius: 24,
+                                color: Colors.white.withOpacity(0.2),
+                                blurRadius: 20,
                                 offset: const Offset(0, 8),
                               ),
                             ],
@@ -335,46 +370,49 @@ class _RepCounterScreenState extends State<RepCounterScreen>
                             child: Text(
                               '+ Add Rep',
                               style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF2A2A6A),
+                                letterSpacing: -0.3,
                               ),
                             ),
                           ),
                         ),
                       )
-                    : Container(
-                        width: double.infinity,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF10B981), Color(0xFF059669)],
-                          ),
-                          borderRadius: BorderRadius.circular(100),
-                          boxShadow: [
-                            BoxShadow(
-                              color: PushinTheme.successGreen.withOpacity(0.5),
-                              blurRadius: 24,
-                              offset: const Offset(0, 8),
+                    : PressAnimationButton(
+                        onTap: () {},
+                        child: Container(
+                          width: double.infinity,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF10B981), Color(0xFF34D399)],
                             ),
-                          ],
-                        ),
-                        child: const Center(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.check_circle,
-                                  color: Colors.white, size: 28),
-                              SizedBox(width: 8),
-                              Text(
-                                'Workout Complete!',
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
+                            borderRadius: BorderRadius.circular(100),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF10B981).withOpacity(0.4),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
                               ),
                             ],
+                          ),
+                          child: const Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.check_circle, color: Colors.white, size: 24),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Workout Complete!',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -425,10 +463,10 @@ class _ProgressRingPainter extends CustomPainter {
 
     canvas.drawCircle(center, radius, backgroundPaint);
 
-    // Progress ring with gradient
+    // Progress ring with purple gradient (matching onboarding)
     final progressPaint = Paint()
       ..shader = const LinearGradient(
-        colors: [Color(0xFF4F46E5), Color(0xFF3B82F6)],
+        colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
       ).createShader(Rect.fromCircle(center: center, radius: radius))
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke

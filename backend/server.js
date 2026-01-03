@@ -187,11 +187,9 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
     const period = billingPeriod || 'monthly';
 
     // Validate planId and billingPeriod
-    // Accept both 'pro' and 'standard' (legacy) as plan IDs
-    const normalizedPlanId = planId === 'standard' ? 'pro' : planId;
-    if (!['pro', 'advanced'].includes(normalizedPlanId)) {
+    if (!['pro', 'advanced'].includes(planId)) {
       return res.status(400).json({
-        error: `Invalid plan ID: ${planId}. Must be 'pro', 'standard', or 'advanced'`
+        error: `Invalid plan ID: ${planId}. Must be 'pro' or 'advanced'`
       });
     }
 
@@ -215,13 +213,13 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       'advanced_yearly': process.env.STRIPE_PRICE_ADVANCED_YEARLY,
     };
 
-    // Create planKey from normalizedPlanId and billingPeriod (e.g., "pro_monthly")
-    const planKey = `${normalizedPlanId}_${period}`;
+    // Create planKey from planId and billingPeriod (e.g., "pro_monthly")
+    const planKey = `${planId}_${period}`;
     const priceId = priceIds[planKey];
 
     if (!priceId) {
       return res.status(400).json({
-        error: `Invalid plan/billing combination: ${planKey}. Check that STRIPE_PRICE_${normalizedPlanId.toUpperCase()}_${period.toUpperCase()} is set.`
+        error: `Invalid plan/billing combination: ${planKey}. Check that STRIPE_PRICE_${planId.toUpperCase()}_${period.toUpperCase()} is set.`
       });
     }
 
@@ -239,7 +237,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       cancel_url: cancelUrl,
       metadata: {
         userId,
-        planId,
+        planId: planId,
         billingPeriod: period,
       },
     });

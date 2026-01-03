@@ -63,3 +63,16 @@ echo "🚀 Next steps:"
 echo "  1. npm install          # Install dependencies"
 echo "  2. npm run db:create    # Create database tables"
 echo ""
+
+
+
+
+
+
+
+
+
+
+
+
+

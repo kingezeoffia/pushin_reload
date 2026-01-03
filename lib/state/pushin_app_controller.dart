@@ -11,12 +11,13 @@ import '../services/UnlockService.dart';
 import '../services/AppBlockingService.dart';
 import '../services/WorkoutRewardCalculator.dart';
 import '../services/DailyUsageTracker.dart';
-import '../services/platform/ScreenTimeMonitor.dart';
+import '../services/FocusModeService.dart';
 import '../services/platform/UsageStatsMonitor.dart';
 import '../services/DeepLinkHandler.dart';
 import '../services/StripeCheckoutService.dart';
+import '../services/StreakTrackingService.dart';
 import '../ui/widgets/AppBlockOverlay.dart';
-import 'PushinController.dart';
+import '../controller/PushinController.dart';
 
 /// Enhanced PUSHIN controller integrating:
 /// - Core state machine (PushinController)
@@ -34,9 +35,10 @@ class PushinAppController extends ChangeNotifier {
   // Services
   final DailyUsageTracker? _usageTracker;
   final WorkoutRewardCalculator _rewardCalculator;
+  late final StreakTrackingService _streakTracker;
 
   // Platform monitors
-  ScreenTimeMonitor? _screenTimeMonitor;
+  FocusModeService? _focusModeService;
   UsageStatsMonitor? _usageStatsMonitor;
 
   // Subscriptions
@@ -52,7 +54,7 @@ class PushinAppController extends ChangeNotifier {
       ValueNotifier(null);
   final ValueNotifier<bool> paymentCancelState = ValueNotifier(false);
 
-  // Plan tier (free, standard, advanced)
+  // Plan tier (free, pro, advanced)
   String _planTier = 'free';
 
   // Deep link handler
@@ -65,9 +67,11 @@ class PushinAppController extends ChangeNotifier {
     required List<AppBlockTarget> blockTargets,
     DailyUsageTracker? usageTracker,
     WorkoutRewardCalculator? rewardCalculator,
+    StreakTrackingService? streakTracker,
     int gracePeriodSeconds = 30, // Free plan default
   })  : _usageTracker = usageTracker,
-        _rewardCalculator = rewardCalculator ?? WorkoutRewardCalculator() {
+        _rewardCalculator = rewardCalculator ?? WorkoutRewardCalculator(),
+        _streakTracker = streakTracker ?? StreakTrackingService() {
     // Initialize core state machine
     _core = PushinController(
       workoutService,
@@ -85,6 +89,7 @@ class PushinAppController extends ChangeNotifier {
       _core.getAccessibleTargets(now);
   double getWorkoutProgress(DateTime now) => _core.getWorkoutProgress(now);
   int getUnlockTimeRemaining(DateTime now) => _core.getUnlockTimeRemaining(now);
+  int getTotalUnlockDuration() => _core.getTotalUnlockDuration();
   int getGracePeriodRemaining(DateTime now) =>
       _core.getGracePeriodRemaining(now);
 
@@ -92,6 +97,7 @@ class PushinAppController extends ChangeNotifier {
   Future<void> initialize() async {
     // Initialize Hive storage (if available)
     await _usageTracker?.initialize();
+    await _streakTracker.initialize();
 
     // Load current plan tier
     // TODO: Integrate with subscription service
@@ -151,14 +157,13 @@ class PushinAppController extends ChangeNotifier {
   /// Initialize iOS Screen Time monitoring
   Future<void> _initializeIOSMonitoring() async {
     try {
-      _screenTimeMonitor = ScreenTimeMonitor();
-      final capability = await _screenTimeMonitor!.initialize();
+      _focusModeService = FocusModeService.forIOS();
+      await _focusModeService!.initialize();
 
-      print('Screen Time capability: $capability');
+      print('Focus Mode Service initialized');
 
-      // Listen for app launch events
-      _appLaunchSubscription =
-          _screenTimeMonitor!.appLaunchEvents.listen(_handleAppLaunch);
+      // Note: FocusModeService doesn't provide app launch monitoring
+      // App launch monitoring removed for better architecture separation
     } catch (e) {
       // Graceful fallback when native module not available
       // This happens when:
@@ -167,7 +172,7 @@ class PushinAppController extends ChangeNotifier {
       // - iOS native module not registered
       print('Screen Time monitoring unavailable (expected in simulator): $e');
       print('Falling back to UX overlay (works for 100% of users)');
-      _screenTimeMonitor = null;
+      _focusModeService = null;
     }
   }
 
@@ -208,11 +213,7 @@ class PushinAppController extends ChangeNotifier {
   }
 
   String _getAppName(dynamic event) {
-    if (event is ScreenTimeMonitor) {
-      return event.appLaunchEvents.toString();
-    } else if (event is UsageStatsMonitor) {
-      return event.appLaunchEvents.toString();
-    }
+    // Controller should not check platform service types for better architecture
     return 'App';
   }
 
@@ -248,21 +249,27 @@ class PushinAppController extends ChangeNotifier {
     }
   }
 
-  /// Start workout with reward calculation
-  Future<void> startWorkout(String workoutType, int targetReps) async {
+  // Store desired screen time for the current workout
+  int? _desiredScreenTimeSeconds;
+
+  /// Start workout with desired screen time (in minutes)
+  /// The desiredScreenTimeMinutes is what the user selected - this is the actual
+  /// unlock time they'll get upon completing the workout.
+  Future<void> startWorkout(
+    String workoutType,
+    int targetReps, {
+    required int desiredScreenTimeMinutes,
+  }) async {
     final now = DateTime.now();
 
-    // Calculate earned time for this workout
-    final earnedSeconds = _rewardCalculator.calculateEarnedTime(
-      workoutType: workoutType,
-      repsCompleted: targetReps,
-    );
+    // Store the user's desired screen time (convert to seconds)
+    _desiredScreenTimeSeconds = desiredScreenTimeMinutes * 60;
 
     final workout = Workout(
       id: 'workout_${now.millisecondsSinceEpoch}',
       type: workoutType,
       targetReps: targetReps,
-      earnedTimeSeconds: earnedSeconds,
+      earnedTimeSeconds: _desiredScreenTimeSeconds!,
     );
 
     _core.startWorkout(workout, now);
@@ -270,27 +277,27 @@ class PushinAppController extends ChangeNotifier {
   }
 
   /// Complete workout and track earned time
+  /// Uses the desired screen time from startWorkout, ensuring the user gets
+  /// exactly the unlock time they selected.
   Future<void> completeWorkout(int actualReps) async {
     final now = DateTime.now();
 
-    // Calculate actual earned time based on reps completed
-    // Note: Using last workout type from startWorkout call
-    // TODO: Improve by storing current workout type in controller state
-    if (actualReps > 0) {
+    if (actualReps > 0 && _desiredScreenTimeSeconds != null) {
       // Record the reps in the workout service
       final workoutService = _core.workoutService as MockWorkoutTrackingService;
       workoutService.recordReps(actualReps, now);
 
-      final earnedSeconds = _rewardCalculator.calculateEarnedTime(
-        workoutType: 'push-ups', // TODO: Get from current workout context
-        repsCompleted: actualReps,
-      );
+      // Use the stored desired screen time (what the user selected)
+      final earnedSeconds = _desiredScreenTimeSeconds!;
 
       // Add to daily usage tracker
       await _usageTracker?.addEarnedTime(earnedSeconds);
 
       // Complete workout in core
       _core.completeWorkout(now);
+
+      // Clear the stored desired time
+      _desiredScreenTimeSeconds = null;
 
       notifyListeners();
     }
@@ -299,6 +306,7 @@ class PushinAppController extends ChangeNotifier {
   /// Cancel workout
   void cancelWorkout() {
     _core.cancelWorkout();
+    _desiredScreenTimeSeconds = null;
     notifyListeners();
   }
 
@@ -333,6 +341,64 @@ class PushinAppController extends ChangeNotifier {
     );
   }
 
+  /// Get current streak (consecutive workout days)
+  int getCurrentStreak() {
+    return _streakTracker.getCurrentStreak();
+  }
+
+  /// Get best streak ever achieved
+  int getBestStreak() {
+    return _streakTracker.getBestStreak();
+  }
+
+  /// Check if today's workout is completed
+  bool isTodayCompleted() {
+    return _streakTracker.isTodayCompleted();
+  }
+
+  /// Record workout completion (should be called when workout finishes)
+  Future<void> recordWorkoutCompletion() async {
+    await _streakTracker.recordWorkoutCompletion();
+    notifyListeners();
+  }
+
+  /// Get weekly usage summary for the past 7 days
+  Future<List<DailyUsage>> getWeeklyUsage() async {
+    if (_usageTracker == null) {
+      return [];
+    }
+
+    // Get usage history for the past 7 days
+    final history = await _usageTracker!.getUsageHistory(7);
+
+    // Ensure we have exactly 7 days, filling missing days with empty usage
+    final now = DateTime.now();
+    final weeklyUsage = <DailyUsage>[];
+
+    for (int i = 6; i >= 0; i--) {
+      final date = now.subtract(Duration(days: i));
+      final dateKey =
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+      // Find usage for this date in history
+      final existingUsage =
+          history.where((usage) => usage.date == dateKey).firstOrNull;
+
+      if (existingUsage != null) {
+        weeklyUsage.add(existingUsage);
+      } else {
+        // If no data for this date, add empty usage
+        weeklyUsage.add(DailyUsage(
+          date: dateKey,
+          planTier: 'free',
+          lastUpdated: date,
+        ));
+      }
+    }
+
+    return weeklyUsage;
+  }
+
   /// Update plan tier (after subscription purchase)
   Future<void> updatePlanTier(String tier, int newGracePeriodSeconds) async {
     _planTier = tier;
@@ -356,10 +422,14 @@ class PushinAppController extends ChangeNotifier {
   /// Get plan tier
   String get planTier => _planTier;
 
+  /// Get focus mode service
+  FocusModeService? get focusModeService => _focusModeService;
+
   /// Request platform permissions (called from UI)
   Future<bool> requestPlatformPermissions() async {
-    if (Platform.isIOS && _screenTimeMonitor != null) {
-      return await _screenTimeMonitor!.requestAuthorization();
+    if (Platform.isIOS && _focusModeService != null) {
+      return await _focusModeService!.requestScreenTimePermission() ==
+          AuthorizationResult.granted;
     } else if (Platform.isAndroid && _usageStatsMonitor != null) {
       return await _usageStatsMonitor!.requestPermission();
     }
@@ -370,7 +440,7 @@ class PushinAppController extends ChangeNotifier {
   void dispose() {
     _appLaunchSubscription?.cancel();
     _tickTimer?.cancel();
-    _screenTimeMonitor?.dispose();
+    _focusModeService?.dispose();
     _usageStatsMonitor?.dispose();
     _usageTracker?.dispose();
     blockOverlayState.dispose();

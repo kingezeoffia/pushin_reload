@@ -113,6 +113,12 @@ class PushinController {
   int getUnlockTimeRemaining(DateTime now) =>
       _unlockService.getRemainingSeconds(now);
 
+  /// Get total unlock duration in seconds (0 if no active session)
+  int getTotalUnlockDuration() {
+    final session = _unlockService.getCurrentSession();
+    return session?.durationSeconds ?? 0;
+  }
+
   /// Expose workout service for manual rep recording
   WorkoutTrackingService get workoutService => _workoutService;
 

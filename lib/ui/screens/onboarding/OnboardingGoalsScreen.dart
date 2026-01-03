@@ -5,6 +5,27 @@ import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/SelectionButton.dart';
 import 'OnboardingWorkoutHistoryScreen.dart';
 
+/// Custom route that disables swipe back gesture on iOS
+class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
+  _NoSwipeBackRoute({
+    required WidgetBuilder builder,
+    RouteSettings? settings,
+  }) : super(builder: builder, settings: settings);
+
+  @override
+  bool get hasScopedWillPopCallback => true;
+
+  @override
+  bool get canPop => false;
+
+  @override
+  Widget buildTransitions(BuildContext context, Animation<double> animation,
+      Animation<double> secondaryAnimation, Widget child) {
+    // Disable the default iOS swipe back transition
+    return child;
+  }
+}
+
 /// Screen 3: What Are Your Goals
 ///
 /// BMAD V6 Spec:
@@ -52,11 +73,6 @@ class _OnboardingGoalsScreenState extends State<OnboardingGoalsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Back Button
-              Padding(
-                padding: const EdgeInsets.only(left: 8, top: 8),
-                child: _BackButton(onTap: () => Navigator.pop(context)),
-              ),
 
               SizedBox(height: screenHeight * 0.08),
 
@@ -184,7 +200,7 @@ class _OnboardingGoalsScreenState extends State<OnboardingGoalsScreen> {
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
+                      _NoSwipeBackRoute(
                         builder: (context) => OnboardingWorkoutHistoryScreen(
                           fitnessLevel: widget.fitnessLevel,
                           goals: _selectedGoals.toList(),
@@ -203,32 +219,6 @@ class _OnboardingGoalsScreenState extends State<OnboardingGoalsScreen> {
   }
 }
 
-/// Back Button Widget
-class _BackButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _BackButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.arrow_back,
-          color: Colors.white,
-          size: 22,
-        ),
-      ),
-    );
-  }
-}
 
 /// Next Button Widget
 class _NextButton extends StatelessWidget {

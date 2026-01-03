@@ -1,8 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../../state/auth_state_provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import 'SkipPushUpTestScreen.dart';
-import 'SkipUnlockDurationScreen.dart';
+import 'SkipEmergencyUnlockScreen.dart';
+
+/// Custom route that disables swipe back gesture on iOS
+class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
+  _NoSwipeBackRoute({
+    required WidgetBuilder builder,
+    RouteSettings? settings,
+  }) : super(builder: builder, settings: settings);
+
+  @override
+  bool get hasScopedWillPopCallback => true;
+
+  @override
+  bool get canPop => false;
+
+  @override
+  Widget buildTransitions(BuildContext context, Animation<double> animation,
+      Animation<double> secondaryAnimation, Widget child) {
+    // Disable the default iOS swipe back transition
+    return child;
+  }
+}
 
 /// Skip Flow: Push-Up Success Screen
 ///
@@ -20,7 +42,9 @@ class SkipPushUpSuccessScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
+    // Capture widget properties for use in callbacks
+    final blockedApps = this.blockedApps;
+    final selectedWorkout = this.selectedWorkout;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -98,37 +122,26 @@ class SkipPushUpSuccessScreen extends StatelessWidget {
 
               const Spacer(),
 
-              // Action Buttons
+              // Action Button
               Padding(
                 padding: const EdgeInsets.all(32),
-                child: Row(
-                  children: [
-                    // Try Again Button
-                    Expanded(
-                      child: _TryAgainButton(
-                        onTap: () {
-                          Navigator.pop(context);
-                        },
+                child: _ContinueButton(
+                  onTap: () {
+                    final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
+                    authProvider.advanceGuestSetupStep();
+
+                    // Navigate to the next screen in the guest flow (disable swipe back)
+                    Navigator.push(
+                      context,
+                      _NoSwipeBackRoute(
+                        builder: (context) => SkipEmergencyUnlockScreen(
+                          blockedApps: blockedApps,
+                          selectedWorkout: selectedWorkout,
+                          unlockDuration: 15, // Default 15 minutes
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    // Continue Button
-                    Expanded(
-                      child: _ContinueButton(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => SkipUnlockDurationScreen(
-                                blockedApps: blockedApps,
-                                selectedWorkout: selectedWorkout,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ),
             ],
@@ -139,44 +152,6 @@ class SkipPushUpSuccessScreen extends StatelessWidget {
   }
 }
 
-/// Try Again Button Widget
-class _TryAgainButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _TryAgainButton({
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return PressAnimationButton(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        height: 52,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(100),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.2),
-            width: 1,
-          ),
-        ),
-        child: const Center(
-          child: Text(
-            'Try Again',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-              letterSpacing: -0.3,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /// Continue Button Widget
 class _ContinueButton extends StatelessWidget {
@@ -219,6 +194,10 @@ class _ContinueButton extends StatelessWidget {
     );
   }
 }
+
+
+
+
 
 
 

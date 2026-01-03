@@ -188,3 +188,16 @@ Should show 5 tables: `users`, `refresh_tokens`, `subscriptions`, `workouts`, `d
 ---
 
 **Questions? See DATABASE_SETUP_GUIDE.md for detailed troubleshooting.**
+
+
+
+
+
+
+
+
+
+
+
+
+

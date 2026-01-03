@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import '../auth/SignUpScreen.dart';
+import 'package:provider/provider.dart';
+import '../../../state/auth_state_provider.dart';
 
-/// Screen 1: Welcome to PUSHIN'
+/// Unified Welcome Screen - Single canonical welcome screen for all users
 ///
 /// BMAD V6 Spec:
 /// - App logo at top
 /// - "Welcome to PUSHIN'" title
 /// - Three value proposition points
-/// - Get Started button aligned with Next button position (bottom fixed)
-class OnboardingWelcomeScreen extends StatelessWidget {
+/// - Two choice buttons: Sign Up / Continue as Guest (for brand new users)
+/// - Single "Get Started" button (for authenticated users)
+/// - Context-aware button behavior based on user authentication state
+class WelcomeScreen extends StatelessWidget {
   final VoidCallback? onGetStarted;
 
-  const OnboardingWelcomeScreen({
+  const WelcomeScreen({
     super.key,
     this.onGetStarted,
   });
@@ -22,6 +24,11 @@ class OnboardingWelcomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
+    final authProvider = context.watch<AuthStateProvider>();
+
+    print('🧪 WelcomeScreen - justRegistered=${authProvider.justRegistered}, '
+        'isGuestMode=${authProvider.isGuestMode}, '
+        'guestCompletedSetup=${authProvider.guestCompletedSetup}');
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -131,26 +138,69 @@ class OnboardingWelcomeScreen extends StatelessWidget {
                 ),
               ),
 
-              // Fixed bottom button - aligned with Next button in other screens
+              // Fixed bottom buttons - context-aware
               Padding(
                 padding: const EdgeInsets.all(32),
-                child: _PrimaryButton(
-                  label: 'Get Started',
-                  onTap: onGetStarted ?? () {
-                    // Default behavior for first-time users: go to Sign Up
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SignUpScreen(),
-                      ),
-                    );
-                  },
-                ),
+                child: _buildBottomButtons(context, authProvider),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildBottomButtons(
+      BuildContext context, AuthStateProvider authProvider) {
+    // For authenticated users (including just registered), show single Get Started button
+    if (authProvider.isAuthenticated) {
+      return _PrimaryButton(
+        label: 'Get Started',
+        onTap: onGetStarted ??
+            () {
+              print('🎯 WelcomeScreen: Authenticated user tapped Get Started');
+              // Default behavior: proceed to onboarding (state change handled by callback)
+            },
+      );
+    }
+
+    // For brand new users, show Sign Up and Continue as Guest buttons
+    return Column(
+      children: [
+        // Sign Up Button
+        _PrimaryButton(
+          label: 'Sign Up',
+          onTap: () {
+            print(
+                '🎯 WelcomeScreen: Brand new user tapped Sign Up → triggering state-driven navigation');
+            // BMAD v6: State-driven navigation - no Navigator.push
+            final authProvider =
+                Provider.of<AuthStateProvider>(context, listen: false);
+            authProvider.triggerSignUpFlow();
+            print('✅ Triggered SignUpFlow, AppRouter will show SignUpScreen');
+          },
+        ),
+
+        const SizedBox(height: 16),
+
+        // Continue as Guest Button
+        _SecondaryButton(
+          key: const ValueKey('guest_start_button'),
+          label: 'Continue as Guest',
+          onTap: () async {
+            print(
+                '🎯 WelcomeScreen: Brand new user tapped Continue as Guest → setting guest mode');
+            final authProvider =
+                Provider.of<AuthStateProvider>(context, listen: false);
+            authProvider.enterGuestMode();
+            print(
+                '✅ Guest mode set, AppRouter should route to: SkipBlockAppsScreen (guest onboarding)');
+            print(
+                '   📍 Expected flow: SkipBlockAppsScreen → Block distracting apps → Main app');
+            // Navigation handled by AppRouter state change
+          },
+        ),
+      ],
     );
   }
 }
@@ -234,6 +284,48 @@ class _PrimaryButton extends StatelessWidget {
               fontSize: 18,
               fontWeight: FontWeight.w700,
               color: Color(0xFF2A2A6A),
+              letterSpacing: -0.3,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Secondary button for guest mode
+class _SecondaryButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _SecondaryButton({
+    super.key,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PressAnimationButton(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        height: 52,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(100),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withOpacity(0.9),
               letterSpacing: -0.3,
             ),
           ),

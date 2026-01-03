@@ -13,6 +13,9 @@ class OnboardingService {
   // Static callback for when onboarding completes
   static VoidCallback? _onOnboardingCompleted;
 
+  // Static callback for when onboarding is reset
+  static VoidCallback? _onOnboardingReset;
+
   // Static callback for development refresh
   static VoidCallback? _onDevRefresh;
 
@@ -22,10 +25,13 @@ class OnboardingService {
     // Check if force onboarding is enabled (for development)
     final forceOnboarding = prefs.getBool(_forceOnboardingKey) ?? false;
     if (forceOnboarding) {
+      print('🎯 OnboardingService: Force onboarding flag is set - returning false');
       return false; // Force show onboarding
     }
 
-    return prefs.getBool(_onboardingCompletedKey) ?? false;
+    final completed = prefs.getBool(_onboardingCompletedKey) ?? false;
+    print('🎯 OnboardingService.isOnboardingCompleted(): returning $completed (from SharedPreferences key: $_onboardingCompletedKey)');
+    return completed;
   }
 
   /// Check if intro screen has been shown (for first-time users)
@@ -54,6 +60,10 @@ class OnboardingService {
     _onOnboardingCompleted = callback;
   }
 
+  static void setOnboardingResetCallback(VoidCallback callback) {
+    _onOnboardingReset = callback;
+  }
+
   static void setDevRefreshCallback(VoidCallback callback) {
     _onDevRefresh = callback;
   }
@@ -64,6 +74,10 @@ class OnboardingService {
     await prefs.remove(_onboardingDataKey);
     await prefs.remove(_forceOnboardingKey);
     await prefs.remove(_introShownKey);
+
+    // Call the reset callback if set
+    _onOnboardingReset?.call();
+
     print('🔄 Onboarding state reset - you can now access onboarding again');
   }
 
@@ -84,6 +98,13 @@ class OnboardingService {
     // ignore: avoid_print
     print(
         '🔄 Onboarding reset complete. Hot restart the app to see onboarding again.');
+  }
+
+  /// Development helper: Reset intro screen to test first-time user flow
+  static Future<void> devResetIntroScreen() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_introShownKey);
+    print('🔄 Intro screen reset - first-time user flow will show again');
   }
 
   static Future<void> saveOnboardingData(Map<String, dynamic> data) async {
@@ -113,13 +134,3 @@ class OnboardingService {
     }
   }
 }
-
-
-
-
-
-
-
-
-
-

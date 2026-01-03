@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../controller/PushinAppController.dart';
+import '../../state/pushin_app_controller.dart';
 import '../../domain/PushinState.dart';
+import '../../state/auth_state_provider.dart';
 import '../../services/StripeCheckoutService.dart';
-import '../theme/pushin_theme.dart';
 import '../widgets/AppBlockOverlay.dart';
 import '../widgets/DevTools.dart'; // TEMPORARY: Remove before production
-import 'paywall/PaywallScreen.dart';
+import '../widgets/GOStepsBackground.dart';
+import '../widgets/PressAnimationButton.dart';
+import 'pushin_settings_screen.dart';
+import 'workout/RepCounterScreen.dart';
+import 'workout/WorkoutSelectionScreen.dart';
 
 /// Home screen showing current state and actions.
 ///
@@ -22,66 +26,106 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthStateProvider>(context);
+    print('🧪 HomeScreen - justRegistered=${authProvider.justRegistered}, '
+        'isGuestMode=${authProvider.isGuestMode}, '
+        'guestCompletedSetup=${authProvider.guestCompletedSetup}');
+
     return Scaffold(
-      body: Stack(
-        children: [
-          // Main content
-          Consumer<PushinAppController>(
-            builder: (context, controller, _) {
-              return _buildStateContent(context, controller);
-            },
-          ),
+      key: const ValueKey('home_screen_marker'),
+      backgroundColor: Colors.black,
+      body: GOStepsBackground(
+        blackRatio: 0.28,
+        child: Stack(
+          children: [
+            // Main content
+            Consumer<PushinAppController>(
+              builder: (context, controller, _) {
+                return _buildStateContent(context, controller);
+              },
+            ),
 
-          // Block overlay (shown when blocked app launched or daily cap hit)
-          ValueListenableBuilder<BlockOverlayState?>(
-            valueListenable:
-                context.watch<PushinAppController>().blockOverlayState,
-            builder: (context, overlayState, _) {
-              if (overlayState != null) {
-                return AppBlockOverlay(
-                  reason: overlayState.reason,
-                  blockedAppName: overlayState.appName,
-                  onStartWorkout: () {
-                    context.read<PushinAppController>().dismissBlockOverlay();
-                    // Navigate to workout screen
-                  },
-                  onGoToSettings: () {
-                    // Navigate to settings
-                  },
-                );
-              }
-              return const SizedBox.shrink();
-            },
-          ),
+            // Block overlay (shown when blocked app launched or daily cap hit)
+            ValueListenableBuilder<BlockOverlayState?>(
+              valueListenable:
+                  context.watch<PushinAppController>().blockOverlayState,
+              builder: (context, overlayState, _) {
+                if (overlayState != null) {
+                  return AppBlockOverlay(
+                    reason: overlayState.reason,
+                    blockedAppName: overlayState.appName,
+                    onStartWorkout: () {
+                      context.read<PushinAppController>().dismissBlockOverlay();
+                      // Navigate to workout screen
+                    },
+                    onGoToSettings: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PushinSettingsScreen(),
+                        ),
+                      );
+                    },
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
 
-          // TEMPORARY: Development tools - REMOVE BEFORE PRODUCTION
-          const DevTools(),
+            // Settings button
+            Positioned(
+              top: 50,
+              right: 20,
+              child: IconButton(
+                icon: const Icon(
+                  Icons.settings,
+                  color: Colors.white,
+                  size: 28,
+                ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const PushinSettingsScreen(),
+                    ),
+                  );
+                },
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.white.withOpacity(0.1),
+                  padding: const EdgeInsets.all(12),
+                ),
+              ),
+            ),
 
-          // Payment success overlay
-          ValueListenableBuilder<SubscriptionStatus?>(
-            valueListenable:
-                context.watch<PushinAppController>().paymentSuccessState,
-            builder: (context, paymentStatus, _) {
-              if (paymentStatus != null) {
-                return _PaymentSuccessOverlay(
-                    subscriptionStatus: paymentStatus);
-              }
-              return const SizedBox.shrink();
-            },
-          ),
+            // TEMPORARY: Development tools - REMOVE BEFORE PRODUCTION
+            DevTools(),
 
-          // Payment cancel notification
-          ValueListenableBuilder<bool>(
-            valueListenable:
-                context.watch<PushinAppController>().paymentCancelState,
-            builder: (context, showCancel, _) {
-              if (showCancel) {
-                return _PaymentCancelOverlay();
-              }
-              return const SizedBox.shrink();
-            },
-          ),
-        ],
+            // Payment success overlay
+            ValueListenableBuilder<SubscriptionStatus?>(
+              valueListenable:
+                  context.watch<PushinAppController>().paymentSuccessState,
+              builder: (context, paymentStatus, _) {
+                if (paymentStatus != null) {
+                  return _PaymentSuccessOverlay(
+                      subscriptionStatus: paymentStatus);
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+
+            // Payment cancel notification
+            ValueListenableBuilder<bool>(
+              valueListenable:
+                  context.watch<PushinAppController>().paymentCancelState,
+              builder: (context, showCancel, _) {
+                if (showCancel) {
+                  return _PaymentCancelOverlay();
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -106,7 +150,7 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-/// LOCKED state view
+/// LOCKED state view - Onboarding-style design
 class _LockedStateView extends StatelessWidget {
   final PushinAppController controller;
 
@@ -114,211 +158,228 @@ class _LockedStateView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: PushinTheme.surfaceGradient,
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(PushinTheme.spacingLg),
-          child: Column(
-            children: [
-              // Status card
-              Container(
-                padding: EdgeInsets.all(PushinTheme.spacingLg),
-                decoration: BoxDecoration(
-                  color: PushinTheme.surfaceDark,
-                  borderRadius: BorderRadius.circular(PushinTheme.radiusMd),
-                  boxShadow: PushinTheme.cardShadow,
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Spacer for top
+          SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+
+          // Main headline
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Your Apps Are',
+                  style: TextStyle(
+                    fontSize: 44,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    height: 1.05,
+                    letterSpacing: -1,
+                  ),
                 ),
-                child: Column(
-                  children: [
-                    const Icon(
-                      Icons.lock_outline,
-                      size: 48,
-                      color: PushinTheme.primaryBlue,
+                ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ).createShader(
+                    Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                  ),
+                  blendMode: BlendMode.srcIn,
+                  child: const Text(
+                    'Blocked',
+                    style: TextStyle(
+                      fontSize: 44,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      height: 1.1,
+                      letterSpacing: -0.5,
                     ),
-                    SizedBox(height: PushinTheme.spacingMd),
-                    const Text(
-                      'Your apps are blocked',
-                      style: PushinTheme.headline3,
-                      textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Complete a workout to unlock screen time',
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Colors.white.withOpacity(0.6),
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 40),
+
+          // Workout option card
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: _OnboardingStyleWorkoutCard(
+              icon: Icons.fitness_center,
+              title: 'Push-Ups',
+              subtitle: controller.getWorkoutRewardDescription('push-ups', 20),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const RepCounterScreen(
+                      workoutType: 'push-ups',
+                      targetReps: 20,
+                      desiredScreenTimeMinutes: 10,
                     ),
-                    SizedBox(height: PushinTheme.spacingSm),
-                    const Text(
-                      'Complete a workout to unlock screen time',
-                      style: PushinTheme.body2,
-                      textAlign: TextAlign.center,
+                  ),
+                );
+              },
+            ),
+          ),
+
+          const Spacer(),
+
+          // Start Workout Button
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 16, 32, 16),
+            child: PressAnimationButton(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const WorkoutSelectionScreen(),
+                  ),
+                );
+              },
+              child: Container(
+                width: double.infinity,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(100),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.white.withOpacity(0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
                     ),
                   ],
                 ),
-              ),
-
-              SizedBox(height: PushinTheme.spacingXl),
-
-              // Workout selection
-              const Text(
-                'Choose Your Workout',
-                style: PushinTheme.headline3,
-              ),
-
-              const SizedBox(height: PushinTheme.spacingMd),
-
-              // Push-ups card (active for free plan)
-              _WorkoutCard(
-                workoutType: 'push-ups',
-                reps: 20,
-                isLocked: false,
-                onTap: () async {
-                  await controller.startWorkout('push-ups', 20);
-                },
-                controller: controller,
-              ),
-
-              const SizedBox(height: PushinTheme.spacingMd),
-
-              // Squats card (locked for free plan)
-              _WorkoutCard(
-                workoutType: 'squats',
-                reps: 30,
-                isLocked: true,
-                badgeText: 'Standard Plan',
-                onTap: () {
-                  // Show paywall
-                  _showPaywall(context);
-                },
-                controller: controller,
-              ),
-
-              SizedBox(height: PushinTheme.spacingXl),
-
-              // Test Paywall Button (for development)
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: PushinTheme.primaryBlue,
-                  side: const BorderSide(color: PushinTheme.primaryBlue),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: PushinTheme.spacingLg,
-                    vertical: PushinTheme.spacingMd,
+                child: const Center(
+                  child: Text(
+                    'Choose Workout',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF2A2A6A),
+                      letterSpacing: -0.3,
+                    ),
                   ),
                 ),
-                onPressed: () => _showPaywall(context),
-                icon: const Icon(Icons.payment),
-                label: const Text('Test Stripe Payment →'),
               ),
-            ],
+            ),
           ),
-        ),
-      ),
-    );
-  }
 
-  void _showPaywall(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const PaywallScreen(),
+          // Quick start subtitle
+          Padding(
+            padding: const EdgeInsets.only(bottom: 32),
+            child: Center(
+              child: Text(
+                'Or tap the card above for quick start',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.white.withOpacity(0.5),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Workout card widget
-class _WorkoutCard extends StatelessWidget {
-  final String workoutType;
-  final int reps;
-  final bool isLocked;
-  final String? badgeText;
+/// Onboarding-style workout card
+class _OnboardingStyleWorkoutCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
   final VoidCallback onTap;
-  final PushinAppController controller;
 
-  const _WorkoutCard({
-    required this.workoutType,
-    required this.reps,
-    required this.isLocked,
-    this.badgeText,
+  const _OnboardingStyleWorkoutCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
     required this.onTap,
-    required this.controller,
   });
 
   @override
   Widget build(BuildContext context) {
-    final rewardDesc =
-        controller.getWorkoutRewardDescription(workoutType, reps);
-
-    return Opacity(
-      opacity: isLocked ? 0.4 : 1.0,
+    return PressAnimationButton(
+      onTap: onTap,
       child: Container(
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          gradient: isLocked ? null : PushinTheme.primaryGradient,
-          color: isLocked ? PushinTheme.surfaceDark : null,
-          borderRadius: BorderRadius.circular(PushinTheme.radiusMd),
-          boxShadow: isLocked ? null : PushinTheme.buttonShadow,
+          color: Colors.white.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(24),
         ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(PushinTheme.radiusMd),
-            child: Padding(
-              padding: EdgeInsets.all(PushinTheme.spacingLg),
-              child: Row(
+        child: Row(
+          children: [
+            // Icon container
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(
+                icon,
+                size: 32,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 16),
+            // Text content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    _getWorkoutIcon(workoutType),
-                    size: 40,
-                    color: Colors.white,
-                  ),
-                  SizedBox(width: PushinTheme.spacingMd),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _capitalize(workoutType),
-                          style: PushinTheme.headline3.copyWith(fontSize: 20),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          badgeText ?? rewardDesc,
-                          style: PushinTheme.body2,
-                        ),
-                      ],
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
                     ),
                   ),
-                  if (isLocked)
-                    const Icon(
-                      Icons.lock,
-                      color: Colors.white54,
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.white.withOpacity(0.6),
                     ),
+                  ),
                 ],
               ),
             ),
-          ),
+            // Arrow
+            Icon(
+              Icons.arrow_forward_ios,
+              size: 20,
+              color: Colors.white.withOpacity(0.5),
+            ),
+          ],
         ),
       ),
     );
   }
-
-  IconData _getWorkoutIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'push-ups':
-        return Icons.fitness_center;
-      case 'squats':
-        return Icons.airline_seat_legroom_normal;
-      default:
-        return Icons.sports_gymnastics;
-    }
-  }
-
-  String _capitalize(String text) {
-    return text.split('-').map((word) {
-      return word[0].toUpperCase() + word.substring(1);
-    }).join(' ');
-  }
 }
 
-/// EARNING state view (workout in progress)
+
+/// EARNING state view (workout in progress) - Onboarding style
 class _EarningStateView extends StatelessWidget {
   final PushinAppController controller;
 
@@ -329,93 +390,121 @@ class _EarningStateView extends StatelessWidget {
     final now = DateTime.now();
     final progress = controller.getWorkoutProgress(now);
 
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: PushinTheme.surfaceGradient,
-      ),
-      child: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            AppBar(
-              backgroundColor: Colors.transparent,
-              leading: IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () {
-                  _showCancelConfirmation(context);
-                },
-              ),
-              title: const Text('Workout in Progress'),
+    return SafeArea(
+      child: Column(
+        children: [
+          // Header with close button
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(Icons.close, color: Colors.white.withOpacity(0.8)),
+                  onPressed: () => _showCancelConfirmation(context),
+                ),
+                const Spacer(),
+                Text(
+                  'Workout in Progress',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withOpacity(0.8),
+                  ),
+                ),
+                const Spacer(),
+                const SizedBox(width: 48),
+              ],
             ),
+          ),
 
-            const Spacer(),
+          const Spacer(),
 
-            // Progress ring
-            Center(
-              child: SizedBox(
-                width: 200,
-                height: 200,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    SizedBox(
-                      width: 200,
-                      height: 200,
-                      child: CircularProgressIndicator(
-                        value: progress,
-                        strokeWidth: 12,
-                        backgroundColor: PushinTheme.surfaceDark,
-                        valueColor: const AlwaysStoppedAnimation(
-                            PushinTheme.primaryBlue),
+          // Progress ring with gradient
+          Center(
+            child: SizedBox(
+              width: 200,
+              height: 200,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 200,
+                    height: 200,
+                    child: CircularProgressIndicator(
+                      value: progress,
+                      strokeWidth: 12,
+                      backgroundColor: Colors.white.withOpacity(0.1),
+                      valueColor: const AlwaysStoppedAnimation(Color(0xFF6060FF)),
+                    ),
+                  ),
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
+                    ).createShader(bounds),
+                    blendMode: BlendMode.srcIn,
+                    child: Text(
+                      '${(progress * 20).round()} / 20',
+                      style: const TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
                     ),
-                    Text(
-                      '${(progress * 20).round()} / 20',
-                      style: PushinTheme.headline1,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          const Text(
+            'Push-Ups Completed',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+
+          const Spacer(),
+
+          // Complete button - pill style
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+            child: PressAnimationButton(
+              onTap: () async {
+                await controller.completeWorkout(20);
+              },
+              child: Container(
+                width: double.infinity,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(100),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.white.withOpacity(0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
                     ),
                   ],
                 ),
-              ),
-            ),
-
-            const SizedBox(height: PushinTheme.spacingLg),
-
-            const Text(
-              'Push-Ups Completed',
-              style: PushinTheme.headline3,
-            ),
-
-            const Spacer(),
-
-            // Complete button (for manual counter MVP)
-            Padding(
-              padding: EdgeInsets.all(PushinTheme.spacingLg),
-              child: SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: PushinTheme.primaryBlue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(PushinTheme.radiusMd),
-                    ),
-                  ),
-                  onPressed: () async {
-                    await controller.completeWorkout(20);
-                  },
-                  child: const Text(
+                child: const Center(
+                  child: Text(
                     'Complete Workout',
                     style: TextStyle(
                       fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF2A2A6A),
+                      letterSpacing: -0.3,
                     ),
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -423,28 +512,100 @@ class _EarningStateView extends StatelessWidget {
   void _showCancelConfirmation(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancel Workout?'),
-        content: const Text('Your progress will be lost.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Keep Going'),
+      builder: (context) => Dialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                size: 56,
+                color: Colors.amber.shade400,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Cancel Workout?',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Your progress will be lost.',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.white.withOpacity(0.6),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: PressAnimationButton(
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.read<PushinAppController>().cancelWorkout();
+                      },
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(100),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white.withOpacity(0.8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: PressAnimationButton(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.95),
+                          borderRadius: BorderRadius.circular(100),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Keep Going',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2A2A6A),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              context.read<PushinAppController>().cancelWorkout();
-            },
-            child: const Text('Cancel'),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-/// UNLOCKED state view
+/// UNLOCKED state view - Onboarding style
 class _UnlockedStateView extends StatelessWidget {
   final PushinAppController controller;
   final DateTime now;
@@ -460,132 +621,165 @@ class _UnlockedStateView extends StatelessWidget {
     final minutes = remainingSeconds ~/ 60;
     final seconds = remainingSeconds % 60;
 
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: PushinTheme.surfaceGradient,
-      ),
-      child: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: EdgeInsets.all(PushinTheme.spacingLg),
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Spacer for top
+          SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+
+          // Main headline
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Success icon
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: PushinTheme.successGreen.withOpacity(0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.check_circle,
-                    size: 80,
-                    color: PushinTheme.successGreen,
-                  ),
-                ),
-
-                SizedBox(height: PushinTheme.spacingXl),
-
                 const Text(
-                  'Apps Unlocked!',
-                  style: PushinTheme.appsText,
-                  textAlign: TextAlign.center,
-                ),
-
-                SizedBox(height: PushinTheme.spacingSm),
-
-                const Text(
-                  'Great work! Enjoy your screen time',
-                  style: PushinTheme.body2,
-                  textAlign: TextAlign.center,
-                ),
-
-                SizedBox(height: PushinTheme.spacingXl * 2),
-
-                // Countdown timer with card
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 40,
-                    vertical: 32,
+                  'Apps',
+                  style: TextStyle(
+                    fontSize: 44,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    height: 1.05,
+                    letterSpacing: -1,
                   ),
-                  decoration: BoxDecoration(
-                    color: PushinTheme.surfaceDark.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(PushinTheme.radiusLg),
-                    border: Border.all(
-                      color: PushinTheme.successGreen.withOpacity(0.3),
-                      width: 2,
+                ),
+                ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Color(0xFF10B981), Color(0xFF34D399)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ).createShader(
+                    Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                  ),
+                  blendMode: BlendMode.srcIn,
+                  child: const Text(
+                    'Unlocked!',
+                    style: TextStyle(
+                      fontSize: 44,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      height: 1.1,
+                      letterSpacing: -0.5,
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      Text(
-                        '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
-                        style: PushinTheme.headline1.copyWith(
-                          fontSize: 72,
-                          color: PushinTheme.successGreen,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 4,
-                        ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Great work! Enjoy your screen time',
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Colors.white.withOpacity(0.6),
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const Spacer(),
+
+          // Countdown timer card
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 32,
+                vertical: 40,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                children: [
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [Color(0xFF10B981), Color(0xFF34D399)],
+                    ).createShader(bounds),
+                    blendMode: BlendMode.srcIn,
+                    child: Text(
+                      '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
+                      style: const TextStyle(
+                        fontSize: 72,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 4,
                       ),
-                      SizedBox(height: PushinTheme.spacingSm),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'TIME REMAINING',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withOpacity(0.5),
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const Spacer(),
+
+          // Earn More Time button
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+            child: PressAnimationButton(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const WorkoutSelectionScreen(),
+                  ),
+                );
+              },
+              child: Container(
+                width: double.infinity,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(100),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.white.withOpacity(0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.fitness_center, size: 20, color: Color(0xFF2A2A6A)),
+                      SizedBox(width: 8),
                       Text(
-                        'TIME REMAINING',
-                        style: PushinTheme.body2.copyWith(
-                          color: PushinTheme.textSecondary,
-                          letterSpacing: 2,
+                        'Earn More Time',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF2A2A6A),
+                          letterSpacing: -0.3,
                         ),
                       ),
                     ],
                   ),
                 ),
-
-                const Spacer(),
-
-                // Earn More Time button
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: PushinTheme.primaryBlue,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(PushinTheme.radiusMd),
-                      ),
-                    ),
-                    onPressed: () async {
-                      await controller.startWorkout('push-ups', 20);
-                    },
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.fitness_center, size: 20),
-                        SizedBox(width: 8),
-                        Text(
-                          'Earn More Time',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                SizedBox(height: PushinTheme.spacingMd),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
-/// EXPIRED state view (grace period)
+/// EXPIRED state view (grace period) - Onboarding style
 class _ExpiredStateView extends StatelessWidget {
   final PushinAppController controller;
   final DateTime now;
@@ -599,35 +793,163 @@ class _ExpiredStateView extends StatelessWidget {
   Widget build(BuildContext context) {
     final graceRemaining = controller.getGracePeriodRemaining(now);
 
-    return Container(
-      color: PushinTheme.errorRed.withOpacity(0.1),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.timer_off,
-              size: 64,
-              color: PushinTheme.warningYellow,
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Spacer for top
+          SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+
+          // Main headline
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Time's",
+                  style: TextStyle(
+                    fontSize: 44,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    height: 1.05,
+                    letterSpacing: -1,
+                  ),
+                ),
+                ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Color(0xFFF59E0B), Color(0xFFFBBF24)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ).createShader(
+                    Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                  ),
+                  blendMode: BlendMode.srcIn,
+                  child: const Text(
+                    'Up!',
+                    style: TextStyle(
+                      fontSize: 44,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      height: 1.1,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Complete a workout to continue using apps',
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Colors.white.withOpacity(0.6),
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: PushinTheme.spacingMd),
-            const Text(
-              "Time's Up!",
-              style: PushinTheme.headline2,
+          ),
+
+          const Spacer(),
+
+          // Grace period card
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 32,
+                vertical: 40,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.timer_off,
+                    size: 64,
+                    color: Colors.amber.shade400,
+                  ),
+                  const SizedBox(height: 16),
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [Color(0xFFF59E0B), Color(0xFFFBBF24)],
+                    ).createShader(bounds),
+                    blendMode: BlendMode.srcIn,
+                    child: Text(
+                      '$graceRemaining',
+                      style: const TextStyle(
+                        fontSize: 56,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'SECONDS GRACE PERIOD',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withOpacity(0.5),
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: PushinTheme.spacingMd),
-            Text(
-              'Grace period: $graceRemaining seconds',
-              style: PushinTheme.body1,
+          ),
+
+          const Spacer(),
+
+          // Start Workout button
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+            child: PressAnimationButton(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const WorkoutSelectionScreen(),
+                  ),
+                );
+              },
+              child: Container(
+                width: double.infinity,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(100),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.white.withOpacity(0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Text(
+                    'Start Workout Now',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF2A2A6A),
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Payment success overlay
+/// Payment success overlay - Onboarding style
 class _PaymentSuccessOverlay extends StatelessWidget {
   final SubscriptionStatus subscriptionStatus;
 
@@ -637,87 +959,146 @@ class _PaymentSuccessOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: PushinTheme.successGreen.withOpacity(0.9),
-      child: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(PushinTheme.spacingXl),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(32),
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: GOStepsBackground(
+        blackRatio: 0.28,
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+
+              // Main headline
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Payment',
+                      style: TextStyle(
+                        fontSize: 44,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        height: 1.05,
+                        letterSpacing: -1,
+                      ),
+                    ),
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Color(0xFF10B981), Color(0xFF34D399)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ).createShader(
+                        Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                      ),
+                      blendMode: BlendMode.srcIn,
+                      child: const Text(
+                        'Successful!',
+                        style: TextStyle(
+                          fontSize: 44,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          height: 1.1,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Welcome to ${subscriptionStatus.displayName}!',
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Colors.white.withOpacity(0.6),
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const Spacer(),
+
+              // Success card
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 40,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(24),
                   ),
-                  child: const Icon(
-                    Icons.check_circle,
-                    size: 80,
-                    color: Colors.white,
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.check_circle,
+                          size: 64,
+                          color: Color(0xFF10B981),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Your premium features are now unlocked',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.white.withOpacity(0.7),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
                 ),
-                SizedBox(height: PushinTheme.spacingXl),
-                const Text(
-                  'Payment Successful!',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: PushinTheme.spacingMd),
-                Text(
-                  'Welcome to ${subscriptionStatus.displayName}!',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: PushinTheme.spacingSm),
-                const Text(
-                  'Your premium features are now unlocked.',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w300,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: PushinTheme.spacingXl * 2),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: PushinTheme.successGreen,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                      vertical: 16,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(PushinTheme.radiusLg),
-                    ),
-                  ),
-                  onPressed: () {
-                    // Dismiss the overlay
-                    context
-                        .read<PushinAppController>()
-                        .paymentSuccessState
-                        .value = null;
+              ),
+
+              const Spacer(),
+
+              // Continue button
+              Padding(
+                padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+                child: PressAnimationButton(
+                  onTap: () {
+                    context.read<PushinAppController>().paymentSuccessState.value = null;
                   },
-                  child: const Text(
-                    'Continue',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                  child: Container(
+                    width: double.infinity,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.95),
+                      borderRadius: BorderRadius.circular(100),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.white.withOpacity(0.2),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Continue',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF2A2A6A),
+                          letterSpacing: -0.3,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -725,81 +1106,150 @@ class _PaymentSuccessOverlay extends StatelessWidget {
   }
 }
 
-/// Payment cancel overlay
+/// Payment cancel overlay - Onboarding style
 class _PaymentCancelOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: PushinTheme.warningYellow.withOpacity(0.9),
-      child: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(PushinTheme.spacingXl),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(32),
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: GOStepsBackground(
+        blackRatio: 0.28,
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+
+              // Main headline
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Payment',
+                      style: TextStyle(
+                        fontSize: 44,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        height: 1.05,
+                        letterSpacing: -1,
+                      ),
+                    ),
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Color(0xFFF59E0B), Color(0xFFFBBF24)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ).createShader(
+                        Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                      ),
+                      blendMode: BlendMode.srcIn,
+                      child: const Text(
+                        'Canceled',
+                        style: TextStyle(
+                          fontSize: 44,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          height: 1.1,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'No charges were made to your card',
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Colors.white.withOpacity(0.6),
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const Spacer(),
+
+              // Info card
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 40,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(24),
                   ),
-                  child: const Icon(
-                    Icons.cancel,
-                    size: 80,
-                    color: Colors.white,
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B).withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.cancel,
+                          size: 64,
+                          color: Color(0xFFF59E0B),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'You can try again anytime',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.white.withOpacity(0.7),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
                 ),
-                SizedBox(height: PushinTheme.spacingXl),
-                const Text(
-                  'Payment Canceled',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: PushinTheme.spacingMd),
-                const Text(
-                  'No charges were made to your card.',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w300,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: PushinTheme.spacingXl * 2),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: PushinTheme.warningYellow,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                      vertical: 16,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(PushinTheme.radiusLg),
-                    ),
-                  ),
-                  onPressed: () {
-                    // Dismiss the overlay
-                    context
-                        .read<PushinAppController>()
-                        .paymentCancelState
-                        .value = false;
+              ),
+
+              const Spacer(),
+
+              // Continue button
+              Padding(
+                padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+                child: PressAnimationButton(
+                  onTap: () {
+                    context.read<PushinAppController>().paymentCancelState.value = false;
                   },
-                  child: const Text(
-                    'Continue',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                  child: Container(
+                    width: double.infinity,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.95),
+                      borderRadius: BorderRadius.circular(100),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.white.withOpacity(0.2),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Continue',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF2A2A6A),
+                          letterSpacing: -0.3,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

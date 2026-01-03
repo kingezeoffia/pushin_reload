@@ -1,11 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
+import 'package:provider/provider.dart';
+import '../../../state/auth_state_provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import '../../theme/pushin_theme.dart';
 import 'SkipPushUpSuccessScreen.dart';
-import 'SkipUnlockDurationScreen.dart';
+
+/// Custom route that disables swipe back gesture on iOS
+class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
+  _NoSwipeBackRoute({
+    required WidgetBuilder builder,
+    RouteSettings? settings,
+  }) : super(builder: builder, settings: settings);
+
+  @override
+  bool get hasScopedWillPopCallback => true;
+
+  @override
+  bool get canPop => false;
+
+  @override
+  Widget buildTransitions(BuildContext context, Animation<double> animation,
+      Animation<double> secondaryAnimation, Widget child) {
+    // Disable the default iOS swipe back transition
+    return child;
+  }
+}
 
 /// Skip Flow: Push-Up Test Screen
 ///
@@ -145,16 +166,20 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
 
     // Stop detection and navigate to success screen
     if (mounted && !_hasCompleted) {
+      print('🎉 Auto-detection completion! Setting _hasCompleted = true');
       _hasCompleted = true;
       setState(() => _isDetecting = false);
       _showSuccessScreen();
+    } else {
+      print(
+          '⏳ Auto-detection completion condition not met: mounted=$mounted, hasCompleted=!$_hasCompleted: ${!_hasCompleted}');
     }
   }
 
   void _showSuccessScreen() {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      _NoSwipeBackRoute(
         builder: (context) => SkipPushUpSuccessScreen(
           blockedApps: widget.blockedApps,
           selectedWorkout: widget.selectedWorkout,
@@ -170,8 +195,11 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
 
     if (_detectedReps >= _targetReps && !_hasCompleted) {
       _hasCompleted = true;
-      // Brief pause to let user register the final "3" rep
+      setState(() {}); // Ensure UI updates immediately
+
+      // Brief pause to let user register the final rep
       await Future.delayed(const Duration(milliseconds: 800));
+
       if (mounted) {
         _showSuccessScreen();
       }
@@ -179,15 +207,8 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
   }
 
   void _continueToNextScreen() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SkipUnlockDurationScreen(
-          blockedApps: widget.blockedApps,
-          selectedWorkout: widget.selectedWorkout,
-        ),
-      ),
-    );
+    final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
+    authProvider.advanceGuestSetupStep();
   }
 
   /// Build camera preview with proper aspect ratio (no stretching)
@@ -222,6 +243,12 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthStateProvider>(context);
+    print(
+        '🧪 SkipPushUpTestScreen - justRegistered=${authProvider.justRegistered}, '
+        'isGuestMode=${authProvider.isGuestMode}, '
+        'guestCompletedSetup=${authProvider.guestCompletedSetup}');
+
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
@@ -232,12 +259,6 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Back Button
-              Padding(
-                padding: const EdgeInsets.only(left: 8, right: 16, top: 8),
-                child: _BackButton(onTap: () => Navigator.pop(context)),
-              ),
-
               SizedBox(height: screenHeight * 0.04),
 
               // Heading
@@ -546,25 +567,26 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
                 ),
               ),
 
-              // Skip for now button (minimal, non-prominent)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 8, bottom: 12),
-                  child: GestureDetector(
-                    onTap: _continueToNextScreen,
-                    child: Text(
-                      'Skip test for now',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.4),
-                        fontWeight: FontWeight.w500,
-                        decoration: TextDecoration.underline,
+              // Skip for now button (minimal, non-prominent) - hidden during detection
+              if (!_isDetecting)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 12),
+                    child: GestureDetector(
+                      onTap: _continueToNextScreen,
+                      child: Text(
+                        'Skip test for now',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.4),
+                          fontWeight: FontWeight.w500,
+                          decoration: TextDecoration.underline,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
                     ),
                   ),
                 ),
-              ),
             ],
           ),
         ),
@@ -573,60 +595,7 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
   }
 }
 
-/// Step indicator widget (not used in skip flow)
-class _StepIndicator extends StatelessWidget {
-  final int currentStep;
-  final int totalSteps;
-
-  const _StepIndicator({
-    required this.currentStep,
-    required this.totalSteps,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(100),
-      ),
-      child: Text(
-        'Step $currentStep of $totalSteps',
-        style: PushinTheme.stepIndicatorText.copyWith(
-          color: Colors.white.withOpacity(0.8),
-        ),
-      ),
-    );
-  }
-}
-
 /// Back Button Widget
-class _BackButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _BackButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.arrow_back,
-          color: Colors.white,
-          size: 22,
-        ),
-      ),
-    );
-  }
-}
 
 /// Manual Count Button with light-up effect
 class _ManualCountButton extends StatefulWidget {
@@ -684,10 +653,3 @@ class _ManualCountButtonState extends State<_ManualCountButton> {
     );
   }
 }
-
-
-
-
-
-
-

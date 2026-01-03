@@ -2,11 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import '../../../services/AuthStateProvider.dart';
-import '../onboarding/OnboardingFitnessLevelScreen.dart';
-import '../HomeScreen.dart';
-import 'SignInScreen.dart';
-import 'SkipBlockAppsScreen.dart';
+import '../../../state/auth_state_provider.dart';
 
 /// Sign Up Screen - New user registration
 ///
@@ -26,36 +22,37 @@ class SignUpScreen extends StatefulWidget {
 
 class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _nameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final FocusNode _nameFocus = FocusNode();
   final FocusNode _emailFocus = FocusNode();
   final FocusNode _passwordFocus = FocusNode();
+  final FocusNode _confirmPasswordFocus = FocusNode();
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void initState() {
     super.initState();
-    _nameFocus.addListener(() => _scrollToFocusedField(_nameFocus));
     _emailFocus.addListener(() => _scrollToFocusedField(_emailFocus));
     _passwordFocus.addListener(() => _scrollToFocusedField(_passwordFocus));
+    _confirmPasswordFocus.addListener(() => _scrollToFocusedField(_confirmPasswordFocus));
 
     // Add listeners for real-time form validation
     _emailController.addListener(_onFormChanged);
-    _nameController.addListener(_onFormChanged);
     _passwordController.addListener(_onFormChanged);
+    _confirmPasswordController.addListener(_onFormChanged);
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
-    _nameFocus.dispose();
     _emailFocus.dispose();
     _passwordFocus.dispose();
+    _confirmPasswordFocus.dispose();
     _emailController.dispose();
-    _nameController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -85,10 +82,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   void _navigateToSignIn() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const SignInScreen()),
-    );
+    // BMAD v6: State-driven navigation - no Navigator.pushReplacement
+    final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
+    authProvider.triggerSignInFlow();
   }
 
   void _navigateAfterAuth() {
@@ -98,15 +94,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   bool _isFormValid() {
     final email = _emailController.text.trim();
-    final name = _nameController.text.trim();
     final password = _passwordController.text;
+    final confirmPassword = _confirmPasswordController.text;
 
     final passwordStrength = _calculatePasswordStrength(password);
 
     return email.isNotEmpty &&
         email.contains('@') &&
-        name.isNotEmpty &&
         password.isNotEmpty &&
+        confirmPassword.isNotEmpty &&
+        password == confirmPassword &&
         (passwordStrength == PasswordStrength.medium ||
             passwordStrength == PasswordStrength.strong);
   }
@@ -117,14 +114,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final success = await authProvider.register(
       email: _emailController.text.trim(),
       password: _passwordController.text,
-      name: _nameController.text.trim().isNotEmpty
-          ? _nameController.text.trim()
-          : null,
     );
 
     if (success && mounted) {
-      // Navigate based on user state
-      _navigateAfterAuth();
+      // register() already set justRegistered = true, router will handle navigation to NewUserWelcomeScreen
+      // BMAD v6: No direct navigation - router reacts to state changes
     }
     // Error is handled by the provider and displayed in UI
   }
@@ -220,7 +214,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Get started with',
+                        'Get started with:',
                         style: TextStyle(
                           fontSize: 38,
                           fontWeight: FontWeight.w800,
@@ -267,6 +261,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       TextField(
                         controller: _emailController,
                         focusNode: _emailFocus,
+                        autofocus: true,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 16,
@@ -289,36 +284,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                         ),
                         keyboardType: TextInputType.emailAddress,
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Name Field
-                      TextField(
-                        controller: _nameController,
-                        focusNode: _nameFocus,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'First Name',
-                          hintStyle: TextStyle(
-                            color: Colors.white.withOpacity(0.6),
-                            fontSize: 16,
-                          ),
-                          filled: true,
-                          fillColor: Colors.white.withOpacity(0.1),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 16,
-                          ),
-                        ),
-                        keyboardType: TextInputType.name,
                       ),
 
                       const SizedBox(height: 16),
@@ -391,6 +356,81 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ],
                         ],
                       ),
+
+                      const SizedBox(height: 16),
+
+                      // Confirm Password Field
+                      TextField(
+                        controller: _confirmPasswordController,
+                        focusNode: _confirmPasswordFocus,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Repeat Password',
+                          hintStyle: TextStyle(
+                            color: Colors.white.withOpacity(0.6),
+                            fontSize: 16,
+                          ),
+                          filled: true,
+                          fillColor: Colors.white.withOpacity(0.1),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscureConfirmPassword
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: Colors.white.withOpacity(0.6),
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscureConfirmPassword = !_obscureConfirmPassword;
+                              });
+                            },
+                          ),
+                        ),
+                        obscureText: _obscureConfirmPassword,
+                        onChanged: (value) => setState(() {}),
+                      ),
+
+                      // Password Match Indicator
+                      if (_confirmPasswordController.text.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(
+                              _passwordController.text == _confirmPasswordController.text
+                                  ? Icons.check_circle
+                                  : Icons.error,
+                              size: 16,
+                              color: _passwordController.text == _confirmPasswordController.text
+                                  ? const Color(0xFF10B981) // Green
+                                  : const Color(0xFFEF4444), // Red
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _passwordController.text == _confirmPasswordController.text
+                                  ? 'Passwords match'
+                                  : 'Passwords do not match',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _passwordController.text == _confirmPasswordController.text
+                                    ? const Color(0xFF10B981) // Green
+                                    : const Color(0xFFEF4444), // Red
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
 
                       const SizedBox(height: 16),
 
@@ -481,33 +521,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           fontWeight: FontWeight.w500,
                           decoration: TextDecoration.underline,
                           letterSpacing: -0.1,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Skip Sign Up (minimal, non-prominent)
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SkipBlockAppsScreen(),
-                          ),
-                        );
-                      },
-                      child: Text(
-                        'Skip Sign Up',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white.withOpacity(0.35),
-                          fontWeight: FontWeight.w500,
-                          decoration: TextDecoration.underline,
                         ),
                         textAlign: TextAlign.center,
                       ),

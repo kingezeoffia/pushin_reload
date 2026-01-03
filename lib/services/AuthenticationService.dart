@@ -351,6 +351,46 @@ class AuthenticationService {
     }
   }
 
+  /// Update current user profile
+  Future<AuthResult> updateProfile({
+    String? email,
+    String? name,
+    String? password,
+  }) async {
+    try {
+      final accessToken = await _tokenManager.getAccessToken();
+      if (accessToken == null) {
+        return AuthResult.failure('Not authenticated');
+      }
+
+      final requestBody = <String, dynamic>{};
+      if (email != null) requestBody['email'] = email;
+      if (name != null) requestBody['name'] = name;
+      if (password != null) requestBody['password'] = password;
+
+      final response = await http.put(
+        Uri.parse('$baseUrl/auth/me'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: jsonEncode(requestBody),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        final authData = AuthData.fromJson(data['data']);
+        return AuthResult.success(authData);
+      } else {
+        final errorMessage = data['error'] ?? 'Profile update failed';
+        return AuthResult.failure(errorMessage);
+      }
+    } catch (e) {
+      return AuthResult.failure('Network error during profile update: ${e.toString()}');
+    }
+  }
+
   /// Check if user is authenticated
   Future<bool> isAuthenticated() async {
     final accessToken = await _tokenManager.getAccessToken();

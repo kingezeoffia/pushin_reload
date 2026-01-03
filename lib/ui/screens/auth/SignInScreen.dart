@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import '../../../services/AuthStateProvider.dart';
-import 'SignUpScreen.dart';
+import '../../../state/auth_state_provider.dart';
 
 /// Sign In Screen - Email/Password authentication
 ///
@@ -81,10 +80,9 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   void _navigateToSignUp() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const SignUpScreen()),
-    );
+    // BMAD v6: State-driven navigation - no Navigator.push
+    final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
+    authProvider.triggerSignUpFlow();
   }
 
   void _navigateAfterAuth() {
@@ -351,7 +349,6 @@ class _SignInScreenState extends State<SignInScreen> {
                     ),
                   ),
                 ),
-
               ],
             ),
           ),

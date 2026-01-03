@@ -4,17 +4,36 @@ import 'package:camera/camera.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../theme/pushin_theme.dart';
-import 'HowItWorksUnlockDurationScreen.dart';
 import 'HowItWorksPushUpSuccessScreen.dart';
 
-/// Step 2.5: Push-Up Test Screen
+/// Custom route that disables swipe back gesture on iOS
+class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
+  _NoSwipeBackRoute({
+    required WidgetBuilder builder,
+    RouteSettings? settings,
+  }) : super(builder: builder, settings: settings);
+
+  @override
+  bool get hasScopedWillPopCallback => true;
+
+  @override
+  bool get canPop => false;
+
+  @override
+  Widget buildTransitions(BuildContext context, Animation<double> animation,
+      Animation<double> secondaryAnimation, Widget child) {
+    // Disable the default iOS swipe back transition
+    return child;
+  }
+}
+
+/// Step 3: Push-Up Test Screen
 ///
 /// BMAD V6 Spec:
-/// - Camera permission request and live preview
-/// - Visual guidance for phone placement and user positioning
-/// - Real push-up detection simulation (falls back to manual counting if camera unavailable)
-/// - Premium, modern UI matching onboarding flow
-/// - Clear instructions with minimal text
+/// - Camera-based push-up detection
+/// - Manual count fallback
+/// - Target: 3 push-ups
+/// - Step indicator: 3 of 6
 class HowItWorksPushUpTestScreen extends StatefulWidget {
   final String fitnessLevel;
   final List<String> goals;
@@ -54,13 +73,6 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initializeCamera();
-  }
-
-  @override
-  void activate() {
-    super.activate();
-    // Reset state immediately when returning to this screen
-    _resetStateForRetry();
   }
 
   @override
@@ -115,15 +127,6 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
     }
   }
 
-  void _resetStateForRetry() {
-    setState(() {
-      _isDetecting = false;
-      _detectedReps = 0;
-      _showInstructions = true;
-      _hasCompleted = false;
-    });
-  }
-
   void _switchCamera() async {
     // Dispose current camera
     await _cameraController?.dispose();
@@ -172,16 +175,20 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
 
     // Stop detection and navigate to success screen
     if (mounted && !_hasCompleted) {
+      print('🎉 Auto-detection completion! Setting _hasCompleted = true');
       _hasCompleted = true;
       setState(() => _isDetecting = false);
       _showSuccessScreen();
+    } else {
+      print(
+          '⏳ Auto-detection completion condition not met: mounted=$mounted, hasCompleted=!$_hasCompleted: ${!_hasCompleted}');
     }
   }
 
   void _showSuccessScreen() {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      _NoSwipeBackRoute(
         builder: (context) => HowItWorksPushUpSuccessScreen(
           fitnessLevel: widget.fitnessLevel,
           goals: widget.goals,
@@ -200,28 +207,15 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
 
     if (_detectedReps >= _targetReps && !_hasCompleted) {
       _hasCompleted = true;
-      // Brief pause to let user register the final "3" rep
+      setState(() {}); // Ensure UI updates immediately
+
+      // Brief pause to let user register the final rep
       await Future.delayed(const Duration(milliseconds: 800));
+
       if (mounted) {
         _showSuccessScreen();
       }
     }
-  }
-
-  void _continueToNextScreen() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => HowItWorksUnlockDurationScreen(
-          fitnessLevel: widget.fitnessLevel,
-          goals: widget.goals,
-          otherGoal: widget.otherGoal,
-          workoutHistory: widget.workoutHistory,
-          blockedApps: widget.blockedApps,
-          selectedWorkout: 'Push-Ups',
-        ),
-      ),
-    );
   }
 
   /// Build camera preview with proper aspect ratio (no stretching)
@@ -266,15 +260,13 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Back Button & Step Indicator
+              // Step Indicator
               Padding(
-                padding: const EdgeInsets.only(left: 8, right: 16, top: 8),
+                padding: const EdgeInsets.only(right: 16, top: 8),
                 child: Row(
                   children: [
-                    _BackButton(onTap: () => Navigator.pop(context)),
                     const Spacer(),
-                    _StepIndicator(
-                        currentStep: 3, totalSteps: 6), // Updated total steps
+                    _StepIndicator(currentStep: 3, totalSteps: 5),
                   ],
                 ),
               ),
@@ -586,26 +578,6 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                   ),
                 ),
               ),
-
-              // Skip for now button (minimal, non-prominent)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 8, bottom: 12),
-                  child: GestureDetector(
-                    onTap: _continueToNextScreen,
-                    child: Text(
-                      'Skip test for now',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.4),
-                        fontWeight: FontWeight.w500,
-                        decoration: TextDecoration.underline,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -636,33 +608,6 @@ class _StepIndicator extends StatelessWidget {
         'Step $currentStep of $totalSteps',
         style: PushinTheme.stepIndicatorText.copyWith(
           color: Colors.white.withOpacity(0.8),
-        ),
-      ),
-    );
-  }
-}
-
-/// Back Button Widget
-class _BackButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _BackButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.arrow_back,
-          color: Colors.white,
-          size: 22,
         ),
       ),
     );
@@ -725,3 +670,4 @@ class _ManualCountButtonState extends State<_ManualCountButton> {
     );
   }
 }
+

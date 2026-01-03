@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../services/OnboardingService.dart';
+import 'package:provider/provider.dart';
+import '../../../state/auth_state_provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 
 /// Skip Flow: Emergency Unlock Screen
 ///
-/// Context-free version for users who skip onboarding
-/// Final screen that completes setup and navigates to main app
+/// Beautiful final screen before app access with emergency unlock information
+/// Adapted design from HowItWorksEmergencyUnlockScreen for skip flow
 class SkipEmergencyUnlockScreen extends StatelessWidget {
   final List<String> blockedApps;
   final String selectedWorkout;
@@ -22,6 +23,12 @@ class SkipEmergencyUnlockScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final authProvider = context.read<AuthStateProvider>();
+
+    print('🧪 SkipEmergencyUnlockScreen - justRegistered=${authProvider.justRegistered}, isGuestMode=${authProvider.isGuestMode}, guestCompletedSetup=${authProvider.guestCompletedSetup}');
+    print('   📋 blockedApps: ${blockedApps.length} apps, workout: $selectedWorkout, duration: ${unlockDuration}min');
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: GOStepsBackground(
@@ -30,97 +37,108 @@ class SkipEmergencyUnlockScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Back Button (no step indicator for skip flow)
+
+              // Consistent spacing with other screens
+              SizedBox(height: screenHeight * 0.06),
+
+              // Heading - consistent positioning
               Padding(
-                padding: const EdgeInsets.only(left: 8, right: 16, top: 8),
-                child: _BackButton(onTap: () => Navigator.pop(context)),
-              ),
-
-              const Spacer(),
-
-              // Success Content
-              Center(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Large Checkmark with Glow
+                    // Emergency unlock icon
                     Container(
-                      width: 120,
-                      height: 120,
+                      width: 80,
+                      height: 80,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF6060FF).withOpacity(0.2),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF6060FF).withOpacity(0.4),
-                            blurRadius: 40,
-                            spreadRadius: 10,
-                          ),
-                        ],
+                        color: const Color(0xFFFF6060).withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(24),
                       ),
                       child: const Icon(
-                        Icons.check_circle,
-                        color: Color(0xFF9090FF),
-                        size: 80,
+                        Icons.warning_rounded,
+                        size: 40,
+                        color: Color(0xFFFF9090),
                       ),
                     ),
-
-                    const SizedBox(height: 32),
-
-                    // Success Title
-                    const Text(
-                      'Setup Complete!',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
+                    const SizedBox(height: 20),
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Color(0xFFFF6060), Color(0xFFFF9090)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ).createShader(
+                        Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
                       ),
-                      textAlign: TextAlign.center,
+                      blendMode: BlendMode.srcIn,
+                      child: const Text(
+                        'Emergency',
+                        style: TextStyle(
+                          fontSize: 44,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          height: 1.1,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
                     ),
-
-                    const SizedBox(height: 16),
-
-                    // Success Description
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Color(0xFFFF6060), Color(0xFFFF9090)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ).createShader(
+                        Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                      ),
+                      blendMode: BlendMode.srcIn,
+                      child: const Text(
+                        'Unlock',
+                        style: TextStyle(
+                          fontSize: 44,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          height: 1.1,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     Text(
-                      'You\'re all set to start earning screen time through exercise.',
+                      "For those rare moments when you need access",
                       style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 15,
+                        color: Colors.white.withOpacity(0.6),
                         letterSpacing: -0.2,
                         height: 1.4,
                       ),
-                      textAlign: TextAlign.center,
                     ),
+                  ],
+                ),
+              ),
 
-                    const SizedBox(height: 48),
+              SizedBox(height: screenHeight * 0.04),
 
-                    // Summary
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      margin: const EdgeInsets.symmetric(horizontal: 32),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Column(
-                        children: [
-                          _SummaryItem(
-                            icon: Icons.apps,
-                            text: '${blockedApps.length} apps blocked',
-                          ),
-                          const SizedBox(height: 12),
-                          _SummaryItem(
-                            icon: Icons.fitness_center,
-                            text: selectedWorkout,
-                          ),
-                          const SizedBox(height: 12),
-                          _SummaryItem(
-                            icon: Icons.timer,
-                            text: '${unlockDuration} min unlock time',
-                          ),
-                        ],
-                      ),
+              // Rules List
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  children: [
+                    _RuleItem(
+                      icon: Icons.today,
+                      title: 'Once per day',
+                      description: 'Emergency unlock 1x a day',
+                    ),
+                    const SizedBox(height: 16),
+                    _RuleItem(
+                      icon: Icons.timer,
+                      title: 'Temporary Access',
+                      description: 'Customizable duration',
+                    ),
+                    const SizedBox(height: 16),
+                    _RuleItem(
+                      icon: Icons.lock_clock,
+                      title: 'Auto-disable',
+                      description: 'Disabled until tomorrow',
                     ),
                   ],
                 ),
@@ -128,14 +146,18 @@ class SkipEmergencyUnlockScreen extends StatelessWidget {
 
               const Spacer(),
 
-              // Continue Button
+              // Complete Setup Button
               Padding(
-                padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
-                child: _ContinueButton(
-                  onTap: () async {
-                    // Mark onboarding as completed - this will trigger the callback
-                    // that switches the app to main app mode
-                    await OnboardingService.markOnboardingCompleted();
+                padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+                child: _CompleteSetupButton(
+                  onTap: () {
+                    print('🎯 Complete Setup button pressed (skip flow)!');
+                    final auth = context.read<AuthStateProvider>();
+                    auth.setGuestCompletedSetup();
+
+                    // Pop all screens to let the router show the main app
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                    debugPrint('🎯 Guest setup completed – popped to root, router will show main app');
                   },
                 ),
               ),
@@ -147,81 +169,80 @@ class SkipEmergencyUnlockScreen extends StatelessWidget {
   }
 }
 
-/// Summary item widget
-class _SummaryItem extends StatelessWidget {
+/// Rule item widget
+class _RuleItem extends StatelessWidget {
   final IconData icon;
-  final String text;
+  final String title;
+  final String description;
 
-  const _SummaryItem({
+  const _RuleItem({
     required this.icon,
-    required this.text,
+    required this.title,
+    required this.description,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: const Color(0xFF6060FF).withOpacity(0.2),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            icon,
-            color: const Color(0xFF9090FF),
-            size: 18,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.white.withOpacity(0.8),
-              letterSpacing: -0.2,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF6060).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              icon,
+              color: const Color(0xFFFF9090),
+              size: 24,
             ),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Back Button Widget
-class _BackButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _BackButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.arrow_back,
-          color: Colors.white,
-          size: 22,
-        ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                    letterSpacing: -0.1,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.white.withOpacity(0.5),
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Continue Button Widget
-class _ContinueButton extends StatelessWidget {
+/// Back Button Widget
+
+/// Complete Setup Button Widget
+class _CompleteSetupButton extends StatelessWidget {
   final VoidCallback onTap;
 
-  const _ContinueButton({
+  const _CompleteSetupButton({
     required this.onTap,
   });
 
@@ -245,7 +266,7 @@ class _ContinueButton extends StatelessWidget {
         ),
         child: const Center(
           child: Text(
-            'Get Started',
+            'Complete Setup',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
@@ -258,9 +279,6 @@ class _ContinueButton extends StatelessWidget {
     );
   }
 }
-
-
-
 
 
 

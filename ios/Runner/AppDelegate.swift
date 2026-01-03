@@ -8,12 +8,32 @@ import UIKit
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
-    
-    // Screen Time integration disabled for MVP
-    // App works perfectly with UX overlay fallback (100% user coverage)
-    // To enable: Add ScreenTimeModule.swift to Xcode project + Family Controls capability
-    print("📱 PUSHIN MVP - Running without Screen Time API (UX overlay active)")
-    
+
+    // Initialize Screen Time platform channel
+    setupScreenTimeChannel()
+
+    print("📱 PUSHIN - Screen Time integration active")
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  private func setupScreenTimeChannel() {
+    guard let controller = window?.rootViewController as? FlutterViewController else {
+      return
+    }
+
+    let channel = FlutterMethodChannel(name: "dev.pushin.screentime", binaryMessenger: controller.binaryMessenger)
+
+    if #available(iOS 15.0, *) {
+      let handler = ScreenTimeChannelHandler()
+      channel.setMethodCallHandler { (call, result) in
+        handler.handle(call, result: result)
+      }
+    } else {
+      // Screen Time APIs require iOS 15+
+      channel.setMethodCallHandler { (call, result) in
+        result(FlutterError(code: "UNSUPPORTED_OS", message: "Screen Time features require iOS 15.0 or later", details: nil))
+      }
+    }
   }
 }

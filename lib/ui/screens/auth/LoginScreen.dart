@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import '../onboarding/OnboardingFitnessLevelScreen.dart';
+import '../../../state/auth_state_provider.dart';
 import 'SignInScreen.dart';
 import 'SignUpScreen.dart';
 import 'SkipBlockAppsScreen.dart';
@@ -15,8 +16,30 @@ import 'SkipBlockAppsScreen.dart';
 /// - Consistent UI with onboarding screens (typography, spacing, buttons)
 /// - Back button to return to Welcome screen
 /// - No step indicator (pre-onboarding)
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  Future<void> _handleThirdPartySignIn(String provider) async {
+    final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
+
+    bool success = false;
+    if (provider == 'google') {
+      success = await authProvider.signInWithGoogle();
+    } else if (provider == 'apple') {
+      success = await authProvider.signInWithApple();
+    }
+
+    if (success && mounted) {
+      // Navigation is handled automatically by AppRouter when auth state changes
+      // The auth provider will update state and the router will handle navigation
+    }
+    // Error is handled by the provider and displayed in UI
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +62,7 @@ class LoginScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Get started with',
+                      'Get started with:',
                       style: TextStyle(
                         fontSize: 38,
                         fontWeight: FontWeight.w800,
@@ -144,15 +167,7 @@ class LoginScreen extends StatelessWidget {
                         // Apple Quick Sign In Button
                         _RoundQuickAuthButton(
                           icon: Icons.apple,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const OnboardingFitnessLevelScreen(),
-                              ),
-                            );
-                          },
+                          onTap: () => _handleThirdPartySignIn('apple'),
                         ),
 
                         const SizedBox(width: 20),
@@ -161,15 +176,7 @@ class LoginScreen extends StatelessWidget {
                         _RoundQuickAuthButton(
                           icon: Icons
                               .g_mobiledata, // Placeholder - will be replaced with Google logo
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const OnboardingFitnessLevelScreen(),
-                              ),
-                            );
-                          },
+                          onTap: () => _handleThirdPartySignIn('google'),
                         ),
                       ],
                     ),

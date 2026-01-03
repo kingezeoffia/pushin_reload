@@ -77,3 +77,16 @@ echo ""
 echo "🚀 Create tables:"
 echo "   npm run db:create"
 echo ""
+
+
+
+
+
+
+
+
+
+
+
+
+

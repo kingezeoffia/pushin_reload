@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 class TokenManager {
   static const String _accessTokenKey = 'access_token';
   static const String _refreshTokenKey = 'refresh_token';
+  static const String _guestModeKey = 'is_guest_mode';
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   final String _baseUrl;
@@ -133,8 +134,20 @@ class TokenManager {
       'Authorization': 'Bearer $accessToken',
     };
   }
+
+  /// Set guest mode flag
+  Future<void> setGuestMode(bool isGuest) async {
+    await _storage.write(key: _guestModeKey, value: isGuest.toString());
+  }
+
+  /// Get guest mode flag
+  Future<bool> isGuestMode() async {
+    final value = await _storage.read(key: _guestModeKey);
+    return value == 'true';
+  }
+
+  /// Clear guest mode flag
+  Future<void> clearGuestMode() async {
+    await _storage.delete(key: _guestModeKey);
+  }
 }
-
-
-
-

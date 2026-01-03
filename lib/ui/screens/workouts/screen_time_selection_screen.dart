@@ -1,49 +1,71 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../domain/models/workout_mode.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import '../../theme/pushin_theme.dart';
-import 'HowItWorksEmergencyUnlockScreen.dart';
+import 'workout_type_selection_screen.dart';
 
-/// Step 3: Unlock Duration
+/// Screen Time Selection Screen
 ///
-/// BMAD V6 Spec:
-/// - Slider with range from 5 minutes to 60 minutes (1 hour max)
-/// - Controls unlock duration (NOT tied to rep count)
-/// - Updated recommendation: 5-30 or 30-45 minutes
-class HowItWorksUnlockDurationScreen extends StatefulWidget {
-  final String fitnessLevel;
-  final List<String> goals;
-  final String otherGoal;
-  final String workoutHistory;
-  final List<String> blockedApps;
-  final String selectedWorkout;
+/// Clean screen matching the onboarding "Set your unlock duration" style.
+/// Quick presets + slider for custom selection.
+class ScreenTimeSelectionScreen extends StatefulWidget {
+  final WorkoutMode selectedMode;
 
-  const HowItWorksUnlockDurationScreen({
+  const ScreenTimeSelectionScreen({
     super.key,
-    required this.fitnessLevel,
-    required this.goals,
-    required this.otherGoal,
-    required this.workoutHistory,
-    required this.blockedApps,
-    required this.selectedWorkout,
+    required this.selectedMode,
   });
 
   @override
-  State<HowItWorksUnlockDurationScreen> createState() =>
-      _HowItWorksUnlockDurationScreenState();
+  State<ScreenTimeSelectionScreen> createState() =>
+      _ScreenTimeSelectionScreenState();
 }
 
-class _HowItWorksUnlockDurationScreenState
-    extends State<HowItWorksUnlockDurationScreen> {
-  double _unlockDuration = 5.0; // Start at minimum (5 minutes)
+class _ScreenTimeSelectionScreenState extends State<ScreenTimeSelectionScreen> {
+  double _selectedMinutes = 15.0;
+
+  // Quick preset options
+  final List<int> _presets = [15, 30, 45, 60];
 
   String get _durationText {
-    final minutes = _unlockDuration.round();
+    final minutes = _selectedMinutes.round();
     if (minutes == 60) {
       return '1 hr';
     }
     return '$minutes min';
+  }
+
+  /// Calculate required reps based on desired screen time and mode multiplier
+  int _calculateRequiredReps(int desiredMinutes) {
+    // Cozy (0.7x) = fewer reps needed = easier
+    // Normal (1.0x) = standard
+    // Tuff (1.5x) = more reps needed = harder
+    return (desiredMinutes * widget.selectedMode.multiplier).ceil();
+  }
+
+  void _continue() {
+    HapticFeedback.mediumImpact();
+    final minutes = _selectedMinutes.round();
+    final requiredReps = _calculateRequiredReps(minutes);
+
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            WorkoutTypeSelectionScreen(
+          selectedMode: widget.selectedMode,
+          desiredScreenTime: minutes,
+          requiredReps: requiredReps,
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const curve = Curves.easeOutCubic;
+          var fadeAnimation = CurvedAnimation(parent: animation, curve: curve);
+          return FadeTransition(opacity: fadeAnimation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
   }
 
   @override
@@ -58,28 +80,32 @@ class _HowItWorksUnlockDurationScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Back Button & Step Indicator
+              // Back button + Mode indicator
               Padding(
-                padding: const EdgeInsets.only(left: 8, right: 16, top: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 child: Row(
                   children: [
-                    _BackButton(onTap: () => Navigator.pop(context)),
+                    IconButton(
+                      icon:
+                          const Icon(Icons.arrow_back_ios, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
                     const Spacer(),
-                    _StepIndicator(currentStep: 4, totalSteps: 6),
+                    _ModeIndicator(mode: widget.selectedMode),
                   ],
                 ),
               ),
 
-              SizedBox(height: screenHeight * 0.08),
+              SizedBox(height: screenHeight * 0.02),
 
-              // Heading - consistent with other screens
+              // Heading
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Set your',
+                      'How much',
                       style: TextStyle(
                         fontSize: 40,
                         fontWeight: FontWeight.w800,
@@ -89,14 +115,19 @@ class _HowItWorksUnlockDurationScreenState
                       ),
                     ),
                     ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
+                      shaderCallback: (bounds) => LinearGradient(
+                        colors: [
+                          widget.selectedMode.color,
+                          widget.selectedMode.color.withOpacity(0.7),
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
                       ).createShader(
                         Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
                       ),
                       blendMode: BlendMode.srcIn,
                       child: const Text(
-                        'Unlock Duration',
+                        'Screen Time?',
                         style: TextStyle(
                           fontSize: 40,
                           fontWeight: FontWeight.w800,
@@ -108,7 +139,7 @@ class _HowItWorksUnlockDurationScreenState
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'How long should your apps be unlocked after a workout?',
+                      'Choose how long you want your apps unlocked',
                       style: TextStyle(
                         fontSize: 15,
                         color: Colors.white.withOpacity(0.6),
@@ -120,9 +151,9 @@ class _HowItWorksUnlockDurationScreenState
                 ),
               ),
 
-              SizedBox(height: screenHeight * 0.06),
+              SizedBox(height: screenHeight * 0.12),
 
-              // Duration Display
+              // Large Duration Display
               Center(
                 child: Column(
                   children: [
@@ -149,18 +180,17 @@ class _HowItWorksUnlockDurationScreenState
                 ),
               ),
 
-              SizedBox(height: screenHeight * 0.06),
+              SizedBox(height: screenHeight * 0.02),
 
-              // Custom Slider - Max 1 hour
+              // Slider for custom selection
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: Column(
                   children: [
-                    // Slider
                     SliderTheme(
                       data: SliderThemeData(
                         trackHeight: 8,
-                        activeTrackColor: const Color(0xFF6060FF),
+                        activeTrackColor: widget.selectedMode.color,
                         inactiveTrackColor: Colors.white.withOpacity(0.15),
                         thumbColor: Colors.white,
                         thumbShape: const RoundSliderThumbShape(
@@ -173,23 +203,20 @@ class _HowItWorksUnlockDurationScreenState
                         ),
                       ),
                       child: Slider(
-                        value: _unlockDuration,
+                        value: _selectedMinutes,
                         min: 5,
-                        max: 60, // Max 1 hour
-                        divisions:
-                            11, // 5-minute intervals (5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60)
+                        max: 60,
+                        divisions: 11, // 5-minute intervals
                         onChanged: (value) {
-                          // Snap to nearest 5 minutes
                           final snapped = (value / 5).round() * 5.0;
-                          if (snapped != _unlockDuration) {
+                          if (snapped != _selectedMinutes) {
                             HapticFeedback.selectionClick();
                           }
                           setState(
-                              () => _unlockDuration = snapped.clamp(5, 60));
+                              () => _selectedMinutes = snapped.clamp(5, 60));
                         },
                       ),
                     ),
-                    // Labels
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Row(
@@ -218,70 +245,62 @@ class _HowItWorksUnlockDurationScreenState
                 ),
               ),
 
-              SizedBox(height: screenHeight * 0.04),
-
-              // Info Card - Updated recommendation
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF6060FF).withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.lightbulb_outline,
-                          color: Color(0xFF9090FF),
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          'We recommend 15 minutes (for now)',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white.withOpacity(0.6),
-                            height: 1.2,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
               const Spacer(),
 
-              // Continue Button
+              // Time buttons + Continue button
               Padding(
                 padding: const EdgeInsets.all(32),
-                child: _ContinueButton(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => HowItWorksEmergencyUnlockScreen(
-                          fitnessLevel: widget.fitnessLevel,
-                          goals: widget.goals,
-                          otherGoal: widget.otherGoal,
-                          workoutHistory: widget.workoutHistory,
-                          blockedApps: widget.blockedApps,
-                          selectedWorkout: widget.selectedWorkout,
-                          unlockDuration: _unlockDuration.round(),
-                        ),
-                      ),
-                    );
-                  },
+                child: Column(
+                  children: [
+                    // Quick Presets (moved from above)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: _presets.map((minutes) {
+                        final isSelected = _selectedMinutes.round() == minutes;
+                        return GestureDetector(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(
+                                () => _selectedMinutes = minutes.toDouble());
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? widget.selectedMode.color
+                                  : Colors.white.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(100),
+                              border: Border.all(
+                                color: isSelected
+                                    ? widget.selectedMode.color
+                                    : Colors.white.withOpacity(0.15),
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              minutes == 60 ? '1 hr' : '$minutes',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: isSelected
+                                    ? Colors.white
+                                    : Colors.white.withOpacity(0.7),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Continue button
+                    _ContinueButton(onTap: _continue),
+                  ],
                 ),
               ),
             ],
@@ -292,56 +311,34 @@ class _HowItWorksUnlockDurationScreenState
   }
 }
 
-/// Step indicator widget
-class _StepIndicator extends StatelessWidget {
-  final int currentStep;
-  final int totalSteps;
+/// Mode indicator pill
+class _ModeIndicator extends StatelessWidget {
+  final WorkoutMode mode;
 
-  const _StepIndicator({
-    required this.currentStep,
-    required this.totalSteps,
-  });
+  const _ModeIndicator({required this.mode});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(100),
+        color: Colors.white.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(
-        'Step $currentStep of $totalSteps',
-        style: PushinTheme.stepIndicatorText.copyWith(
-          color: Colors.white.withOpacity(0.8),
-        ),
-      ),
-    );
-  }
-}
-
-/// Back Button Widget
-class _BackButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _BackButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.arrow_back,
-          color: Colors.white,
-          size: 22,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(mode.icon, color: mode.color, size: 16),
+          const SizedBox(width: 8),
+          Text(
+            mode.displayName,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: mode.color,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -351,9 +348,7 @@ class _BackButton extends StatelessWidget {
 class _ContinueButton extends StatelessWidget {
   final VoidCallback onTap;
 
-  const _ContinueButton({
-    required this.onTap,
-  });
+  const _ContinueButton({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -361,7 +356,7 @@ class _ContinueButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        height: 52,
+        height: 56,
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.95),
           borderRadius: BorderRadius.circular(100),

@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "295186904898",
+    "project_id": "pushin-auth",
+    "storage_bucket": "pushin-auth.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:295186904898:android:15ccec1d194c261030badb",
+        "android_client_info": {
+          "package_name": "com.example.pushin_reload"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "295186904898-vul5qdpt79ja2jrgr4du7tpdgpqikvte.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBgDRjAH7Wz31UT9XJCUyQQXxHYDmCr3HM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "295186904898-vul5qdpt79ja2jrgr4du7tpdgpqikvte.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "295186904898-tt9hae40m8v0l5b021cv008995a3eck7.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.pushinReload"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
+
+
+
+
+
+
+
+
