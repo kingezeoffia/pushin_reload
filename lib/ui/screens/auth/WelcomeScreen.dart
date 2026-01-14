@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
+import '../../widgets/pill_navigation_bar.dart';
 import 'package:provider/provider.dart';
 import '../../../state/auth_state_provider.dart';
 
@@ -139,8 +140,7 @@ class WelcomeScreen extends StatelessWidget {
               ),
 
               // Fixed bottom buttons - context-aware
-              Padding(
-                padding: const EdgeInsets.all(32),
+              BottomActionContainer(
                 child: _buildBottomButtons(context, authProvider),
               ),
             ],

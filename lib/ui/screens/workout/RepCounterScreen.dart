@@ -36,6 +36,7 @@ class RepCounterScreen extends StatefulWidget {
 class _RepCounterScreenState extends State<RepCounterScreen>
     with SingleTickerProviderStateMixin {
   int _currentReps = 0;
+  bool _workoutCompleted = false;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
@@ -69,7 +70,7 @@ class _RepCounterScreenState extends State<RepCounterScreen>
   }
 
   void _addRep() {
-    if (_currentReps < widget.targetReps) {
+    if (_currentReps < widget.targetReps && !_workoutCompleted) {
       setState(() {
         _currentReps++;
       });
@@ -88,6 +89,14 @@ class _RepCounterScreenState extends State<RepCounterScreen>
   }
 
   void _completeWorkout() async {
+    // Prevent multiple completion calls
+    if (_workoutCompleted) {
+      print('⚠️ _completeWorkout called but workout already completed');
+      return;
+    }
+    _workoutCompleted = true;
+    print('✅ Completing workout: ${_currentReps} reps of ${widget.workoutType}');
+
     final controller = context.read<PushinAppController>();
     await controller.completeWorkout(_currentReps);
 
@@ -234,7 +243,8 @@ class _RepCounterScreenState extends State<RepCounterScreen>
                 child: Row(
                   children: [
                     IconButton(
-                      icon: Icon(Icons.close, color: Colors.white.withOpacity(0.8)),
+                      icon: Icon(Icons.close,
+                          color: Colors.white.withOpacity(0.8)),
                       onPressed: _cancelWorkout,
                     ),
                     Expanded(
@@ -298,8 +308,12 @@ class _RepCounterScreenState extends State<RepCounterScreen>
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 ShaderMask(
-                                  shaderCallback: (bounds) => const LinearGradient(
-                                    colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
+                                  shaderCallback: (bounds) =>
+                                      const LinearGradient(
+                                    colors: [
+                                      Color(0xFF6060FF),
+                                      Color(0xFF9090FF)
+                                    ],
                                   ).createShader(bounds),
                                   blendMode: BlendMode.srcIn,
                                   child: Text(
@@ -401,7 +415,8 @@ class _RepCounterScreenState extends State<RepCounterScreen>
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.check_circle, color: Colors.white, size: 24),
+                                Icon(Icons.check_circle,
+                                    color: Colors.white, size: 24),
                                 SizedBox(width: 8),
                                 Text(
                                   'Workout Complete!',

@@ -1,9 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../../../state/pushin_app_controller.dart';
+import '../../../services/ShieldNotificationMonitor.dart';
 import '../../theme/pushin_theme.dart';
 import 'ManageAppsScreen.dart';
+import 'EmergencyUnlockSettingsScreen.dart';
 
 /// Settings Screen - User configuration and account management
 ///
@@ -106,14 +110,26 @@ class SettingsScreen extends StatelessWidget {
 
                     const SizedBox(height: 8),
 
-                    _SettingsItem(
-                      icon: Icons.timer_outlined,
-                      iconColor: const Color(0xFFFFB347),
-                      title: 'Emergency Unlock',
-                      subtitle: '5 minutes (once per day)',
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        _showEmergencyUnlockDialog(context);
+                    Consumer<PushinAppController>(
+                      builder: (context, controller, _) {
+                        return _SettingsItem(
+                          icon: Icons.timer_outlined,
+                          iconColor: const Color(0xFFFFB347),
+                          title: 'Emergency Unlock',
+                          subtitle: controller.emergencyUnlockEnabled
+                              ? '${controller.emergencyUnlockMinutes} minutes (${controller.emergencyUnlocksRemaining} remaining)'
+                              : 'Disabled',
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const EmergencyUnlockSettingsScreen(),
+                              ),
+                            );
+                          },
+                        );
                       },
                     ),
 
@@ -177,6 +193,46 @@ class SettingsScreen extends StatelessWidget {
 
                     const SizedBox(height: 32),
 
+                    // Debug Section
+                    const _SectionHeader(title: 'Debug Tools'),
+                    const SizedBox(height: 16),
+                    if (Platform.isIOS) ...[
+                      _SettingsItem(
+                        icon: Icons.bug_report_outlined,
+                        iconColor: const Color(0xFFFF9500),
+                        title: 'Test Notification System',
+                        subtitle: 'Verify notifications are working',
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          _testNotificationSystem(context);
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      _SettingsItem(
+                        icon: Icons.refresh_rounded,
+                        iconColor: const Color(0xFF10B981),
+                        title: 'Check for Pending Notifications',
+                        subtitle: 'Manually check shield notifications',
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          _checkPendingNotifications(context);
+                        },
+                      ),
+                      const SizedBox(height: 32),
+                    ] else ...[
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text(
+                          'Debug tools are only available on iOS',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                    ],
+
                     // Legal Section
                     const _SectionHeader(title: 'Legal'),
                     const SizedBox(height: 16),
@@ -239,8 +295,9 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  void _showEmergencyUnlockDialog(BuildContext context) {
-    HapticFeedback.mediumImpact();
+  void _testNotificationSystem(BuildContext context) async {
+    final monitor = ShieldNotificationMonitor();
+
     showDialog(
       context: context,
       barrierColor: Colors.black.withOpacity(0.7),
@@ -254,93 +311,69 @@ class SettingsScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Icon with subtle glow
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFB347).withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: const Icon(
-                  Icons.timer_outlined,
-                  size: 32,
-                  color: Color(0xFFFFB347),
-                ),
+              const Icon(
+                Icons.science_outlined,
+                size: 48,
+                color: Color(0xFFFF9500),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               const Text(
-                'Emergency Unlock',
+                'Running Notification Test',
                 style: TextStyle(
-                  fontSize: 22,
+                  fontSize: 20,
                   fontWeight: FontWeight.w700,
                   color: Colors.white,
-                  letterSpacing: -0.3,
                 ),
-                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Text(
-                'Use this only in genuine emergencies. You\'ll get 5 minutes of access without working out.',
+                'Check the console logs for detailed results',
                 style: TextStyle(
                   fontSize: 15,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.white.withOpacity(0.55),
-                  height: 1.4,
+                  color: Colors.white.withOpacity(0.7),
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Limited to once per day.',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: const Color(0xFFFFB347).withOpacity(0.8),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 28),
-              Row(
-                children: [
-                  Expanded(
-                    child: _DialogButton(
-                      label: 'Cancel',
-                      onTap: () => Navigator.pop(context),
-                      isPrimary: false,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _DialogButton(
-                      label: 'Unlock',
-                      onTap: () {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text(
-                              'Emergency unlock activated (5 minutes)',
-                              style: TextStyle(fontWeight: FontWeight.w500),
-                            ),
-                            backgroundColor: const Color(0xFFFFB347),
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        );
-                      },
-                      isPrimary: true,
-                      primaryColor: const Color(0xFFFFB347),
-                    ),
-                  ),
-                ],
+              const SizedBox(height: 24),
+              _DialogButton(
+                label: 'Close',
+                onTap: () => Navigator.pop(context),
+                isPrimary: true,
+                primaryColor: const Color(0xFFFF9500),
               ),
             ],
           ),
         ),
       ),
     );
+
+    // Run the test
+    await monitor.testNotificationSystem();
+  }
+
+  void _checkPendingNotifications(BuildContext context) async {
+    final monitor = ShieldNotificationMonitor();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Checking for pending notifications...'),
+        backgroundColor: const Color(0xFF10B981),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    // Manually trigger a check
+    await monitor.manualCheckForNotifications();
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Check complete. See console for details.'),
+          backgroundColor: const Color(0xFF10B981),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _showLogoutDialog(BuildContext context) {

@@ -1,52 +1,124 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../theme/pushin_theme.dart';
+import '../../../services/WorkoutHistoryService.dart';
+import '../../../domain/WorkoutHistory.dart';
+import '../../../state/pushin_app_controller.dart';
 
 /// Recent workouts list showing past workout history
-class RecentWorkouts extends StatelessWidget {
+class RecentWorkouts extends StatefulWidget {
   const RecentWorkouts({super.key});
 
   @override
+  State<RecentWorkouts> createState() => _RecentWorkoutsState();
+}
+
+class _RecentWorkoutsState extends State<RecentWorkouts> {
+  final WorkoutHistoryService _historyService = WorkoutHistoryService();
+  List<WorkoutHistory> _recentWorkouts = [];
+  bool _isLoading = true;
+  late PushinAppController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = context.read<PushinAppController>();
+    _controller.addListener(_onWorkoutCompleted);
+    _loadWorkoutHistory();
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onWorkoutCompleted);
+    super.dispose();
+  }
+
+  void _onWorkoutCompleted() {
+    // Reload workout history when controller notifies of changes
+    _loadWorkoutHistory();
+  }
+
+  Future<void> _loadWorkoutHistory() async {
+    try {
+      await _historyService.initialize();
+      final workouts = await _historyService.getRecentWorkouts(limit: 3);
+      if (mounted) {
+        setState(() {
+          _recentWorkouts = workouts;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading workout history: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_recentWorkouts.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Recent Workouts',
+            style: PushinTheme.headline3,
+          ),
+          SizedBox(height: PushinTheme.spacingMd),
+          Container(
+            padding: EdgeInsets.all(PushinTheme.spacingMd),
+            decoration: BoxDecoration(
+              color: PushinTheme.surfaceDark,
+              borderRadius: BorderRadius.circular(PushinTheme.radiusMd),
+            ),
+            child: Center(
+              child: Text(
+                'No workouts completed yet.\nComplete your first workout to see history here!',
+                style: PushinTheme.body2.copyWith(
+                  color: PushinTheme.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Workouts',
+          'Recent Workouts',
           style: PushinTheme.headline3,
         ),
         SizedBox(height: PushinTheme.spacingMd),
 
         // List of recent workouts
-        _buildWorkoutHistoryItem(
-          date: 'Today',
-          workout: 'Push-ups',
-          reps: 20,
-          reward: '15 min',
-          mode: 'Normal',
-          modeColor: PushinTheme.primaryBlue,
-        ),
-
-        SizedBox(height: PushinTheme.spacingSm),
-
-        _buildWorkoutHistoryItem(
-          date: 'Yesterday',
-          workout: 'Squats',
-          reps: 25,
-          reward: '12 min',
-          mode: 'Tuff',
-          modeColor: PushinTheme.warningYellow,
-        ),
-
-        SizedBox(height: PushinTheme.spacingSm),
-
-        _buildWorkoutHistoryItem(
-          date: '2 days ago',
-          workout: 'Push-ups',
-          reps: 15,
-          reward: '10 min',
-          mode: 'Cozy',
-          modeColor: PushinTheme.successGreen,
-        ),
+        ..._recentWorkouts.map((workout) => Padding(
+              padding: EdgeInsets.only(bottom: PushinTheme.spacingSm),
+              child: _buildWorkoutHistoryItem(
+                date: workout.relativeTimeDisplay,
+                workout: workout.displayName,
+                reps: workout.repsCompleted,
+                reward: workout.earnedTimeDisplay,
+                mode: workout.workoutModeDisplay,
+                modeColor: _getModeColor(workout.workoutMode),
+              ),
+            )),
       ],
     );
   }
@@ -68,22 +140,6 @@ class RecentWorkouts extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Workout icon
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: modeColor.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(PushinTheme.radiusSm),
-            ),
-            child: Icon(
-              _getWorkoutIcon(workout),
-              color: modeColor,
-              size: 20,
-            ),
-          ),
-
-          SizedBox(width: PushinTheme.spacingMd),
-
           // Workout details
           Expanded(
             child: Column(
@@ -93,7 +149,8 @@ class RecentWorkouts extends StatelessWidget {
                   children: [
                     Text(
                       workout,
-                      style: PushinTheme.body1.copyWith(fontWeight: FontWeight.w500),
+                      style: PushinTheme.body1
+                          .copyWith(fontWeight: FontWeight.w500),
                     ),
                     SizedBox(width: PushinTheme.spacingSm),
                     Container(
@@ -103,7 +160,8 @@ class RecentWorkouts extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: modeColor.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(PushinTheme.radiusSm),
+                        borderRadius:
+                            BorderRadius.circular(PushinTheme.radiusSm),
                       ),
                       child: Text(
                         mode,
@@ -138,21 +196,17 @@ class RecentWorkouts extends StatelessWidget {
     );
   }
 
-  IconData _getWorkoutIcon(String workout) {
-    switch (workout.toLowerCase()) {
-      case 'push-ups':
-        return Icons.fitness_center;
-      case 'squats':
-        return Icons.airline_seat_legroom_normal;
+  Color _getModeColor(String mode) {
+    switch (mode.toLowerCase()) {
+      case 'cozy':
+        return const Color(0xFF10B981); // Green
+      case 'normal':
+        return const Color(0xFF3B82F6); // Blue
+      case 'tuff':
+        return const Color(0xFFF59E0B); // Orange
       default:
-        return Icons.sports_gymnastics;
+        return const Color(0xFF6B7280); // Gray
     }
   }
+
 }
-
-
-
-
-
-
-

@@ -4,6 +4,8 @@ import 'package:camera/camera.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../theme/pushin_theme.dart';
+import '../../../services/CameraWorkoutService.dart';
+import '../../../services/PoseDetectionService.dart';
 import 'HowItWorksPushUpSuccessScreen.dart';
 
 /// Custom route that disables swipe back gesture on iOS
@@ -57,13 +59,18 @@ class HowItWorksPushUpTestScreen extends StatefulWidget {
 
 class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
     with WidgetsBindingObserver {
-  CameraController? _cameraController;
-  bool _isCameraInitialized = false;
-  bool _isDetecting = false;
+  CameraWorkoutService? _cameraService;
+  bool _isInitialized = false;
+  bool _isInitializing = true;
+  bool _cameraFailed = false;
+  String _errorMessage = '';
   int _detectedReps = 0;
   bool _showInstructions = true;
   bool _hasCompleted = false;
-  CameraLensDirection _currentCameraDirection = CameraLensDirection.front;
+  String _feedbackMessage = 'Position yourself in frame';
+
+  // Track current camera lens direction for switching
+  CameraLensDirection _currentCameraLens = CameraLensDirection.front;
 
   // Mock push-up detection for demo
   static const int _targetReps = 3;
@@ -72,117 +79,137 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initializeCamera();
+    _initializeCameraService();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _cameraController?.dispose();
+    _cameraService?.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+    if (_cameraService == null || !_cameraService!.isReady) {
       return;
     }
 
     if (state == AppLifecycleState.inactive) {
-      _cameraController?.dispose();
+      _cameraService?.dispose();
     } else if (state == AppLifecycleState.resumed) {
-      _initializeCamera();
+      _initializeCameraService();
     }
   }
 
-  Future<void> _initializeCamera() async {
-    try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) {
-        setState(() => _isCameraInitialized = false);
-        return;
-      }
+  Future<void> _initializeCameraService() async {
+    _cameraService = CameraWorkoutService();
 
-      // Use selected camera direction
-      final selectedCamera = cameras.firstWhere(
-        (camera) => camera.lensDirection == _currentCameraDirection,
-        orElse: () => cameras.first,
-      );
-
-      _cameraController = CameraController(
-        selectedCamera,
-        ResolutionPreset.medium,
-        enableAudio: false,
-      );
-
-      await _cameraController!.initialize();
-      await _cameraController!.setFlashMode(FlashMode.off);
-
+    _cameraService!.onRepCounted = (count) {
       if (mounted) {
-        setState(() => _isCameraInitialized = true);
+        setState(() {
+          _detectedReps = count;
+        });
+        HapticFeedback.mediumImpact();
+
+        if (_detectedReps >= _targetReps && !_hasCompleted) {
+          _hasCompleted = true;
+          _showSuccessScreen();
+        }
+      }
+    };
+
+    _cameraService!.onPoseUpdate = (result) {
+      if (mounted) {
+        setState(() {
+          _feedbackMessage = result.feedbackMessage ?? 'Keep going!';
+        });
+      }
+    };
+
+    try {
+      debugPrint(
+          'Starting camera initialization for onboarding with $_currentCameraLens camera...');
+      final success = await _cameraService!
+          .initialize(
+        workoutType: 'push-ups',
+        preferredCamera: _currentCameraLens,
+      )
+          .timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          debugPrint('Camera initialization timed out after 15 seconds');
+          return false;
+        },
+      );
+
+      debugPrint('Camera initialization result: $success');
+
+      if (success && mounted) {
+        debugPrint('Starting push-up test workout...');
+        await _cameraService!.startWorkout();
+        setState(() {
+          _isInitialized = true;
+          _isInitializing = false;
+        });
+        debugPrint('Camera initialized successfully for onboarding');
+      } else {
+        debugPrint(
+            'Camera initialization failed. Error: ${_cameraService!.errorMessage}');
+        if (mounted) {
+          String errorMsg = _cameraService!.errorMessage ??
+              'Camera initialization failed. You can still count reps manually.';
+
+          if (_cameraService!.errorMessage?.contains('permission denied') ??
+              false) {
+            errorMsg =
+                'Camera permission is required for AI rep counting. Please enable camera access in Settings > Privacy > Camera. You can still count reps manually.';
+          }
+
+          setState(() {
+            _isInitializing = false;
+            _cameraFailed = true;
+            _errorMessage = errorMsg;
+          });
+        }
       }
     } catch (e) {
-      // Camera not available, will show manual fallback
-      setState(() => _isCameraInitialized = false);
+      debugPrint('Camera initialization exception: $e');
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+          _cameraFailed = true;
+          _errorMessage =
+              'Camera error: $e. You can still count reps manually.';
+        });
+      }
     }
   }
 
   void _switchCamera() async {
-    // Dispose current camera
-    await _cameraController?.dispose();
-    setState(() => _isCameraInitialized = false);
+    // Dispose current service
+    await _cameraService?.dispose();
 
-    // Toggle camera direction
-    _currentCameraDirection =
-        _currentCameraDirection == CameraLensDirection.front
-            ? CameraLensDirection.back
-            : CameraLensDirection.front;
+    // Switch camera lens direction
+    setState(() {
+      _currentCameraLens = _currentCameraLens == CameraLensDirection.front
+          ? CameraLensDirection.back
+          : CameraLensDirection.front;
+      _isInitialized = false;
+      _isInitializing = true;
+    });
 
-    // Initialize new camera
-    await _initializeCamera();
+    // Initialize with the new camera
+    await _initializeCameraService();
   }
 
   void _startDetection() {
     setState(() {
-      _isDetecting = true;
       _showInstructions = false;
     });
 
-    // Simulate push-up detection for demo
-    _simulatePushUpDetection();
-  }
-
-  void _simulatePushUpDetection() async {
-    // Mock detection - in real implementation, this would use pose detection
-    // First push-up detection happens quickly
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (mounted) {
-      setState(() => _detectedReps = 1);
-      HapticFeedback.mediumImpact();
-    }
-
-    // Subsequent detections at normal intervals
-    for (int i = 2; i <= _targetReps; i++) {
-      await Future.delayed(const Duration(seconds: 2));
-      if (mounted) {
-        setState(() => _detectedReps = i);
-        HapticFeedback.mediumImpact();
-      }
-    }
-
-    // Brief pause to let user register the final "3" rep
-    await Future.delayed(const Duration(milliseconds: 800));
-
-    // Stop detection and navigate to success screen
-    if (mounted && !_hasCompleted) {
-      print('🎉 Auto-detection completion! Setting _hasCompleted = true');
-      _hasCompleted = true;
-      setState(() => _isDetecting = false);
-      _showSuccessScreen();
-    } else {
-      print(
-          '⏳ Auto-detection completion condition not met: mounted=$mounted, hasCompleted=!$_hasCompleted: ${!_hasCompleted}');
-    }
+    // Detection is already running via the CameraWorkoutService
+    // Just hide instructions to show the detection UI
   }
 
   void _showSuccessScreen() {
@@ -202,12 +229,20 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
 
   void _manualRepCount() async {
     if (_detectedReps < _targetReps) {
-      setState(() => _detectedReps++);
+      // Wenn Kamera aktiv ist, verwende den Service-Zähler
+      if (_cameraService != null && _cameraService!.isReady) {
+        _cameraService!.addManualRep();
+        // Der onRepCounted Callback wird automatisch _detectedReps aktualisieren
+      } else {
+        // Wenn Kamera nicht aktiv, erhöhe manuell
+        setState(() {
+          _detectedReps++;
+        });
+      }
     }
 
     if (_detectedReps >= _targetReps && !_hasCompleted) {
       _hasCompleted = true;
-      setState(() {}); // Ensure UI updates immediately
 
       // Brief pause to let user register the final rep
       await Future.delayed(const Duration(milliseconds: 800));
@@ -221,12 +256,13 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
   /// Build camera preview with proper aspect ratio (no stretching)
   /// Fills width edge-to-edge, crops top/bottom if needed (no side bars)
   Widget _buildCameraPreview() {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+    final controller = _cameraService?.cameraController;
+    if (controller == null || !controller.value.isInitialized) {
       return const SizedBox.shrink();
     }
 
     // Get camera's natural dimensions
-    final previewSize = _cameraController!.value.previewSize!;
+    final previewSize = controller.value.previewSize!;
 
     return Positioned.fill(
       child: AspectRatio(
@@ -239,11 +275,33 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
               child: SizedBox(
                 width: previewSize.height,
                 height: previewSize.width,
-                child: CameraPreview(_cameraController!),
+                child: Stack(
+                  children: [
+                    CameraPreview(controller),
+                    // Pose skeleton overlay
+                    if (_cameraService?.lastResult.isPoseDetected ?? false)
+                      _buildPoseSkeletonOverlay(),
+                  ],
+                ),
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Build pose skeleton overlay showing detected keypoints
+  Widget _buildPoseSkeletonOverlay() {
+    final result = _cameraService!.lastResult;
+    if (!result.isPoseDetected || result.keyPoints.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return CustomPaint(
+      painter: _PoseSkeletonPainter(
+        keyPoints: result.keyPoints,
+        phase: result.phase,
       ),
     );
   }
@@ -349,8 +407,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                             child: Stack(
                               children: [
                                 // Camera Preview
-                                if (_isCameraInitialized &&
-                                    _cameraController != null)
+                                if (_isInitialized)
                                   _buildCameraPreview()
                                 else
                                   // Fallback when camera not available
@@ -406,8 +463,8 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                     ),
                                   ),
 
-                                // Detection Overlay (when detecting)
-                                if (_isDetecting)
+                                // Detection Overlay (when not showing instructions)
+                                if (!_showInstructions)
                                   Positioned.fill(
                                     child: Container(
                                       color: Colors.black.withOpacity(0.3),
@@ -438,12 +495,13 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                             ),
                                             const SizedBox(height: 16),
                                             Text(
-                                              'Push-ups detected',
+                                              _feedbackMessage,
                                               style: TextStyle(
                                                 fontSize: 16,
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.w500,
                                               ),
+                                              textAlign: TextAlign.center,
                                             ),
                                           ],
                                         ),
@@ -452,7 +510,8 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                   ),
 
                                 // Camera frame hints
-                                if (_isCameraInitialized)
+                                if (_isInitialized &&
+                                    _cameraService?.cameraController != null)
                                   Positioned(
                                     top: 16,
                                     right: 16,
@@ -466,7 +525,10 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                         borderRadius: BorderRadius.circular(16),
                                       ),
                                       child: Text(
-                                        _currentCameraDirection ==
+                                        _cameraService!
+                                                    .cameraController!
+                                                    .description
+                                                    .lensDirection ==
                                                 CameraLensDirection.front
                                             ? 'Front Camera'
                                             : 'Back Camera',
@@ -487,26 +549,32 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                       const SizedBox(height: 20),
 
                       // Action Buttons
-                      if (!_isDetecting)
+                      if (_showInstructions)
                         Row(
                           children: [
                             // Start Detection Button
                             Expanded(
                               child: PressAnimationButton(
-                                onTap: _startDetection,
+                                onTap: _isInitialized ? _startDetection : null,
                                 child: Container(
                                   height: 52,
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF6060FF),
+                                    color: _isInitialized
+                                        ? Colors.white
+                                        : Colors.grey.withOpacity(0.3),
                                     borderRadius: BorderRadius.circular(26),
                                   ),
-                                  child: const Center(
+                                  child: Center(
                                     child: Text(
-                                      'Start Detection',
+                                      _isInitialized
+                                          ? 'Start Detection'
+                                          : 'Initializing...',
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w700,
-                                        color: Colors.white,
+                                        color: _isInitialized
+                                            ? Colors.black
+                                            : Colors.white.withOpacity(0.5),
                                         letterSpacing: -0.3,
                                       ),
                                     ),
@@ -517,17 +585,21 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                             const SizedBox(width: 12),
                             // Camera Switch Button
                             GestureDetector(
-                              onTap: _switchCamera,
+                              onTap: _isInitialized ? _switchCamera : null,
                               child: Container(
                                 width: 52,
                                 height: 52,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.1),
+                                  color: _isInitialized
+                                      ? Colors.white.withOpacity(0.1)
+                                      : Colors.grey.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(26),
                                 ),
                                 child: Icon(
                                   Icons.flip_camera_ios,
-                                  color: Colors.white,
+                                  color: _isInitialized
+                                      ? Colors.white
+                                      : Colors.white.withOpacity(0.3),
                                   size: 24,
                                 ),
                               ),
@@ -546,7 +618,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                       const SizedBox(height: 8),
 
                       // Info text
-                      if (!_isCameraInitialized)
+                      if (_cameraFailed)
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
@@ -563,7 +635,40 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'Camera not available. Use manual counting to test the workout.',
+                                  _errorMessage,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.white.withOpacity(0.6),
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else if (_isInitializing)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white.withOpacity(0.6),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Initializing AI camera detection...',
                                   style: TextStyle(
                                     fontSize: 14,
                                     color: Colors.white.withOpacity(0.6),
@@ -671,3 +776,88 @@ class _ManualCountButtonState extends State<_ManualCountButton> {
   }
 }
 
+/// Custom painter for drawing pose detection skeleton
+class _PoseSkeletonPainter extends CustomPainter {
+  final Map<String, Offset> keyPoints;
+  final PushUpPhase phase;
+
+  _PoseSkeletonPainter({
+    required this.keyPoints,
+    required this.phase,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (keyPoints.isEmpty) return;
+
+    final paint = Paint()
+      ..color = _getPhaseColor(phase)
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+
+    // Draw pose connections (simplified skeleton)
+    _drawConnection(canvas, paint, 'nose', 'left_eye');
+    _drawConnection(canvas, paint, 'nose', 'right_eye');
+    _drawConnection(canvas, paint, 'left_eye', 'left_ear');
+    _drawConnection(canvas, paint, 'right_eye', 'right_ear');
+
+    // Shoulders
+    _drawConnection(canvas, paint, 'left_shoulder', 'right_shoulder');
+
+    // Arms
+    _drawConnection(canvas, paint, 'left_shoulder', 'left_elbow');
+    _drawConnection(canvas, paint, 'left_elbow', 'left_wrist');
+    _drawConnection(canvas, paint, 'right_shoulder', 'right_elbow');
+    _drawConnection(canvas, paint, 'right_elbow', 'right_wrist');
+
+    // Torso
+    _drawConnection(canvas, paint, 'left_shoulder', 'left_hip');
+    _drawConnection(canvas, paint, 'right_shoulder', 'right_hip');
+    _drawConnection(canvas, paint, 'left_hip', 'right_hip');
+
+    // Legs
+    _drawConnection(canvas, paint, 'left_hip', 'left_knee');
+    _drawConnection(canvas, paint, 'left_knee', 'left_ankle');
+    _drawConnection(canvas, paint, 'right_hip', 'right_knee');
+    _drawConnection(canvas, paint, 'right_knee', 'right_ankle');
+
+    // Draw keypoints as circles
+    final keyPointPaint = Paint()
+      ..color = _getPhaseColor(phase)
+      ..style = PaintingStyle.fill;
+
+    keyPoints.forEach((key, point) {
+      canvas.drawCircle(point, 4, keyPointPaint);
+    });
+  }
+
+  void _drawConnection(
+      Canvas canvas, Paint paint, String point1, String point2) {
+    final p1 = keyPoints[point1];
+    final p2 = keyPoints[point2];
+
+    if (p1 != null && p2 != null) {
+      canvas.drawLine(p1, p2, paint);
+    }
+  }
+
+  Color _getPhaseColor(PushUpPhase phase) {
+    switch (phase) {
+      case PushUpPhase.up:
+        return Colors.green;
+      case PushUpPhase.goingDown:
+        return Colors.yellow;
+      case PushUpPhase.down:
+        return Colors.orange;
+      case PushUpPhase.goingUp:
+        return Colors.blue;
+      case PushUpPhase.unknown:
+        return Colors.white.withOpacity(0.7);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PoseSkeletonPainter oldDelegate) {
+    return oldDelegate.keyPoints != keyPoints || oldDelegate.phase != phase;
+  }
+}

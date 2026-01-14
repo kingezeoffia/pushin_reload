@@ -24,20 +24,22 @@ class PushinController {
     this._unlockService,
     this._blockingService,
     this._blockTargets, {
-    int gracePeriodSeconds = 5,
+    int gracePeriodSeconds = 0, // Instant blocking - no grace period
   }) : _gracePeriodSeconds = gracePeriodSeconds;
 
   PushinState get currentState => _currentState;
 
-  /// LOCKED → EARNING
+  /// LOCKED → EARNING or UNLOCKED → EARNING (allow stacking workouts)
   void startWorkout(Workout workout, DateTime now) {
-    if (_currentState == PushinState.locked) {
+    if (_currentState == PushinState.locked ||
+        _currentState == PushinState.unlocked) {
       _workoutService.recordWorkoutStart(workout, now);
       _currentState = PushinState.earning;
     }
   }
 
   /// EARNING → UNLOCKED (when workout completed)
+  /// Also handles extending unlock time when already unlocked
   void completeWorkout(DateTime now) {
     if (_currentState == PushinState.earning &&
         _workoutService.isCompleted(now)) {
@@ -47,6 +49,14 @@ class PushinController {
             workout.earnedTimeSeconds, 'workout_completed', now);
         _workoutService.clearWorkout();
         _currentState = PushinState.unlocked;
+      }
+    } else if (_currentState == PushinState.unlocked) {
+      // Extend existing unlock session with additional earned time
+      final workout = _workoutService.getCurrentWorkout();
+      if (workout != null) {
+        _unlockService.extendUnlockSession(workout.earnedTimeSeconds, now);
+        _workoutService.clearWorkout();
+        // Stay in unlocked state
       }
     }
   }

@@ -7,8 +7,7 @@ import '../../widgets/PressAnimationButton.dart';
 
 /// Skip Flow: Exercise to Unlock Screen Time
 ///
-/// Context-free version for users who skip onboarding
-/// Simplified workout selection with direct navigation to unlock duration
+/// Matches workout_type_selection_screen.dart layout exactly
 class SkipExerciseScreen extends StatefulWidget {
   final List<String> blockedApps;
 
@@ -24,36 +23,50 @@ class SkipExerciseScreen extends StatefulWidget {
 class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
   String? _selectedWorkout;
 
-  // Workouts list - only Push-Ups is unlocked
+  // Workouts list - all unlocked (matching main app)
   final List<_WorkoutInfo> _workouts = [
-    _WorkoutInfo('Push-Ups', Icons.fitness_center, false),
-    _WorkoutInfo('Squats', Icons.accessibility_new, true),
-    _WorkoutInfo('Glute Bridge', Icons.call_to_action, true),
-    _WorkoutInfo('Plank', Icons.view_stream, true),
-    _WorkoutInfo('Jumping Jacks', Icons.directions_run, true),
+    _WorkoutInfo(
+      name: 'Push-Ups',
+      iconPath: 'assets/icons/pushups.png',
+      fallbackIcon: Icons.fitness_center,
+    ),
+    _WorkoutInfo(
+      name: 'Squats',
+      iconPath: 'assets/icons/squats.png',
+      fallbackIcon: Icons.airline_seat_legroom_normal,
+    ),
+    _WorkoutInfo(
+      name: 'Glute Bridge',
+      iconPath: 'assets/icons/glute_bridge.png',
+      fallbackIcon: Icons.accessibility_new,
+    ),
+    _WorkoutInfo(
+      name: 'Plank',
+      iconPath: 'assets/icons/plank.png',
+      fallbackIcon: Icons.self_improvement,
+    ),
+    _WorkoutInfo(
+      name: 'Jumping Jacks',
+      iconPath: 'assets/icons/jumping_jacks.png',
+      fallbackIcon: Icons.directions_run,
+    ),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthStateProvider>(context);
-    print('🧪 SkipExerciseScreen - justRegistered=${authProvider.justRegistered}, '
-          'isGuestMode=${authProvider.isGuestMode}, '
-          'guestCompletedSetup=${authProvider.guestCompletedSetup}');
-
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: GOStepsBackground(
-        blackRatio: 0.25,
+        blackRatio: 0.22,
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              SizedBox(height: screenHeight * 0.04),
 
-              SizedBox(height: screenHeight * 0.08),
-
-              // Heading - consistent with other screens
+              // Header
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: Column(
@@ -78,7 +91,7 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
                         Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
                       ),
                       blendMode: BlendMode.srcIn,
-                      child: Text(
+                      child: const Text(
                         'Screen Time',
                         style: TextStyle(
                           fontSize: 38,
@@ -86,33 +99,31 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
                           color: Colors.white,
                           height: 1.1,
                           letterSpacing: -0.5,
-                          decoration: TextDecoration.none,
-                          fontFamily: 'Inter',
                         ),
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Choose your workout',
+                      'Choose your Workout',
                       style: TextStyle(
                         fontSize: 15,
                         color: Colors.white.withOpacity(0.6),
                         letterSpacing: -0.2,
+                        height: 1.4,
                       ),
                     ),
                   ],
                 ),
               ),
 
-              SizedBox(height: screenHeight * 0.06),
+              const SizedBox(height: 24),
 
-              // Workout Selection
+              // Workout Grid
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
                     children: [
-                      // Cards Grid - 2 columns
                       GridView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
@@ -130,54 +141,45 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
                           return _WorkoutCard(
                             workout: workout,
                             isSelected: isSelected,
-                            onTap: workout.isLocked
-                                ? null
-                                : () {
-                                    HapticFeedback.mediumImpact();
-                                    setState(
-                                        () => _selectedWorkout = workout.name);
-                                  },
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              setState(() => _selectedWorkout = workout.name);
+                            },
                           );
                         },
                       ),
 
                       const SizedBox(height: 20),
 
-                      // More Workouts coming soon reminder
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.auto_awesome,
+                      // More workouts coming soon
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.auto_awesome,
+                            color: Colors.white.withOpacity(0.4),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'More workouts coming soon!',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
                               color: Colors.white.withOpacity(0.4),
-                              size: 18,
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'More Workouts coming soon!',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.white.withOpacity(0.4),
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
               ),
 
-              // Continue Button
-              Padding(
-                padding: const EdgeInsets.all(32),
-                child: _ContinueButton(
+              // Start button
+              Container(
+                padding: const EdgeInsets.all(24),
+                child: _StartButton(
                   enabled: _selectedWorkout != null,
                   onTap: () {
                     if (_selectedWorkout != null) {
@@ -199,27 +201,31 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
 /// Workout info model
 class _WorkoutInfo {
   final String name;
-  final IconData icon;
-  final bool isLocked;
+  final String iconPath;
+  final IconData fallbackIcon;
 
-  const _WorkoutInfo(this.name, this.icon, this.isLocked);
+  const _WorkoutInfo({
+    required this.name,
+    required this.iconPath,
+    required this.fallbackIcon,
+  });
 }
 
-/// Duolingo-style Workout Card
+/// Workout Card Widget
 class _WorkoutCard extends StatelessWidget {
   final _WorkoutInfo workout;
   final bool isSelected;
-  final VoidCallback? onTap;
+  final VoidCallback onTap;
 
   const _WorkoutCard({
     required this.workout,
     required this.isSelected,
-    this.onTap,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bool isLocked = workout.isLocked;
+    const Color modeColor = Color(0xFF6060FF); // Purple/blue
 
     return GestureDetector(
       onTap: onTap,
@@ -228,11 +234,8 @@ class _WorkoutCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: isSelected
               ? Colors.white
-              : isLocked
-                  ? Colors.white.withOpacity(0.04)
-                  : Colors.white.withOpacity(0.10),
+              : Colors.white.withOpacity(0.10),
           borderRadius: BorderRadius.circular(24),
-          // Subtle shadow for depth
           boxShadow: isSelected
               ? [
                   BoxShadow(
@@ -243,119 +246,71 @@ class _WorkoutCard extends StatelessWidget {
                 ]
               : null,
         ),
-        child: Stack(
-          children: [
-            // Main content
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Spacer to push content to center
-                  const Spacer(),
-                  // Icon container centered in card
-                  Center(
-                    child: Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Spacer(),
+              // Icon container
+              Center(
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? modeColor.withOpacity(0.12)
+                        : Colors.white.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Image.asset(
+                    workout.iconPath,
+                    color: isSelected
+                        ? modeColor
+                        : Colors.white.withOpacity(0.9),
+                    width: 40,
+                    height: 40,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Icon(
+                        workout.fallbackIcon,
                         color: isSelected
-                            ? const Color(0xFF3535A0).withOpacity(0.12)
-                            : isLocked
-                                ? Colors.white.withOpacity(0.05)
-                                : Colors.white.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: Icon(
-                        workout.icon,
-                        color: isSelected
-                            ? const Color(0xFF3535A0)
-                            : isLocked
-                                ? Colors.white.withOpacity(0.25)
-                                : Colors.white.withOpacity(0.9),
+                            ? modeColor
+                            : Colors.white.withOpacity(0.9),
                         size: 40,
-                      ),
-                    ),
+                      );
+                    },
                   ),
-                  const SizedBox(height: 8),
-                  // Workout name sleek right under icon
-                  SizedBox(
-                    width: double.infinity,
-                    child: Text(
-                      workout.name,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: isSelected
-                            ? const Color(0xFF3535A0)
-                            : isLocked
-                                ? Colors.white.withOpacity(0.25)
-                                : Colors.white,
-                        letterSpacing: -0.3,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  // Premium feature label area - consistent space for all cards
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 20, // Fixed height to maintain consistent spacing
-                    child: Center(
-                      child: isLocked
-                          ? Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.08),
-                                borderRadius: BorderRadius.circular(100),
-                              ),
-                              child: Text(
-                                'Premium feature',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.white.withOpacity(0.35),
-                                ),
-                              ),
-                            )
-                          : null, // Invisible when not locked
-                    ),
-                  ),
-                  // Spacer to balance the layout
-                  const Spacer(),
-                ],
-              ),
-            ),
-
-            // Lock icon overlay for locked items
-            if (isLocked)
-              Positioned(
-                top: 12,
-                right: 12,
-                child: Icon(
-                  Icons.lock_rounded,
-                  color: Colors.white.withOpacity(0.2),
-                  size: 16,
                 ),
               ),
-          ],
+              const SizedBox(height: 8),
+              // Workout name
+              Text(
+                workout.name,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? modeColor : Colors.white,
+                  letterSpacing: -0.3,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 28), // Space where "Premium feature" used to be
+              const Spacer(),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Back Button Widget
-
-/// Continue Button Widget
-class _ContinueButton extends StatelessWidget {
+/// Start Button Widget
+class _StartButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
 
-  const _ContinueButton({
+  const _StartButton({
     required this.enabled,
     required this.onTap,
   });
@@ -368,11 +323,9 @@ class _ContinueButton extends StatelessWidget {
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
         width: double.infinity,
-        height: 52,
+        height: 56,
         decoration: BoxDecoration(
-          color: enabled
-              ? Colors.white.withOpacity(0.95)
-              : Colors.white.withOpacity(0.12),
+          color: enabled ? Colors.white : Colors.white.withOpacity(0.12),
           borderRadius: BorderRadius.circular(100),
           boxShadow: enabled
               ? [
@@ -385,30 +338,18 @@ class _ContinueButton extends StatelessWidget {
               : null,
         ),
         child: Center(
-          child: Text(
-            'Continue',
+          child: AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 300),
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: enabled
-                  ? const Color(0xFF2A2A6A)
-                  : Colors.white.withOpacity(0.4),
+              color: enabled ? const Color(0xFF2A2A6A) : Colors.white.withOpacity(0.4),
               letterSpacing: -0.3,
             ),
+            child: const Text('Continue'),
           ),
         ),
       ),
     );
   }
 }
-
-
-
-
-
-
-
-
-
-
-

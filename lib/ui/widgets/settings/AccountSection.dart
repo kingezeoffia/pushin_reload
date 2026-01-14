@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'SettingsSection.dart';
+import 'package:pushin_reload/ui/screens/settings/EditNameScreen.dart';
+import 'package:pushin_reload/ui/screens/settings/EditEmailScreen.dart';
+import 'package:pushin_reload/ui/screens/settings/ChangePasswordScreen.dart';
+import 'package:pushin_reload/state/auth_state_provider.dart';
 
 /// Account settings section
 class AccountSection extends StatelessWidget {
@@ -7,24 +12,33 @@ class AccountSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authState = Provider.of<AuthStateProvider>(context);
+    final user = authState.currentUser;
+
     return SettingsSection(
       title: 'Account',
       icon: Icons.person,
       children: [
         SettingsListTile(
           title: 'Name',
-          subtitle: 'King E.',
+          subtitle: user?.name ?? 'Not set',
           leadingIcon: Icons.person_outline,
           onTap: () {
-            // TODO: Navigate to name editing screen
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const EditNameScreen()),
+            );
           },
         ),
         SettingsListTile(
           title: 'Email',
-          subtitle: 'john.doe@example.com',
+          subtitle: user?.email ?? 'Not set',
           leadingIcon: Icons.email_outlined,
           onTap: () {
-            // TODO: Navigate to email editing screen
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const EditEmailScreen()),
+            );
           },
         ),
         SettingsListTile(
@@ -33,6 +47,18 @@ class AccountSection extends StatelessWidget {
           leadingIcon: Icons.fitness_center,
           onTap: () {
             // TODO: Navigate to fitness level selection
+          },
+        ),
+        SettingsListTile(
+          title: 'Password',
+          subtitle: 'Change your password',
+          leadingIcon: Icons.lock_outline,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const ChangePasswordScreen()),
+            );
           },
         ),
         SettingsListTile(
@@ -48,5 +74,3 @@ class AccountSection extends StatelessWidget {
     );
   }
 }
-
-

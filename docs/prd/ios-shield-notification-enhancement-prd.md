@@ -1,0 +1,274 @@
+# iOS Screen Time Shield Notification Enhancement PRD
+
+**Product**: PUSHIN
+**Feature**: iOS Screen Time Shield Notification Enhancement
+**Platform**: iOS 15.0+
+**Date**: 2025-01-05
+
+## Executive Summary
+
+### Problem
+When users tap "Earn Screen Time" on the iOS Screen Time shield overlay, the blocked app closes automatically and users must manually navigate back to Pushin to select a workout. This creates friction and poor UX.
+
+### Solution
+Keep the blocked app open with shield active, send local push notification to guide users to workout selection, enable deep-linking for seamless navigation.
+
+### Business Value
+- Reduces user friction in accessing workouts
+- Keeps users engaged with blocked content visible
+- Improves conversion to workout completion
+- Maintains Screen Time shield effectiveness
+
+## Requirements
+
+### Functional Requirements
+
+#### FR1: Shield Persistence
+- When "Earn Screen Time" is tapped, blocked app remains open
+- Shield overlay stays visible until workout completion or emergency unlock
+- Emergency unlock continues to work immediately
+
+#### FR2: Local Notification System
+- Schedule local notification when shield action is detected
+- Notification appears even if Pushin app is in background
+- Notification includes clear call-to-action for workout
+
+#### FR3: Deep Link Navigation
+- Tapping notification opens Pushin directly to workout selection
+- Custom URL scheme: pushin://workout
+- Handles notification tap from any app state
+
+#### FR4: Notification Management
+- Prevent duplicate notifications for multiple shield taps
+- Auto-expire notifications after 5 minutes
+- Include app badge increment and subtle sound
+
+### Technical Requirements
+
+#### TR1: Shield Action Extension Changes
+- Change completionHandler(.close) to completionHandler(.none)
+- Continue App Group UserDefaults signaling
+- Emergency unlock retains completionHandler(.close)
+
+#### TR2: iOS Local Notifications
+- Request notification permissions on app launch
+- Monitor App Group for shield action signals
+- Use UNUserNotificationCenter for scheduling
+
+#### TR3: Deep Linking
+- Register custom URL scheme in Info.plist
+- Handle URL opening in AppDelegate
+- Navigate to workout flow programmatically
+
+#### TR4: Edge Case Handling
+- App not running: notification appears on next launch
+- Multiple taps: single notification only
+- Emergency unlock: immediate shield closure
+
+## User Journey
+
+### Primary User Flow
+
+1. User opens blocked app (Instagram/TikTok/YouTube)
+2. Screen Time shield appears with "Earn Screen Time" button
+3. User taps "Earn Screen Time"
+4. Blocked app stays open with shield still visible
+5. Local notification appears: "Time to workout! Tap to earn screen time"
+6. User taps notification
+7. Pushin opens directly to workout selection screen
+8. User selects and completes workout
+9. Shield automatically removes, blocked app becomes fully accessible
+
+### Alternative Flows
+
+#### Emergency Unlock
+1. User taps "Emergency Unlock" on shield
+2. Shield closes immediately, app becomes accessible
+3. Emergency unlock count decrements
+
+#### Notification Timeout
+1. User receives notification but doesn't tap within 5 minutes
+2. Notification auto-dismisses
+3. Shield remains active
+4. User can tap shield again to get new notification
+
+#### App Not Running
+1. Shield action occurs while Pushin is not running
+2. Next time Pushin launches, notification appears
+3. Tapping notification navigates to workout selection
+
+## Technical Architecture
+
+### Component Architecture
+
+#### ShieldActionExtension (iOS Extension)
+```
+ShieldActionExtension.swift
+├── handle(action: .primaryButtonPressed)
+│   ├── signalMainAppForWorkout() // App Group signaling
+│   └── completionHandler(.none) // Keep shield active
+└── handle(action: .secondaryButtonPressed)
+    ├── performEmergencyUnlock()
+    └── completionHandler(.close) // Close for emergency
+```
+
+#### Pushin Main App
+```
+AppDelegate.swift
+├── didFinishLaunchingWithOptions
+│   └── requestNotificationPermissions()
+└── application(_:open:)
+    └── handleDeepLink(url) // pushin://workout
+
+NotificationManager.swift (New)
+├── requestPermissions()
+├── monitorShieldActions()
+├── scheduleWorkoutNotification()
+└── handleNotificationResponse()
+```
+
+#### App Group Communication
+```
+UserDefaults(suiteName: "group.com.pushin.reload")
+├── should_show_workout: Bool
+├── shield_action_timestamp: Double
+├── pending_notification_id: String (New)
+└── last_notification_time: Double (New)
+```
+
+### Notification Details
+- **Title**: "Earn Screen Time"
+- **Body**: "Complete a quick workout to unblock your apps"
+- **Sound**: Default notification sound (subtle)
+- **Badge**: Increment app badge count
+- **Category**: Custom category with "Start Workout" and "Later" actions
+- **Expiration**: 5 minutes
+- **Thread ID**: "workout-reminder" for grouping
+
+## Implementation Plan
+
+### Phase 1: Shield Action Extension Updates
+1. Modify ShieldActionExtension.swift
+   - Change completionHandler(.close) to completionHandler(.none)
+   - Add deduplication logic for notifications
+   - Test emergency unlock still works
+
+### Phase 2: iOS Notification System
+1. Create NotificationManager.swift
+   - Request notification permissions
+   - Monitor App Group for shield actions
+   - Schedule local notifications
+   - Handle notification responses
+
+2. Update AppDelegate.swift
+   - Request permissions on launch
+   - Add deep link handling
+   - Integrate notification manager
+
+3. Update Info.plist
+   - Add notification permissions
+   - Register custom URL scheme
+
+### Phase 3: Flutter Integration
+1. Add flutter_local_notifications dependency
+2. Create notification service bridge
+3. Update workout selection navigation
+
+### Phase 4: Testing & Validation
+1. Unit tests for notification manager
+2. Integration tests with blocked apps
+3. Edge case validation
+4. Performance testing
+
+## Success Metrics
+
+### Quantitative Metrics
+- **Notification Tap Rate**: % of notifications tapped vs dismissed
+- **Workout Completion Rate**: % of notification taps leading to workout completion
+- **Shield Bypass Rate**: % of users using emergency unlock vs workout path
+- **User Retention**: Impact on daily active users
+
+### Qualitative Metrics
+- **User Feedback**: App store reviews mentioning notification experience
+- **Support Tickets**: Reduction in "can't access blocked apps" issues
+- **Session Analytics**: Time from shield appearance to workout start
+
+### Technical Metrics
+- **Notification Delivery Rate**: % of shield actions resulting in notifications
+- **Deep Link Success Rate**: % of notification taps successfully opening workout screen
+- **App Launch Performance**: Impact on cold start time with notification monitoring
+
+## Risks & Mitigations
+
+### Technical Risks
+
+#### R1: Notification Permissions Denied
+- **Impact**: Feature doesn't work for users who deny permissions
+- **Mitigation**: Graceful fallback, clear onboarding explanation, settings deep link
+
+#### R2: App Group Communication Issues
+- **Impact**: Shield actions not detected by main app
+- **Mitigation**: Fallback to standard UserDefaults, extensive logging, health checks
+
+#### R3: Deep Link Conflicts
+- **Impact**: Other apps using same URL scheme
+- **Mitigation**: Unique scheme "pushin-workout://", validation in AppDelegate
+
+### User Experience Risks
+
+#### R4: Notification Overload
+- **Impact**: Users annoyed by frequent notifications
+- **Mitigation**: 5-minute expiration, single notification per shield session, user controls
+
+#### R5: Confusing Shield State
+- **Impact**: Users confused why app still blocked after tapping
+- **Mitigation**: Clear notification messaging, visual shield state indicators
+
+### Platform Risks
+
+#### R6: iOS Notification Limitations
+- **Impact**: Platform restrictions on notification delivery/scheduling
+- **Mitigation**: Comprehensive iOS version checking, alternative UX for older versions
+
+#### R7: Background Execution Limits
+- **Impact**: App killed before notification scheduled
+- **Mitigation**: Use background tasks, persistent App Group state, launch-time processing
+
+## Testing Strategy
+
+### Manual Testing Scenarios
+
+#### Primary Flow Testing
+- [ ] Instagram blocked → tap "Earn Screen Time" → notification appears → tap notification → Pushin opens to workout selection
+- [ ] TikTok blocked → same flow verification
+- [ ] YouTube blocked → same flow verification
+
+#### Edge Cases
+- [ ] Emergency unlock still closes shield immediately
+- [ ] Multiple shield taps create only one notification
+- [ ] Notification expires after 5 minutes
+- [ ] Pushin not running → notification appears on next launch
+- [ ] Pushin in background → notification appears immediately
+
+#### Error Conditions
+- [ ] Notification permissions denied → graceful fallback
+- [ ] App Group not accessible → fallback behavior
+- [ ] Deep link fails → error handling and user feedback
+
+### Automated Testing
+
+#### Unit Tests
+- NotificationManager permission requests
+- Shield action signal processing
+- Deep link URL parsing
+- Notification scheduling logic
+
+#### Integration Tests
+- Shield extension communication
+- Notification delivery and handling
+- Workout navigation from notification
+
+### Performance Testing
+- App launch time with notification monitoring
+- Memory usage with notification system active
+- Battery impact of background notification scheduling

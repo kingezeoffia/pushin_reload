@@ -3,6 +3,33 @@ import 'package:flutter/services.dart';
 import 'dart:ui';
 import '../theme/pushin_theme.dart';
 
+/// Standardized bottom button container that positions content at navigation pill level
+class BottomActionContainer extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+
+  const BottomActionContainer({
+    Key? key,
+    required this.child,
+    this.padding = const EdgeInsets.symmetric(horizontal: 24),
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final safePadding = MediaQuery.of(context).padding.bottom;
+
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: safePadding + 8, // Same positioning as navigation pill
+      child: Padding(
+        padding: padding!,
+        child: child,
+      ),
+    );
+  }
+}
+
 class PillNavigationBar extends StatefulWidget {
   final int selectedIndex;
   final ValueChanged<int> onTabChanged;

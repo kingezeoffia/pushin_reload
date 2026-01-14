@@ -1,17 +1,38 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'TokenManager.dart';
 
 /// Authentication service for handling login, signup, and OAuth flows
 class AuthenticationService {
-  final String baseUrl;
-  final TokenManager _tokenManager = TokenManager();
+  static final AuthenticationService _instance =
+      AuthenticationService._internal();
 
-  AuthenticationService({
+  factory AuthenticationService() => _instance;
+
+  late final String baseUrl;
+  final TokenManager _tokenManager = TokenManager();
+  late final http.Client _httpClient;
+
+  AuthenticationService._internal({
     this.baseUrl = 'https://pushin-production.up.railway.app/api',
-  });
+  }) {
+    _httpClient = _createHttpClient();
+  }
+
+  /// Create HTTP client that handles SSL certificate issues for Railway
+  http.Client _createHttpClient() {
+    final ioClient = HttpClient()
+      ..badCertificateCallback = (X509Certificate cert, String host, int port) {
+        // Trust Railway certificates specifically
+        return host.contains('railway.app') || host.contains('up.railway.app');
+      };
+
+    return IOClient(ioClient);
+  }
 
   // Google Sign In instance
   final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -39,7 +60,7 @@ class AuthenticationService {
     print('  Body: $requestBody');
 
     try {
-      final response = await http.post(
+      final response = await _httpClient.post(
         Uri.parse(requestUrl),
         headers: {'Content-Type': 'application/json'},
         body: requestBody,
@@ -92,7 +113,7 @@ class AuthenticationService {
     print('  Body: $requestBody');
 
     try {
-      final response = await http.post(
+      final response = await _httpClient.post(
         Uri.parse(requestUrl),
         headers: requestHeaders,
         body: requestBody,
@@ -210,7 +231,7 @@ class AuthenticationService {
     print('  Method: POST');
     print('  Body: $requestBody');
 
-    final response = await http.post(
+    final response = await _httpClient.post(
       Uri.parse(requestUrl),
       headers: {'Content-Type': 'application/json'},
       body: requestBody,
@@ -255,7 +276,7 @@ class AuthenticationService {
       }
 
       // Send to backend
-      final response = await http.post(
+      final response = await _httpClient.post(
         Uri.parse('$baseUrl/auth/apple'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
@@ -296,7 +317,7 @@ class AuthenticationService {
       final accessToken = await _tokenManager.getAccessToken();
       if (accessToken != null) {
         // Call logout endpoint
-        await http.post(
+        await _httpClient.post(
           Uri.parse('$baseUrl/auth/logout'),
           headers: {
             'Content-Type': 'application/json',
@@ -324,7 +345,7 @@ class AuthenticationService {
       final accessToken = await _tokenManager.getAccessToken();
       if (accessToken == null) return null;
 
-      final response = await http.get(
+      final response = await _httpClient.get(
         Uri.parse('$baseUrl/auth/me'),
         headers: {
           'Content-Type': 'application/json',
@@ -368,7 +389,7 @@ class AuthenticationService {
       if (name != null) requestBody['name'] = name;
       if (password != null) requestBody['password'] = password;
 
-      final response = await http.put(
+      final response = await _httpClient.put(
         Uri.parse('$baseUrl/auth/me'),
         headers: {
           'Content-Type': 'application/json',
@@ -387,7 +408,8 @@ class AuthenticationService {
         return AuthResult.failure(errorMessage);
       }
     } catch (e) {
-      return AuthResult.failure('Network error during profile update: ${e.toString()}');
+      return AuthResult.failure(
+          'Network error during profile update: ${e.toString()}');
     }
   }
 

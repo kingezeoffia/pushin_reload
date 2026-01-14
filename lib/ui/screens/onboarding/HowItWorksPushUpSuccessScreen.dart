@@ -132,20 +132,20 @@ class HowItWorksPushUpSuccessScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(32),
                 child: _ContinueButton(
                   onTap: () {
-                          Navigator.push(
-                            context,
-                            _NoSwipeBackRoute(
-                              builder: (context) => HowItWorksEmergencyUnlockScreen(
-                                fitnessLevel: fitnessLevel,
-                                goals: goals,
-                                otherGoal: otherGoal,
-                                workoutHistory: workoutHistory,
-                                blockedApps: blockedApps,
-                                selectedWorkout: 'Push-Ups',
-                                unlockDuration: 15, // Default 15 minutes
-                              ),
-                            ),
-                          );
+                    Navigator.push(
+                      context,
+                      _NoSwipeBackRoute(
+                        builder: (context) => HowItWorksEmergencyUnlockScreen(
+                          fitnessLevel: fitnessLevel,
+                          goals: goals,
+                          otherGoal: otherGoal,
+                          workoutHistory: workoutHistory,
+                          blockedApps: blockedApps,
+                          selectedWorkout: 'Push-Ups',
+                          unlockDuration: 15, // Default 15 minutes
+                        ),
+                      ),
+                    );
                   },
                 ),
               ),
@@ -156,7 +156,6 @@ class HowItWorksPushUpSuccessScreen extends StatelessWidget {
     );
   }
 }
-
 
 /// Continue Button Widget
 class _ContinueButton extends StatelessWidget {

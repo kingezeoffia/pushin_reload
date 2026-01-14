@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +12,10 @@ import '../../../state/auth_state_provider.dart';
 import '../../../state/pushin_app_controller.dart';
 import '../../../services/platform/ScreenTimeMonitor.dart';
 import 'paywall/PaywallScreen.dart';
+import 'settings/EmergencyUnlockSettingsScreen.dart';
+import 'settings/EditNameScreen.dart';
+import 'settings/EditEmailScreen.dart';
+import 'settings/ChangePasswordScreen.dart';
 
 /// Enhanced Settings Screen - The highlight of the PUSHIN app
 /// Features premium animations, glassmorphism, and iOS-like design
@@ -121,176 +126,198 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
       body: GOStepsBackground(
         blackRatio: 0.25,
         child: SafeArea(
-          bottom: false, // Don't include bottom safe area - navigation pill handles this
+          bottom:
+              false, // Don't include bottom safe area - navigation pill handles this
           child: CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
               // Animated Header
-            SliverToBoxAdapter(
-              child: AnimatedBuilder(
-                animation: _headerController,
-                builder: (context, child) {
-                  return Transform.translate(
-                    offset: Offset(0, _headerSlideAnimation.value),
-                    child: Opacity(
-                      opacity: _headerFadeAnimation.value,
-                      child: child,
-                    ),
-                  );
-                },
-                child: Padding(
-                  padding: const EdgeInsets.all(
-                      EnhancedSettingsDesignTokens.spacingLarge),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Title
-                      const Text(
-                        'Settings',
-                        style: EnhancedSettingsDesignTokens.titleLarge,
+              SliverToBoxAdapter(
+                child: AnimatedBuilder(
+                  animation: _headerController,
+                  builder: (context, child) {
+                    return Transform.translate(
+                      offset: Offset(0, _headerSlideAnimation.value),
+                      child: Opacity(
+                        opacity: _headerFadeAnimation.value,
+                        child: child,
                       ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(
+                        EnhancedSettingsDesignTokens.spacingLarge),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title
+                        const Text(
+                          'Settings',
+                          style: EnhancedSettingsDesignTokens.titleLarge,
+                        ),
 
-                      const SizedBox(height: 4),
+                        const SizedBox(height: 4),
 
-                      // Subtitle
-                      Text(
-                        'Personalize your experience',
-                        style: EnhancedSettingsDesignTokens.subtitle,
+                        // Subtitle
+                        Text(
+                          'Personalize your experience',
+                          style: EnhancedSettingsDesignTokens.subtitle,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // GO Club Style Banner Widget
+              SliverToBoxAdapter(
+                child: _buildPromoBanner(),
+              ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+
+              // Account Section
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: EnhancedSettingsDesignTokens.spacingLarge),
+                  child: EnhancedSettingsSection(
+                    title: 'Account',
+                    icon: Icons.person,
+                    gradient: EnhancedSettingsDesignTokens.primaryGradient,
+                    delay: 100,
+                    children: [
+                      EnhancedSettingsTile(
+                        icon: Icons.person_outline,
+                        title: 'Edit Name',
+                        subtitle: 'Change your display name',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => const EditNameScreen()),
+                        ),
+                      ),
+                      EnhancedSettingsTile(
+                        icon: Icons.email_outlined,
+                        title: 'Edit E-Mail',
+                        subtitle: 'Change your email address',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => const EditEmailScreen()),
+                        ),
+                      ),
+                      EnhancedSettingsTile(
+                        icon: Icons.lock_outline,
+                        title: 'Change Password',
+                        subtitle: 'Update your password',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) =>
+                                  const ChangePasswordScreen()),
+                        ),
+                        showDivider: false,
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
 
-            // GO Club Style Banner Widget
-            SliverToBoxAdapter(
-              child: _buildPromoBanner(),
-            ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-
-            // Account Section
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: EnhancedSettingsDesignTokens.spacingLarge),
-                child: EnhancedSettingsSection(
-                  title: 'Account',
-                  icon: Icons.person,
-                  gradient: EnhancedSettingsDesignTokens.primaryGradient,
-                  delay: 100,
-                  children: [
-                    EnhancedSettingsTile(
-                      icon: Icons.person_outline,
-                      title: 'Edit Name',
-                      subtitle: 'Change your display name',
-                      onTap: () => _showEditNameDialog(),
-                    ),
-                    EnhancedSettingsTile(
-                      icon: Icons.email_outlined,
-                      title: 'Edit E-Mail',
-                      subtitle: 'Change your email address',
-                      onTap: () => _showEditEmailDialog(),
-                    ),
-                    EnhancedSettingsTile(
-                      icon: Icons.lock_outline,
-                      title: 'Change Password',
-                      subtitle: 'Update your password',
-                      onTap: () => _showChangePasswordDialog(),
-                      showDivider: false,
-                    ),
-                  ],
+              // App Blocking Section
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: EnhancedSettingsDesignTokens.spacingLarge),
+                  child: EnhancedSettingsSection(
+                    title: 'App Blocking',
+                    icon: Icons.block,
+                    gradient: EnhancedSettingsDesignTokens.accentGradient,
+                    delay: 200,
+                    children: [
+                      Consumer<PushinAppController>(
+                        builder: (context, controller, child) {
+                          final count = controller.blockedApps.length;
+                          return EnhancedSettingsTile(
+                            icon: Icons.screen_lock_portrait,
+                            title: 'Distracting Apps',
+                            subtitle: count > 0 ? '$count apps blocked' : 'Choose distracting apps to block',
+                            onTap: () => _showFocusSessionsDialog(),
+                            iconColor: const Color(0xFFEF4444), // dangerRed color
+                          );
+                        },
+                      ),
+                      EnhancedSettingsTile(
+                        icon: Icons.timer,
+                        title: 'Emergency Unlock',
+                        subtitle: 'Set timer for urgent access',
+                        onTap: () => _showEmergencyUnlockDialog(),
+                        showDivider: false,
+                        iconColor: const Color(0xFFEF4444), // dangerRed color
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-            // App Blocking Section
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: EnhancedSettingsDesignTokens.spacingLarge),
-                child: EnhancedSettingsSection(
-                  title: 'App Blocking',
-                  icon: Icons.block,
-                  gradient: EnhancedSettingsDesignTokens.accentGradient,
-                  delay: 200,
-                  children: [
-                    EnhancedSettingsTile(
-                      icon: Icons.screen_lock_portrait,
-                      title: 'Distracting Apps',
-                      subtitle: 'Choose distracting apps to block',
-                      onTap: () => _showFocusSessionsDialog(),
-                      iconColor: const Color(0xFFEF4444), // dangerRed color
-                    ),
-                    EnhancedSettingsTile(
-                      icon: Icons.timer,
-                      title: 'Emergency Unlock',
-                      subtitle: 'Set timer for urgent access',
-                      onTap: () => _showEmergencyUnlockDialog(),
-                      showDivider: false,
-                      iconColor: const Color(0xFFEF4444), // dangerRed color
-                    ),
-                  ],
+              // Privacy & Security Section
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: EnhancedSettingsDesignTokens.spacingLarge),
+                  child: EnhancedSettingsSection(
+                    title: 'Privacy & Security',
+                    icon: Icons.security,
+                    gradient: EnhancedSettingsDesignTokens.successGradient,
+                    delay: 400,
+                    children: [
+                      EnhancedSettingsTile(
+                        icon: Icons.privacy_tip,
+                        title: 'Privacy Policy',
+                        onTap: () => _launchURL('https://pushin.app/privacy'),
+                        iconColor: const Color(0xFF10B981), // green color
+                      ),
+                      EnhancedSettingsTile(
+                        icon: Icons.description,
+                        title: 'Terms of Service',
+                        onTap: () => _launchURL('https://pushin.app/terms'),
+                        showDivider: false,
+                        iconColor: const Color(0xFF10B981), // green color
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              const SliverToBoxAdapter(child: SizedBox(height: 40)),
 
-            // Privacy & Security Section
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: EnhancedSettingsDesignTokens.spacingLarge),
-                child: EnhancedSettingsSection(
-                  title: 'Privacy & Security',
-                  icon: Icons.security,
-                  gradient: EnhancedSettingsDesignTokens.successGradient,
-                  delay: 400,
-                  children: [
-                    EnhancedSettingsTile(
-                      icon: Icons.privacy_tip,
-                      title: 'Privacy Policy',
-                      onTap: () => _launchURL('https://pushin.app/privacy'),
-                      iconColor: const Color(0xFF10B981), // green color
-                    ),
-                    EnhancedSettingsTile(
-                      icon: Icons.description,
-                      title: 'Terms of Service',
-                      onTap: () => _launchURL('https://pushin.app/terms'),
-                      showDivider: false,
-                      iconColor: const Color(0xFF10B981), // green color
-                    ),
-                  ],
+              // Logout Button
+              SliverToBoxAdapter(
+                child: _buildLogoutButton(),
+              ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 60)),
+
+              // App Version
+              SliverToBoxAdapter(
+                child: Center(
+                  child: Text(
+                    'PUSHIN v1.0.0',
+                    style: EnhancedSettingsDesignTokens.tileSubtitle,
+                  ),
                 ),
               ),
-            ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 40)),
-
-            // Logout Button
-            SliverToBoxAdapter(
-              child: _buildLogoutButton(),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 60)),
-
-            // App Version
-            SliverToBoxAdapter(
-              child: Center(
-                child: Text(
-                  'PUSHIN v1.0.0',
-                  style: EnhancedSettingsDesignTokens.tileSubtitle,
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 112)), // Navigation pill (64px) + margin (8px) + extra spacing (40px)
-          ],
-        ),
+              const SliverToBoxAdapter(
+                  child: SizedBox(
+                      height:
+                          112)), // Navigation pill (64px) + margin (8px) + extra spacing (40px)
+            ],
+          ),
         ),
       ),
     );
@@ -456,8 +483,10 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                       child: Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            begin: Alignment(-2.0 + (_shimmerAnimation.value * 2), -0.5),
-                            end: Alignment(-1.0 + (_shimmerAnimation.value * 2), 0.5),
+                            begin: Alignment(
+                                -2.0 + (_shimmerAnimation.value * 2), -0.5),
+                            end: Alignment(
+                                -1.0 + (_shimmerAnimation.value * 2), 0.5),
                             colors: [
                               Colors.transparent,
                               Colors.white.withOpacity(0.0),
@@ -507,48 +536,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
     );
   }
 
-  // Dialog and Navigation Methods
-
-  void _showEditNameDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => EditNameDialog(
-        currentName: _displayName,
-        onNameUpdated: (newName) async {
-          setState(() => _displayName = newName);
-          _saveSettings();
-          // Also update the backend account name
-          await _updateAccountName(newName);
-        },
-      ),
-    );
-  }
-
-  void _showEditEmailDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => EditEmailDialog(
-        currentEmail: Provider.of<AuthStateProvider>(context, listen: false)
-                .currentUser
-                ?.email ??
-            '',
-        onEmailUpdated: (newEmail) {
-          // Email update will be handled by the dialog
-        },
-      ),
-    );
-  }
-
-  void _showChangePasswordDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => ChangePasswordDialog(
-        onPasswordUpdated: () {
-          // Password update will be handled by the dialog
-        },
-      ),
-    );
-  }
+  // Navigation Methods
 
   Future<void> _updateAccountName(String newName) async {
     final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
@@ -556,8 +544,12 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
   }
 
   void _showEmergencyUnlockDialog() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Emergency Unlock - Coming Soon!')),
+    HapticFeedback.lightImpact();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const EmergencyUnlockSettingsScreen(),
+      ),
     );
   }
 
@@ -660,14 +652,11 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
       // Open the picker directly
       final result = await focusModeService.presentAppPicker();
 
+      // Update blocked apps list with the selected apps
       if (result != null && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('Updated blocked apps (${result.totalSelected} selected)'),
-            backgroundColor: EnhancedSettingsDesignTokens.primaryPurple,
-          ),
-        );
+        // Update the controller with the selected app tokens
+        await appController.updateBlockedApps(result.appTokens);
+        // The UI will automatically update through the controller's notifyListeners
       }
     } catch (e) {
       if (context.mounted) {
@@ -1105,935 +1094,11 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       // Open the picker directly
       final result = await focusModeService.presentAppPicker();
 
+      // Update blocked apps list with the selected apps
       if (result != null && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('Updated blocked apps (${result.totalSelected} selected)'),
-            backgroundColor: EnhancedSettingsDesignTokens.primaryPurple,
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to open app picker')),
-        );
-      }
-    }
-  }
-}
-
-/// Edit Name Dialog Widget
-class EditNameDialog extends StatefulWidget {
-  final String currentName;
-  final Future<void> Function(String) onNameUpdated;
-
-  const EditNameDialog({
-    Key? key,
-    required this.currentName,
-    required this.onNameUpdated,
-  }) : super(key: key);
-
-  @override
-  State<EditNameDialog> createState() => _EditNameDialogState();
-}
-
-class _EditNameDialogState extends State<EditNameDialog> {
-  late TextEditingController _nameController;
-  bool _isLoading = false;
-  String? _errorMessage;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(text: widget.currentName);
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _updateName() async {
-    final name = _nameController.text.trim();
-
-    // Basic validation
-    if (name.isEmpty) {
-      setState(() => _errorMessage = 'Name cannot be empty');
-      return;
-    }
-
-    if (name.length > 50) {
-      setState(() => _errorMessage = 'Name must be less than 50 characters');
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      await widget.onNameUpdated(name);
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Display name updated successfully')),
-      );
-    } catch (e) {
-      setState(() => _errorMessage = 'Failed to update name: $e');
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Container(
-        decoration: const BoxDecoration(
-          borderRadius: BorderRadius.all(Radius.circular(20)),
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0A0A0F),
-              Color(0xFF0F0F18),
-              Color(0xFF12121D),
-            ],
-            stops: [0.0, 0.5, 1.0],
-          ),
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              const Text(
-                'Edit Display Name',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Choose how you want to be addressed',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withOpacity(0.6),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Error message
-              if (_errorMessage != null)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color:
-                        EnhancedSettingsDesignTokens.dangerRed.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: EnhancedSettingsDesignTokens.dangerRed
-                          .withOpacity(0.3),
-                    ),
-                  ),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(
-                      color: EnhancedSettingsDesignTokens.dangerRed,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-
-              if (_errorMessage != null) const SizedBox(height: 16),
-
-              // Name field
-              TextField(
-                controller: _nameController,
-                autofocus: true,
-                style: const TextStyle(color: Colors.white),
-                maxLength: 50,
-                decoration: InputDecoration(
-                  labelText: 'Display Name',
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  counterStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide:
-                        BorderSide(color: Colors.white.withOpacity(0.3)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFF6060FF)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Action buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed:
-                          _isLoading ? null : () => Navigator.of(context).pop(),
-                      child: Text(
-                        'Cancel',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _updateName,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6060FF),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              'Update',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        ),
-      ),
-    );
-  }
-
-  void _showFocusSessionsDialog() async {
-    try {
-      final appController = context.read<PushinAppController>();
-      final focusModeService = appController.focusModeService;
-
-      if (focusModeService == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Screen Time service not available')),
-        );
-        return;
-      }
-
-      // Check authorization first
-      if (focusModeService.authorizationStatus !=
-          AuthorizationStatus.authorized) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Please enable Screen Time access first')),
-        );
-        return;
-      }
-
-      // Open the picker directly
-      final result = await focusModeService.presentAppPicker();
-
-      if (result != null && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('Updated blocked apps (${result.totalSelected} selected)'),
-            backgroundColor: EnhancedSettingsDesignTokens.primaryPurple,
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to open app picker')),
-        );
-      }
-    }
-  }
-}
-
-/// Edit Email Dialog Widget
-class EditEmailDialog extends StatefulWidget {
-  final String currentEmail;
-  final Function(String) onEmailUpdated;
-
-  const EditEmailDialog({
-    Key? key,
-    required this.currentEmail,
-    required this.onEmailUpdated,
-  }) : super(key: key);
-
-  @override
-  State<EditEmailDialog> createState() => _EditEmailDialogState();
-}
-
-class _EditEmailDialogState extends State<EditEmailDialog> {
-  late TextEditingController _emailController;
-  late TextEditingController _passwordController;
-  bool _obscurePassword = true;
-  bool _isLoading = false;
-  String? _errorMessage;
-
-  @override
-  void initState() {
-    super.initState();
-    _emailController = TextEditingController(text: widget.currentEmail);
-    _passwordController = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _updateEmail() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
-
-    // Basic validation
-    if (email.isEmpty || !email.contains("@")) {
-      setState(() => _errorMessage = "Please enter a valid email address");
-      return;
-    }
-
-    if (password.isEmpty) {
-      setState(
-          () => _errorMessage = "Current password is required to change email");
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final authProvider =
-          Provider.of<AuthStateProvider>(context, listen: false);
-      final success = await authProvider.updateProfile(email: email);
-
-      if (success) {
-        widget.onEmailUpdated(email);
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Email updated successfully")),
-        );
-      } else {
-        setState(() => _errorMessage =
-            authProvider.errorMessage ?? "Failed to update email");
-      }
-    } catch (e) {
-      setState(() => _errorMessage = "Failed to update email: $e");
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Container(
-        decoration: const BoxDecoration(
-          borderRadius: BorderRadius.all(Radius.circular(20)),
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0A0A0F),
-              Color(0xFF0F0F18),
-              Color(0xFF12121D),
-            ],
-            stops: [0.0, 0.5, 1.0],
-          ),
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                const Text(
-                  "Edit Email",
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                  ),
-                ),
-              const SizedBox(height: 8),
-              Text(
-                "Enter your new email address",
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withOpacity(0.6),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Error message
-              if (_errorMessage != null)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color:
-                        EnhancedSettingsDesignTokens.dangerRed.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: EnhancedSettingsDesignTokens.dangerRed
-                          .withOpacity(0.3),
-                    ),
-                  ),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(
-                      color: EnhancedSettingsDesignTokens.dangerRed,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-
-              if (_errorMessage != null) const SizedBox(height: 16),
-
-              // Email field
-              TextField(
-                controller: _emailController,
-                autofocus: true,
-                keyboardType: TextInputType.emailAddress,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: "New Email",
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide:
-                        BorderSide(color: Colors.white.withOpacity(0.3)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFF6060FF)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Current password field
-              TextField(
-                controller: _passwordController,
-                obscureText: _obscurePassword,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: "Current Password",
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide:
-                        BorderSide(color: Colors.white.withOpacity(0.3)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFF6060FF)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility
-                          : Icons.visibility_off,
-                      color: Colors.white.withOpacity(0.5),
-                    ),
-                    onPressed: () =>
-                        setState(() => _obscurePassword = !_obscurePassword),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Action buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed:
-                          _isLoading ? null : () => Navigator.of(context).pop(),
-                      child: Text(
-                        "Cancel",
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _updateEmail,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6060FF),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              "Update",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-      ),
-    );
-  }
-
-  void _showFocusSessionsDialog() async {
-    try {
-      final appController = context.read<PushinAppController>();
-      final focusModeService = appController.focusModeService;
-
-      if (focusModeService == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Screen Time service not available')),
-        );
-        return;
-      }
-
-      // Check authorization first
-      if (focusModeService.authorizationStatus !=
-          AuthorizationStatus.authorized) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Please enable Screen Time access first')),
-        );
-        return;
-      }
-
-      // Open the picker directly
-      final result = await focusModeService.presentAppPicker();
-
-      if (result != null && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('Updated blocked apps (${result.totalSelected} selected)'),
-            backgroundColor: EnhancedSettingsDesignTokens.primaryPurple,
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to open app picker')),
-        );
-      }
-    }
-  }
-}
-
-/// Change Password Dialog Widget
-class ChangePasswordDialog extends StatefulWidget {
-  final VoidCallback onPasswordUpdated;
-
-  const ChangePasswordDialog({
-    Key? key,
-    required this.onPasswordUpdated,
-  }) : super(key: key);
-
-  @override
-  State<ChangePasswordDialog> createState() => _ChangePasswordDialogState();
-}
-
-class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
-  final TextEditingController _currentPasswordController =
-      TextEditingController();
-  final TextEditingController _newPasswordController = TextEditingController();
-  final TextEditingController _confirmPasswordController =
-      TextEditingController();
-
-  bool _obscureCurrent = true;
-  bool _obscureNew = true;
-  bool _obscureConfirm = true;
-  bool _isLoading = false;
-  String? _errorMessage;
-
-  @override
-  void dispose() {
-    _currentPasswordController.dispose();
-    _newPasswordController.dispose();
-    _confirmPasswordController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _updatePassword() async {
-    final currentPassword = _currentPasswordController.text;
-    final newPassword = _newPasswordController.text;
-    final confirmPassword = _confirmPasswordController.text;
-
-    // Basic validation
-    if (currentPassword.isEmpty) {
-      setState(() => _errorMessage = "Current password is required");
-      return;
-    }
-
-    if (newPassword.isEmpty) {
-      setState(() => _errorMessage = "New password is required");
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      setState(
-          () => _errorMessage = "New password must be at least 6 characters");
-      return;
-    }
-
-    if (newPassword != confirmPassword) {
-      setState(() => _errorMessage = "New passwords do not match");
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final authProvider =
-          Provider.of<AuthStateProvider>(context, listen: false);
-      final success = await authProvider.updateProfile(password: newPassword);
-
-      if (success) {
-        widget.onPasswordUpdated();
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Password updated successfully")),
-        );
-      } else {
-        setState(() => _errorMessage =
-            authProvider.errorMessage ?? "Failed to update password");
-      }
-    } catch (e) {
-      setState(() => _errorMessage = "Failed to update password: $e");
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Container(
-        decoration: const BoxDecoration(
-          borderRadius: BorderRadius.all(Radius.circular(20)),
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0A0A0F),
-              Color(0xFF0F0F18),
-              Color(0xFF12121D),
-            ],
-            stops: [0.0, 0.5, 1.0],
-          ),
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                const Text(
-                  "Change Password",
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                  ),
-                ),
-              const SizedBox(height: 8),
-              Text(
-                "Enter your new password",
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withOpacity(0.6),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Error message
-              if (_errorMessage != null)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color:
-                        EnhancedSettingsDesignTokens.dangerRed.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: EnhancedSettingsDesignTokens.dangerRed
-                          .withOpacity(0.3),
-                    ),
-                  ),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(
-                      color: EnhancedSettingsDesignTokens.dangerRed,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-
-              if (_errorMessage != null) const SizedBox(height: 16),
-
-              // Current password field
-              TextField(
-                controller: _currentPasswordController,
-                obscureText: _obscureCurrent,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: "Current Password",
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide:
-                        BorderSide(color: Colors.white.withOpacity(0.3)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFF6060FF)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureCurrent ? Icons.visibility : Icons.visibility_off,
-                      color: Colors.white.withOpacity(0.5),
-                    ),
-                    onPressed: () =>
-                        setState(() => _obscureCurrent = !_obscureCurrent),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // New password field
-              TextField(
-                controller: _newPasswordController,
-                obscureText: _obscureNew,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: "New Password",
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide:
-                        BorderSide(color: Colors.white.withOpacity(0.3)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFF6060FF)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureNew ? Icons.visibility : Icons.visibility_off,
-                      color: Colors.white.withOpacity(0.5),
-                    ),
-                    onPressed: () => setState(() => _obscureNew = !_obscureNew),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Confirm password field
-              TextField(
-                controller: _confirmPasswordController,
-                obscureText: _obscureConfirm,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: "Confirm New Password",
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide:
-                        BorderSide(color: Colors.white.withOpacity(0.3)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFF6060FF)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureConfirm ? Icons.visibility : Icons.visibility_off,
-                      color: Colors.white.withOpacity(0.5),
-                    ),
-                    onPressed: () =>
-                        setState(() => _obscureConfirm = !_obscureConfirm),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Action buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed:
-                          _isLoading ? null : () => Navigator.of(context).pop(),
-                      child: Text(
-                        "Cancel",
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _updatePassword,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6060FF),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              "Update",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-      ),
-    );
-  }
-
-  void _showFocusSessionsDialog() async {
-    try {
-      final appController = context.read<PushinAppController>();
-      final focusModeService = appController.focusModeService;
-
-      if (focusModeService == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Screen Time service not available')),
-        );
-        return;
-      }
-
-      // Check authorization first
-      if (focusModeService.authorizationStatus !=
-          AuthorizationStatus.authorized) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Please enable Screen Time access first')),
-        );
-        return;
-      }
-
-      // Open the picker directly
-      final result = await focusModeService.presentAppPicker();
-
-      if (result != null && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('Updated blocked apps (${result.totalSelected} selected)'),
-            backgroundColor: EnhancedSettingsDesignTokens.primaryPurple,
-          ),
-        );
+        // Update the controller with the selected app tokens
+        await appController.updateBlockedApps(result.appTokens);
+        // The UI will automatically update through the controller's notifyListeners
       }
     } catch (e) {
       if (context.mounted) {

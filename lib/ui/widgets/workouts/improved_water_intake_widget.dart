@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'dart:math' as math;
 import '../../theme/workouts_design_tokens.dart';
 import '../../theme/dashboard_design_tokens.dart';
+import '../../screens/WaterIntakeScreen.dart';
+import '../WaterGoalSetupDialog.dart';
 
 // Utility class for water amount formatting
 class WaterAmountFormatter {
@@ -41,6 +43,7 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
     with TickerProviderStateMixin {
   late double _currentAmount = 0.0;
   late double _targetAmount = 2.5;
+  bool _hasCustomGoal = false;
   late AnimationController _fillController;
   late AnimationController _glowController;
   late AnimationController _waveController;
@@ -114,6 +117,8 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
       setState(() {
         _targetAmount = prefs.getDouble('water_daily_goal') ?? 2.5;
         _currentAmount = prefs.getDouble('water_current_amount') ?? 0.0;
+        _hasCustomGoal = prefs
+            .containsKey('water_daily_goal'); // Check if custom goal was set
 
         // Reset if it's a new day
         final lastUpdated = prefs.getString('water_last_updated') ?? '';
@@ -159,30 +164,49 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
     }
   }
 
-  void _showWaterTracker() {
-    showModalBottomSheet(
+  void _showWaterGoalSetup() {
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => WaterTrackerModal(
-        currentAmount: _currentAmount,
-        targetAmount: _targetAmount,
-        onAmountChanged: (amount) {
-          setState(() {
-            _currentAmount = amount;
-            _fillController.forward(from: 0.0);
-          });
-          _saveData();
-        },
-        onTargetChanged: (target) {
-          setState(() {
-            _targetAmount = target;
-          });
-          _saveData();
-        },
-        onWaterAdded: (amount) {
-          _addWaterLog(amount);
-        },
+      builder: (context) => const WaterGoalSetupDialog(),
+    );
+  }
+
+  void _showWaterTracker() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => WaterIntakeScreen(
+          currentAmount: _currentAmount,
+          targetAmount: _targetAmount,
+          onAmountChanged: (amount) {
+            setState(() {
+              _currentAmount = amount;
+              _fillController.forward(from: 0.0);
+            });
+            _saveData();
+          },
+          onTargetChanged: (target) {
+            setState(() {
+              _targetAmount = target;
+            });
+            _saveData();
+          },
+          onWaterAdded: (amount) {
+            _addWaterLog(amount);
+          },
+          onEditGoal: () {
+            Navigator.of(context).pop(); // Close water screen
+            // Show setup dialog after a short delay
+            Future.delayed(const Duration(milliseconds: 200), () {
+              if (context.mounted) {
+                showDialog(
+                  context: context,
+                  builder: (context) => const WaterGoalSetupDialog(),
+                );
+              }
+            });
+          },
+        ),
       ),
     );
   }
@@ -207,7 +231,11 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
       },
       onTapUp: (_) {
         _scaleController.reverse();
-        _showWaterTracker();
+        if (_hasCustomGoal) {
+          _showWaterTracker();
+        } else {
+          _showWaterGoalSetup();
+        }
       },
       onTapCancel: () {
         _scaleController.reverse();
@@ -229,41 +257,45 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
                   width: 1,
                 ),
               ),
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  widget.compact ? 14.0 : 16.0,
-                  widget.compact ? 12.0 : 14.0,
-                  widget.compact ? 14.0 : 16.0,
-                  widget.compact ? 14.0 : 16.0,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: widget.compact ? 55 : 70,
-                            height: widget.compact ? 90 : 110,
-                            child: _buildAnimatedGlass(percentage.toDouble()),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _buildStats(percentage.toDouble()),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              child: _buildWaterContent(percentage.toDouble()),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildWaterContent(double percentage) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        widget.compact ? 14.0 : 16.0,
+        widget.compact ? 12.0 : 14.0,
+        widget.compact ? 14.0 : 16.0,
+        widget.compact ? 14.0 : 16.0,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeader(),
+          const SizedBox(height: 8),
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: widget.compact ? 55 : 70,
+                  height: widget.compact ? 90 : 110,
+                  child: _buildAnimatedGlass(percentage.toDouble()),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildStats(percentage.toDouble()),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -310,7 +342,8 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
 
   Widget _buildAnimatedGlass(double percentage) {
     return AnimatedBuilder(
-      animation: Listenable.merge([_fillController, _glowController, _waveController]),
+      animation:
+          Listenable.merge([_fillController, _glowController, _waveController]),
       builder: (context, child) {
         return CustomPaint(
           painter: WaterGlassPainter(
@@ -326,7 +359,6 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
       },
     );
   }
-
 
   Widget _buildStats(double percentage) {
     return Container(
@@ -430,7 +462,8 @@ class WaterGlassPainter extends CustomPainter {
 
       // Calculate the width of the glass at the current water level
       final waterLevelRatio = waterHeight / glassHeight; // 0.0 to 1.0
-      final waterWidthAtLevel = glassBottomWidth + (glassTopWidth - glassBottomWidth) * waterLevelRatio;
+      final waterWidthAtLevel = glassBottomWidth +
+          (glassTopWidth - glassBottomWidth) * waterLevelRatio;
 
       // Water edges at current level
       final waterLeftX = centerX - waterWidthAtLevel / 2;
@@ -454,8 +487,9 @@ class WaterGlassPainter extends CustomPainter {
 
       for (double i = 0; i <= waterWidthAtLevel; i += 2) {
         final x = waterLeftX + i;
-        final wave = math.sin((i / waterWidthAtLevel) * math.pi * waveFrequency +
-                waveValue * math.pi * 2) *
+        final wave = math.sin(
+                (i / waterWidthAtLevel) * math.pi * waveFrequency +
+                    waveValue * math.pi * 2) *
             waveAmplitude;
         wavePoints.add(Offset(x, topY + wave));
       }

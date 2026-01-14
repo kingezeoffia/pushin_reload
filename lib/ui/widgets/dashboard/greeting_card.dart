@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../services/streak_tracker.dart';
+import 'package:provider/provider.dart';
+import '../../../state/pushin_app_controller.dart';
 
 /// Sleek, minimal GreetingCard matching onboarding aesthetic
 /// - Clean typography
@@ -31,12 +32,6 @@ class _GreetingCardState extends State<GreetingCard>
   // Stats animation
   late AnimationController _statsController;
   late Animation<double> _statsAnimation;
-
-  // Stats data
-  int _currentStreak = 0;
-  int _longestStreak = 0;
-  int _totalWorkouts = 0;
-  bool _isLoadingStats = true;
 
   @override
   void initState() {
@@ -77,8 +72,6 @@ class _GreetingCardState extends State<GreetingCard>
         _statsController.forward();
       }
     });
-
-    _loadStats();
   }
 
   @override
@@ -86,30 +79,6 @@ class _GreetingCardState extends State<GreetingCard>
     _controller.dispose();
     _statsController.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadStats() async {
-    try {
-      final currentStreak = await StreakTracker.getCurrentStreak();
-      final longestStreak = await StreakTracker.getLongestStreak();
-      final totalWorkouts = await StreakTracker.getTotalWorkouts();
-
-      if (mounted) {
-        setState(() {
-          _currentStreak = currentStreak;
-          _longestStreak = longestStreak;
-          _totalWorkouts = totalWorkouts;
-          _isLoadingStats = false;
-        });
-      }
-    } catch (e) {
-      print('Error loading streak stats: $e');
-      if (mounted) {
-        setState(() {
-          _isLoadingStats = false;
-        });
-      }
-    }
   }
 
   String _getGreeting() {
@@ -132,50 +101,53 @@ class _GreetingCardState extends State<GreetingCard>
           ),
         );
       },
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          // Subtle, clean background - matching onboarding/settings
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.08),
-            width: 1,
+      child: GestureDetector(
+        onTap: widget.onNameTap,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            // Subtle, clean background - matching onboarding/settings
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.08),
+              width: 1,
+            ),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Greeting text - clean, elegant
-            _buildGreeting(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Greeting text - clean, elegant
+              _buildGreeting(),
 
-            const SizedBox(height: 14),
+              const SizedBox(height: 14),
 
-            // Motivational message - subtle styling
-            _buildMotivationalMessage(),
+              // Motivational message - subtle styling
+              _buildMotivationalMessage(),
 
-            const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-            // Subtle divider
-            Container(
-              height: 0.5,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.white.withOpacity(0.0),
-                    Colors.white.withOpacity(0.15),
-                    Colors.white.withOpacity(0.0),
-                  ],
+              // Subtle divider
+              Container(
+                height: 0.5,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.white.withOpacity(0.0),
+                      Colors.white.withOpacity(0.15),
+                      Colors.white.withOpacity(0.0),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
-            const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-            // Stats row - clean, minimal
-            _buildStatsRow(),
-          ],
+              // Stats row - clean, minimal
+              _buildStatsRow(),
+            ],
+          ),
         ),
       ),
     );
@@ -227,23 +199,11 @@ class _GreetingCardState extends State<GreetingCard>
   }
 
   Widget _buildStatsRow() {
-    if (_isLoadingStats) {
-      return SizedBox(
-        height: 70,
-        child: Center(
-          child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(
-                Colors.white.withOpacity(0.5),
-              ),
-              strokeWidth: 2,
-            ),
-          ),
-        ),
-      );
-    }
+    // Get stats from controller
+    final controller = context.watch<PushinAppController>();
+    final currentStreak = controller.getCurrentStreak();
+    final longestStreak = controller.getBestStreak();
+    final totalWorkouts = controller.getTotalWorkoutsCompleted();
 
     return AnimatedBuilder(
       animation: _statsAnimation,
@@ -260,24 +220,24 @@ class _GreetingCardState extends State<GreetingCard>
         children: [
           Expanded(
             child: _StatItem(
-              value: _currentStreak,
-              label: 'Current',
+              value: currentStreak,
+              label: 'Day Streak',
               accentColor: const Color(0xFF7C8CFF),
             ),
           ),
           _buildVerticalDivider(),
           Expanded(
             child: _StatItem(
-              value: _longestStreak,
-              label: 'Best',
+              value: longestStreak,
+              label: 'Record',
               accentColor: const Color(0xFFFFB347),
             ),
           ),
           _buildVerticalDivider(),
           Expanded(
             child: _StatItem(
-              value: _totalWorkouts,
-              label: 'Total',
+              value: totalWorkouts,
+              label: 'Workouts',
               accentColor: const Color(0xFF4ADE80),
             ),
           ),

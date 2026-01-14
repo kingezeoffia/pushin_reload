@@ -1381,7 +1381,7 @@ class _EditNameDialogState extends State<EditNameDialog> {
   }
 }
 
-/// Edit Email Dialog Widget
+/// Edit E-Mail Dialog Widget
 class EditEmailDialog extends StatefulWidget {
   final String currentEmail;
   final Function(String) onEmailUpdated;
@@ -1491,7 +1491,7 @@ class _EditEmailDialogState extends State<EditEmailDialog> {
               children: [
                 // Header
                 const Text(
-                  "Edit Email",
+                  "Edit E-Mail",
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w800,

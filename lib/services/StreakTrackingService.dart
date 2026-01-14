@@ -7,6 +7,7 @@ class StreakTrackingService {
   static const String _dateBoxName = 'streak_tracking_date';
   static const String _currentStreakKey = 'current_streak';
   static const String _bestStreakKey = 'best_streak';
+  static const String _totalWorkoutsKey = 'total_workouts';
   static const String _lastWorkoutDateKey = 'last_workout_date';
 
   late Box<int> _streakBox;
@@ -30,6 +31,13 @@ class StreakTrackingService {
 
     int currentStreak = _streakBox.get(_currentStreakKey) ?? 0;
     int bestStreak = _streakBox.get(_bestStreakKey) ?? 0;
+    int totalWorkouts = _streakBox.get(_totalWorkoutsKey) ?? 0;
+
+    // Check if this is a new workout today
+    bool isNewWorkoutToday = true;
+    if (lastWorkoutDateStr == todayKey) {
+      isNewWorkoutToday = false;
+    }
 
     if (lastWorkoutDate == null) {
       // First workout ever
@@ -52,9 +60,15 @@ class StreakTrackingService {
       bestStreak = currentStreak;
     }
 
+    // Increment total workouts only if this is a new workout today
+    if (isNewWorkoutToday) {
+      totalWorkouts += 1;
+    }
+
     // Save updated values
     await _streakBox.put(_currentStreakKey, currentStreak);
     await _streakBox.put(_bestStreakKey, bestStreak);
+    await _streakBox.put(_totalWorkoutsKey, totalWorkouts);
     await _dateBox.put(_lastWorkoutDateKey, todayKey);
   }
 
@@ -66,6 +80,11 @@ class StreakTrackingService {
   /// Get the best streak ever achieved.
   int getBestStreak() {
     return _streakBox.get(_bestStreakKey) ?? 0;
+  }
+
+  /// Get the total number of workouts completed.
+  int getTotalWorkouts() {
+    return _streakBox.get(_totalWorkoutsKey) ?? 0;
   }
 
   /// Check if today's workout is completed.

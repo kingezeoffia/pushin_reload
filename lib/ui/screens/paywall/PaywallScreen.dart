@@ -10,7 +10,7 @@ import '../auth/SignUpScreen.dart';
 /// Paywall Screen - Free Trial with Pro or Advanced plan
 ///
 /// BMAD V6 Spec:
-/// - 3-Day Free Trial (Monthly) / 5-Day Free Trial (Yearly)
+/// - 5-Day Free Trial (Monthly) / 5-Day Free Trial (Yearly)
 /// - Pro — 9.99 €: 3 App Blockages, 3 Workouts
 /// - Advanced — 14.99 €: Unlimited App Blockages, Unlimited Workouts
 /// - GO Steps style design
@@ -177,9 +177,7 @@ class _PaywallScreenState extends State<PaywallScreen>
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    _billingPeriod == 'yearly'
-                                        ? '5-Day Free Trial'
-                                        : '3-Day Free Trial',
+                                    '5-Day Free Trial',
                                     style: const TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w700,
@@ -270,9 +268,7 @@ class _PaywallScreenState extends State<PaywallScreen>
                                 const SizedBox(height: 12),
                                 _TrialStep(
                                   step: '1',
-                                  text: _billingPeriod == 'yearly'
-                                      ? 'Start your free 5-day trial today'
-                                      : 'Start your free 3-day trial today',
+                                  text: 'Start your free 5-day trial today',
                                 ),
                                 const SizedBox(height: 8),
                                 _TrialStep(

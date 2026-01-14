@@ -34,9 +34,11 @@ class WorkoutSelectionScreen extends StatelessWidget {
                 children: [
                   // Header with back button
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     child: IconButton(
-                      icon: Icon(Icons.arrow_back, color: Colors.white.withOpacity(0.8)),
+                      icon: Icon(Icons.arrow_back,
+                          color: Colors.white.withOpacity(0.8)),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ),
@@ -63,7 +65,8 @@ class WorkoutSelectionScreen extends StatelessWidget {
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                           ).createShader(
-                            Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                            Rect.fromLTWH(
+                                0, 0, bounds.width, bounds.height * 1.3),
                           ),
                           blendMode: BlendMode.srcIn,
                           child: const Text(
@@ -102,9 +105,11 @@ class WorkoutSelectionScreen extends StatelessWidget {
                           _OnboardingWorkoutCard(
                             icon: Icons.fitness_center,
                             title: 'Push-Ups',
-                            subtitle: controller.getWorkoutRewardDescription('push-ups', 20),
+                            subtitle: controller.getWorkoutRewardDescription(
+                                'push-ups', 20),
                             isLocked: false,
-                            onTap: () => _startWorkout(context, controller, 'push-ups', 20),
+                            onTap: () => _startWorkout(
+                                context, controller, 'push-ups', 20),
                           ),
 
                           const SizedBox(height: 12),
@@ -113,11 +118,14 @@ class WorkoutSelectionScreen extends StatelessWidget {
                           _OnboardingWorkoutCard(
                             icon: Icons.airline_seat_legroom_normal,
                             title: 'Squats',
-                            subtitle: planTier == 'free' ? 'Pro Plan' : '30 reps = 15 minutes',
+                            subtitle: planTier == 'free'
+                                ? 'Pro Plan'
+                                : '30 reps = 15 minutes',
                             isLocked: planTier == 'free',
                             onTap: () => planTier == 'free'
                                 ? _showUpgradeDialog(context, 'Squats', 'Pro')
-                                : _startWorkout(context, controller, 'squats', 30),
+                                : _startWorkout(
+                                    context, controller, 'squats', 30),
                           ),
 
                           const SizedBox(height: 12),
@@ -126,11 +134,15 @@ class WorkoutSelectionScreen extends StatelessWidget {
                           _OnboardingWorkoutCard(
                             icon: Icons.self_improvement,
                             title: 'Plank',
-                            subtitle: planTier != 'advanced' ? 'Advanced Plan' : '60 sec = 15 minutes',
+                            subtitle: planTier != 'advanced'
+                                ? 'Advanced Plan'
+                                : '60 sec = 15 minutes',
                             isLocked: planTier != 'advanced',
                             onTap: () => planTier != 'advanced'
-                                ? _showUpgradeDialog(context, 'Plank', 'Advanced')
-                                : _startWorkout(context, controller, 'plank', 60),
+                                ? _showUpgradeDialog(
+                                    context, 'Plank', 'Advanced')
+                                : _startWorkout(
+                                    context, controller, 'plank', 60),
                           ),
 
                           const SizedBox(height: 12),
@@ -139,11 +151,15 @@ class WorkoutSelectionScreen extends StatelessWidget {
                           _OnboardingWorkoutCard(
                             icon: Icons.directions_run,
                             title: 'Jumping Jacks',
-                            subtitle: planTier == 'free' ? 'Pro Plan' : '40 reps = 16 minutes',
+                            subtitle: planTier == 'free'
+                                ? 'Pro Plan'
+                                : '40 reps = 16 minutes',
                             isLocked: planTier == 'free',
                             onTap: () => planTier == 'free'
-                                ? _showUpgradeDialog(context, 'Jumping Jacks', 'Pro')
-                                : _startWorkout(context, controller, 'jumping-jacks', 40),
+                                ? _showUpgradeDialog(
+                                    context, 'Jumping Jacks', 'Pro')
+                                : _startWorkout(
+                                    context, controller, 'jumping-jacks', 40),
                           ),
 
                           const SizedBox(height: 12),
@@ -152,11 +168,15 @@ class WorkoutSelectionScreen extends StatelessWidget {
                           _OnboardingWorkoutCard(
                             icon: Icons.sports_gymnastics,
                             title: 'Burpees',
-                            subtitle: planTier != 'advanced' ? 'Advanced Plan' : '15 reps = 12 minutes',
+                            subtitle: planTier != 'advanced'
+                                ? 'Advanced Plan'
+                                : '15 reps = 12 minutes',
                             isLocked: planTier != 'advanced',
                             onTap: () => planTier != 'advanced'
-                                ? _showUpgradeDialog(context, 'Burpees', 'Advanced')
-                                : _startWorkout(context, controller, 'burpees', 15),
+                                ? _showUpgradeDialog(
+                                    context, 'Burpees', 'Advanced')
+                                : _startWorkout(
+                                    context, controller, 'burpees', 15),
                           ),
 
                           const SizedBox(height: 24),
@@ -164,7 +184,8 @@ class WorkoutSelectionScreen extends StatelessWidget {
                           // Upgrade CTA for free users
                           if (planTier == 'free')
                             _OnboardingUpgradeCTA(
-                              onTap: () => Navigator.pushNamed(context, '/paywall'),
+                              onTap: () =>
+                                  Navigator.pushNamed(context, '/paywall'),
                             ),
 
                           const SizedBox(height: 32),

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../domain/models/workout_mode.dart';
+import '../../../services/WorkoutRewardCalculator.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import '../workout/RepCounterScreen.dart';
+import '../workout/CameraRepCounterScreen.dart';
 
 /// Workout Type Selection Screen
 ///
@@ -30,7 +31,7 @@ class _WorkoutTypeSelectionScreenState
     extends State<WorkoutTypeSelectionScreen> {
   String? _selectedWorkout;
 
-  // Workouts list - only Push-Ups is unlocked for now
+  // Workouts list - all unlocked
   final List<_WorkoutInfo> _workouts = [
     _WorkoutInfo(
       name: 'Push-Ups',
@@ -42,25 +43,25 @@ class _WorkoutTypeSelectionScreenState
       name: 'Squats',
       iconPath: 'assets/icons/squats.png',
       fallbackIcon: Icons.airline_seat_legroom_normal,
-      isLocked: true,
+      isLocked: false,
     ),
     _WorkoutInfo(
       name: 'Glute Bridge',
       iconPath: 'assets/icons/glute_bridge.png',
       fallbackIcon: Icons.accessibility_new,
-      isLocked: true,
+      isLocked: false,
     ),
     _WorkoutInfo(
       name: 'Plank',
       iconPath: 'assets/icons/plank.png',
       fallbackIcon: Icons.self_improvement,
-      isLocked: true,
+      isLocked: false,
     ),
     _WorkoutInfo(
       name: 'Jumping Jacks',
       iconPath: 'assets/icons/jumping_jacks.png',
       fallbackIcon: Icons.directions_run,
-      isLocked: true,
+      isLocked: false,
     ),
   ];
 
@@ -69,14 +70,25 @@ class _WorkoutTypeSelectionScreenState
 
     HapticFeedback.mediumImpact();
 
+    // Calculate appropriate target value using the sophisticated reward calculator
+    final calculator = WorkoutRewardCalculator();
+    final targetSeconds = widget.desiredScreenTime * 60; // Convert minutes to seconds
+
+    final targetValue = calculator.calculateRequiredReps(
+      workoutType: _selectedWorkout!.toLowerCase().replaceAll(' ', '-'),
+      targetSeconds: targetSeconds,
+      mode: widget.selectedMode,
+    );
+
     Navigator.push(
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            RepCounterScreen(
+            CameraRepCounterScreen(
           workoutType: _selectedWorkout!.toLowerCase().replaceAll(' ', '-'),
-          targetReps: widget.requiredReps,
+          targetReps: targetValue, // Uses proper calculation for each workout type
           desiredScreenTimeMinutes: widget.desiredScreenTime,
+          workoutMode: widget.selectedMode.name,
         ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const curve = Curves.easeOutCubic;
@@ -86,6 +98,39 @@ class _WorkoutTypeSelectionScreenState
         transitionDuration: const Duration(milliseconds: 300),
       ),
     );
+  }
+
+  /// Get appropriate workout description based on selected workout
+  String _getWorkoutDescription() {
+    if (_selectedWorkout == null) {
+      return 'Choose a workout to unlock ${widget.desiredScreenTime} min of screen time';
+    }
+
+    // Calculate the actual target for the selected workout
+    final calculator = WorkoutRewardCalculator();
+    final targetSeconds = widget.desiredScreenTime * 60;
+    final targetValue = calculator.calculateRequiredReps(
+      workoutType: _selectedWorkout!.toLowerCase().replaceAll(' ', '-'),
+      targetSeconds: targetSeconds,
+      mode: widget.selectedMode,
+    );
+
+    // Check if this is a time-based workout
+    final isTimeBased = _selectedWorkout!.toLowerCase() == 'plank';
+
+    if (isTimeBased) {
+      // Format time for planks
+      final minutes = targetValue ~/ 60;
+      final seconds = targetValue % 60;
+      final timeString = minutes > 0
+          ? '${minutes}m ${seconds}s'
+          : '${seconds}s';
+
+      return 'Hold for $timeString to unlock ${widget.desiredScreenTime} min';
+    } else {
+      // Rep-based workout
+      return 'Complete $targetValue ${_selectedWorkout!} to unlock ${widget.desiredScreenTime} min';
+    }
   }
 
   @override
@@ -152,7 +197,7 @@ class _WorkoutTypeSelectionScreenState
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Complete ${widget.requiredReps} reps to unlock ${widget.desiredScreenTime} min',
+                      _getWorkoutDescription(),
                       style: TextStyle(
                         fontSize: 15,
                         color: Colors.white.withOpacity(0.6),
@@ -228,53 +273,13 @@ class _WorkoutTypeSelectionScreenState
                 ),
               ),
 
-              // Summary & Start button
+              // Start button
               Container(
                 padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    // Summary row
-                    if (_selectedWorkout != null)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: widget.selectedMode.color.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: widget.selectedMode.color.withOpacity(0.25),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.timer_outlined,
-                              color: widget.selectedMode.color,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                '${widget.requiredReps} $_selectedWorkout → ${widget.desiredScreenTime} min',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white.withOpacity(0.9),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    // Start button
-                    _StartButton(
-                      enabled: _selectedWorkout != null,
-                      modeColor: widget.selectedMode.color,
-                      onTap: _startWorkout,
-                    ),
-                  ],
+                child: _StartButton(
+                  enabled: _selectedWorkout != null,
+                  modeColor: widget.selectedMode.color,
+                  onTap: _startWorkout,
                 ),
               ),
             ],

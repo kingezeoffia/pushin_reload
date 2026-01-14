@@ -1,0 +1,110 @@
+    final startY = size.height * 0.1;
+
+    glassPath.moveTo(centerX - glassWidth / 2, startY);
+    glassPath.lineTo(centerX - glassWidth / 2 + 10, startY + glassHeight);
+    glassPath.lineTo(centerX + glassWidth / 2 - 10, startY + glassHeight);
+    glassPath.lineTo(centerX + glassWidth / 2, startY);
+
+    canvas.drawPath(glassPath, paint);
+
+    // Water fill
+    final currentFill = fillPercentage * animationValue / 100;
+    if (currentFill > 0) {
+      final waterPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            waterColor.withOpacity(0.6),
+            waterColor,
+          ],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+      final waterHeight = glassHeight * currentFill;
+      final waterPath = Path();
+
+      final bottomY = startY + glassHeight;
+      final topY = bottomY - waterHeight;
+
+      // Calculate water edge positions that follow the glass shape
+      // Glass gets narrower towards bottom by 10px on each side (20px total)
+      final glassTopWidth = glassWidth;
+      final glassBottomWidth = glassWidth - 20;
+
+      // Calculate the width of the glass at the current water level
+      final waterLevelRatio = waterHeight / glassHeight; // 0.0 to 1.0
+      final waterWidthAtLevel = glassBottomWidth + (glassTopWidth - glassBottomWidth) * waterLevelRatio;
+
+      // Water edges at current level
+      final waterLeftX = centerX - waterWidthAtLevel / 2;
+      final waterRightX = centerX + waterWidthAtLevel / 2;
+
+      // Bottom reference points (always at glass bottom width)
+      final waterBottomWidth = glassBottomWidth;
+      final waterBottomLeftX = centerX - waterBottomWidth / 2;
+      final waterBottomRightX = centerX + waterBottomWidth / 2;
+
+      // Start from bottom left
+      waterPath.moveTo(waterBottomLeftX, bottomY);
+
+      // Draw left edge following glass slant to water level
+      waterPath.lineTo(waterLeftX, topY);
+
+      // Add wave effect across the water surface at current level
+      final waveAmplitude = 3.0;
+      final waveFrequency = 2.0;
+      final wavePoints = <Offset>[];
+
+      for (double i = 0; i <= waterWidthAtLevel; i += 2) {
+        final x = waterLeftX + i;
+        final wave = math.sin((i / waterWidthAtLevel) * math.pi * waveFrequency +
+                waveValue * math.pi * 2) *
+            waveAmplitude;
+        wavePoints.add(Offset(x, topY + wave));
+      }
+
+      // Add all wave points
+      for (final point in wavePoints) {
+        waterPath.lineTo(point.dx, point.dy);
+      }
+
+      // Draw right edge following glass slant back to bottom
+      waterPath.lineTo(waterRightX, topY);
+      waterPath.lineTo(waterBottomRightX, bottomY);
+
+      // Close the path
+      waterPath.close();
+
+      canvas.drawPath(waterPath, waterPaint);
+
+      // Glow effect
+      if (currentFill > 0.5) {
+        final glowPaint = Paint()
+          ..color = waterColor.withOpacity(0.2 * glowValue)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15);
+        canvas.drawPath(waterPath, glowPaint);
+      }
+
+      // Reflection/highlight
+      final highlightPaint = Paint()
+        ..color = Colors.white.withOpacity(0.3)
+        ..style = PaintingStyle.fill;
+
+      final highlightPath = Path();
+      highlightPath.addOval(Rect.fromLTWH(
+        centerX - glassWidth / 4,
+        topY + 10,
+        glassWidth / 6,
+        waterHeight / 3,
+      ));
+      canvas.drawPath(highlightPath, highlightPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(WaterGlassPainter oldDelegate) =>
+      oldDelegate.fillPercentage != fillPercentage ||
+      oldDelegate.animationValue != animationValue ||
+      oldDelegate.glowValue != glowValue ||
+      oldDelegate.waveValue != waveValue;
+}

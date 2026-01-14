@@ -8,7 +8,7 @@ import '../../../state/auth_state_provider.dart';
 /// Step 4: Emergency Unlock
 ///
 /// BMAD V6 Spec:
-/// - Allowed once per day
+/// - Allowed three times per day
 /// - Grants 30 minutes of unlocked screen time
 /// - After use, the button becomes disabled until the next day
 class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
@@ -151,8 +151,8 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
                   children: [
                     _RuleItem(
                       icon: Icons.today,
-                      title: 'Once per day',
-                      description: 'Emergency unlock 1x a day',
+                      title: 'Three times per day',
+                      description: 'Emergency unlock 3x a day',
                     ),
                     const SizedBox(height: 16),
                     _RuleItem(
@@ -173,10 +173,14 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
               const Spacer(),
 
               // Continue Button
-              Padding(
-                padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
-                child: _ContinueButton(
-                  onTap: () async {
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: MediaQuery.of(context).padding.bottom + 8,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: _ContinueButton(
+                    onTap: () async {
                     try {
                       debugPrint('🎯 Complete Setup button pressed - using canonical completeOnboardingFlow()');
 
@@ -204,6 +208,7 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
                   },
                 ),
               ),
+            ),
             ],
           ),
         ),

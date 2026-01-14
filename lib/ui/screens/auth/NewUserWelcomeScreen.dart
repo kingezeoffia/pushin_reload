@@ -173,7 +173,7 @@ class NewUserWelcomeScreen extends StatelessWidget {
 
               // Continue Button
               Padding(
-                padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+                padding: const EdgeInsets.all(32),
                 child: _ContinueButton(
                   onTap: () => _handleContinue(context),
                 ),

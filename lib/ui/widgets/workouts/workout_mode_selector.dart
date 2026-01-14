@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../animations/liquid_animation_utils.dart';
+import '../../theme/pushin_theme.dart';
 import '../../../domain/models/workout_mode.dart';
 
 /// Premium workout mode selector with liquid motion animations
@@ -36,14 +37,12 @@ class _WorkoutModeSelectorState extends State<WorkoutModeSelector>
   Widget build(BuildContext context) {
     return RepaintBoundary(
       child: Row(
-        children: WorkoutMode.values.map((mode) {
-          final index = WorkoutMode.values.indexOf(mode);
+        children: WorkoutMode.values.asMap().entries.map((entry) {
+          final index = entry.key;
+          final mode = entry.value;
           return Expanded(
             child: Padding(
-              padding: EdgeInsets.only(
-                left: index == 0 ? 0 : 6,
-                right: index == 2 ? 0 : 6,
-              ),
+              padding: EdgeInsets.symmetric(horizontal: 8),
               child: LiquidModeCard(
                 mode: mode,
                 isSelected: widget.selectedMode == mode,
@@ -99,10 +98,6 @@ class _LiquidModeCardState extends State<LiquidModeCard>
   late Animation<double> _titleAnimation;
   late Animation<double> _subtitleAnimation;
 
-  // Morphing border animation
-  late Animation<double> _borderAnimation;
-  late Animation<double> _shadowAnimation;
-
   @override
   void initState() {
     super.initState();
@@ -110,6 +105,7 @@ class _LiquidModeCardState extends State<LiquidModeCard>
 
     if (widget.isSelected) {
       _selectionController.value = 1.0;
+      _staggerController.value = 1.0; // Set text to final position immediately
       _glowController.repeat(reverse: true);
     }
   }
@@ -129,21 +125,6 @@ class _LiquidModeCardState extends State<LiquidModeCard>
       curve: curve,
       reverseCurve: Curves.easeInCubic,
     );
-
-    // Morphing border
-    _borderAnimation = Tween<double>(
-      begin: 1.0,
-      end: 2.0,
-    ).animate(_selectionAnimation);
-
-    // Shadow intensity
-    _shadowAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _selectionController,
-      curve: const Interval(0.0, 0.7, curve: Curves.easeOut),
-    ));
 
     // Press animation
     _pressController = AnimationController(
@@ -313,61 +294,27 @@ class _LiquidModeCardState extends State<LiquidModeCard>
         final progress = _selectionAnimation.value;
         final mode = widget.mode;
 
-        // Interpolate colors
-        final bgColor = Color.lerp(
-          Colors.white.withValues(alpha: 0.05),
-          mode.color.withValues(alpha: 0.15),
-          progress,
-        )!;
-
-        final borderColor = Color.lerp(
-          Colors.white.withValues(alpha: 0.08),
-          mode.color.withValues(alpha: 0.5),
-          progress,
-        )!;
-
         return Container(
+          width: double.infinity,
           height: 140,
           decoration: BoxDecoration(
-            // Gradient background with morphing
             gradient: widget.isSelected
                 ? LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      mode.gradient.colors[0].withValues(alpha: progress),
-                      mode.gradient.colors[1].withValues(alpha: progress * 0.8),
+                      mode.gradient.colors[0],
+                      mode.gradient.colors[1],
                     ],
                   )
                 : null,
-            color: widget.isSelected ? null : bgColor,
-            borderRadius: BorderRadius.circular(
-              24 + (progress * 4), // Subtle radius morph
+            color: widget.isSelected ? null : Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(28),
+            border: widget.isSelected ? null : Border.all(
+              color: Colors.white.withValues(alpha: 0.08),
+              width: 1,
             ),
-            border: Border.all(
-              color: borderColor,
-              width: _borderAnimation.value,
-            ),
-            boxShadow: [
-              // Mode-specific glow shadow
-              if (widget.isSelected && !reducedMotion)
-                BoxShadow(
-                  color: mode.color.withValues(
-                    alpha: 0.3 * _shadowAnimation.value * _glowAnimation.value,
-                  ),
-                  blurRadius: 20 + (10 * _glowAnimation.value),
-                  spreadRadius: 0,
-                  offset: const Offset(0, 8),
-                ),
-              // Base shadow
-              BoxShadow(
-                color: Colors.black.withValues(
-                  alpha: 0.2 * _shadowAnimation.value,
-                ),
-                blurRadius: 15,
-                offset: const Offset(0, 5),
-              ),
-            ],
+            boxShadow: widget.isSelected ? PushinTheme.cardShadow : null,
           ),
           child: _buildContent(progress, reducedMotion),
         );
@@ -378,28 +325,6 @@ class _LiquidModeCardState extends State<LiquidModeCard>
   Widget _buildContent(double progress, bool reducedMotion) {
     return Stack(
       children: [
-        // Animated gradient overlay for selected state
-        if (widget.isSelected)
-          Positioned.fill(
-            child: AnimatedOpacity(
-              opacity: progress * 0.5,
-              duration: const Duration(milliseconds: 200),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24 + (progress * 4)),
-                  gradient: RadialGradient(
-                    center: Alignment.topLeft,
-                    radius: 1.5,
-                    colors: [
-                      Colors.white.withValues(alpha: 0.4),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-
         // Main content with staggered animations
         Center(
           child: Column(
@@ -426,7 +351,8 @@ class _LiquidModeCardState extends State<LiquidModeCard>
     return AnimatedBuilder(
       animation: Listenable.merge([_iconAnimation, _scaleAnimation]),
       builder: (context, child) {
-        final iconScale = reducedMotion
+        // Only apply stagger animation to selected cards
+        final iconScale = (reducedMotion || !widget.isSelected)
             ? 1.0
             : 0.8 + (0.2 * _iconAnimation.value);
 
@@ -442,15 +368,6 @@ class _LiquidModeCardState extends State<LiquidModeCard>
                   ? Colors.white.withValues(alpha: 0.2 * progress)
                   : widget.mode.color.withValues(alpha: 0.15),
               shape: BoxShape.circle,
-              boxShadow: widget.isSelected
-                  ? [
-                      BoxShadow(
-                        color: widget.mode.color.withValues(alpha: 0.3 * progress),
-                        blurRadius: 12,
-                        spreadRadius: 0,
-                      ),
-                    ]
-                  : null,
             ),
             child: AnimatedSwitcher(
               duration: ModeDurations.crossfade,
@@ -480,7 +397,8 @@ class _LiquidModeCardState extends State<LiquidModeCard>
     return AnimatedBuilder(
       animation: _titleAnimation,
       builder: (context, child) {
-        final offset = reducedMotion
+        // Only apply stagger animation to selected cards
+        final offset = (reducedMotion || !widget.isSelected)
             ? Offset.zero
             : Offset(0, 8 * (1 - _titleAnimation.value));
 
@@ -507,7 +425,8 @@ class _LiquidModeCardState extends State<LiquidModeCard>
     return AnimatedBuilder(
       animation: _subtitleAnimation,
       builder: (context, child) {
-        final offset = reducedMotion
+        // Only apply stagger animation to selected cards
+        final offset = (reducedMotion || !widget.isSelected)
             ? Offset.zero
             : Offset(0, 6 * (1 - _subtitleAnimation.value));
 

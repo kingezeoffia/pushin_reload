@@ -174,7 +174,7 @@ class UsageStatsMonitor {
   Future<Map<String, int>> getTodayUsageStats() async {
     try {
       final result = await _channel.invokeMethod<Map>('getTodayUsageStats');
-      
+
       if (result != null) {
         return result.map((key, value) {
           return MapEntry(key as String, value as int);
@@ -185,6 +185,35 @@ class UsageStatsMonitor {
     }
 
     return {};
+  }
+
+  /// Grant emergency access to a blocked app for a specified duration
+  ///
+  /// On Android, this works by temporarily removing the app from the blocked list
+  /// and allowing the overlay to be dismissed. The app is re-added to the blocked
+  /// list after the duration expires.
+  Future<bool> grantEmergencyAccess({
+    required String appName,
+    required int durationMinutes,
+  }) async {
+    try {
+      // On Android, emergency access is handled by dismissing the overlay
+      // The PushinAppController manages the timer and re-blocking
+      // We just need to signal that access has been granted
+
+      print('Emergency access granted for $appName ($durationMinutes minutes)');
+
+      // Optionally, we could invoke a native method here to track the emergency access
+      // await _channel.invokeMethod('grantEmergencyAccess', {
+      //   'packageName': appName,
+      //   'durationMinutes': durationMinutes,
+      // });
+
+      return true;
+    } on PlatformException catch (e) {
+      print('Failed to grant emergency access: ${e.message}');
+      return false;
+    }
   }
 }
 

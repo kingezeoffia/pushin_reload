@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
+import '../../widgets/pill_navigation_bar.dart';
 import '../../theme/pushin_theme.dart';
 import '../../../state/pushin_app_controller.dart';
 import '../../../state/auth_state_provider.dart';
@@ -79,6 +80,9 @@ class _HowItWorksBlockAppsScreenState extends State<HowItWorksBlockAppsScreen> {
       final selectionResult = await focusModeService.presentAppPicker();
 
       if (selectionResult != null && selectionResult.totalSelected > 0) {
+        // Save the selected apps to the controller
+        await appController.updateBlockedApps(selectionResult.appTokens);
+
         // Permission granted and apps selected - advance onboarding
         final authProvider = context.read<AuthStateProvider>();
         authProvider.advanceOnboardingStep();
@@ -118,95 +122,151 @@ class _HowItWorksBlockAppsScreenState extends State<HowItWorksBlockAppsScreen> {
     }
   }
 
+  Widget _buildBottomSection() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Subtitle text - above button
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: SizedBox(
+            width: double.infinity,
+            child: Text(
+              'Grant Screen Time access and choose apps to block',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.white.withOpacity(0.6),
+                letterSpacing: -0.1,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+
+        // Main CTA Button
+        _AllowAndSelectButton(
+          isLoading: _isLoading,
+          errorMessage: _errorMessage,
+          onTap: _handleAllowAndSelectApps,
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: GOStepsBackground(
         blackRatio: 0.25,
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Step Indicator
-              Padding(
-                padding: const EdgeInsets.only(right: 16, top: 8),
-                child: Row(
-                  children: [
-                    const Spacer(),
-                    _StepIndicator(currentStep: 1, totalSteps: 5),
-                  ],
-                ),
-              ),
-
-              // Consistent spacing with other screens
-              SizedBox(height: MediaQuery.of(context).size.height * 0.04),
-
-              // Heading - consistent positioning
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Block',
-                      style: TextStyle(
-                        fontSize: 44,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        height: 1.05,
-                        letterSpacing: -1,
-                      ),
+        child: Stack(
+          children: [
+            SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Step Indicator
+                  Padding(
+                    padding: const EdgeInsets.only(right: 16, top: 8),
+                    child: Row(
+                      children: [
+                        const Spacer(),
+                        _StepIndicator(currentStep: 1, totalSteps: 5),
+                      ],
                     ),
-                    ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ).createShader(
-                        Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
-                      ),
-                      blendMode: BlendMode.srcIn,
-                      child: Text(
-                        'Distracting Apps',
-                        style: TextStyle(
-                          fontSize: 44,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          height: 1.1,
-                          letterSpacing: -0.5,
-                          decoration: TextDecoration.none,
-                          fontFamily: 'Inter', // Explicit font family
+                  ),
+
+                  // Consistent spacing with other screens
+                  SizedBox(height: MediaQuery.of(context).size.height * 0.04),
+
+                  // Heading - consistent positioning
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Block',
+                          style: TextStyle(
+                            fontSize: 44,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            height: 1.05,
+                            letterSpacing: -1,
+                          ),
                         ),
-                      ),
+                        ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ).createShader(
+                            Rect.fromLTWH(
+                                0, 0, bounds.width, bounds.height * 1.3),
+                          ),
+                          blendMode: BlendMode.srcIn,
+                          child: Text(
+                            'Distracting Apps',
+                            style: TextStyle(
+                              fontSize: 44,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              height: 1.1,
+                              letterSpacing: -0.5,
+                              decoration: TextDecoration.none,
+                              fontFamily: 'Inter', // Explicit font family
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Choose which apps to block before workout',
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: Colors.white.withOpacity(0.6),
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Choose which apps to block before workout',
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Colors.white.withOpacity(0.6),
-                        letterSpacing: -0.2,
-                      ),
+                  ),
+
+                  SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+
+                  // Value Proposition Points
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
+                      children: [
+                        _ValuePoint(
+                          icon: Icons.block,
+                          text: 'Block social media and games',
+                        ),
+                        SizedBox(height: 20),
+                        _ValuePoint(
+                          icon: Icons.psychology,
+                          text: 'Stay focused on what matters',
+                        ),
+                        SizedBox(height: 20),
+                        _ValuePoint(
+                          icon: Icons.phone_android,
+                          text: 'Break the scroll habit',
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
 
-              // Spacer to center the button
-              const Spacer(),
-
-              // Main CTA Button
-              Padding(
-                padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
-                child: _AllowAndSelectButton(
-                  isLoading: _isLoading,
-                  errorMessage: _errorMessage,
-                  onTap: _handleAllowAndSelectApps,
-                ),
+                  // Spacer to push content up (button will be positioned at bottom)
+                  const Spacer(),
+                ],
               ),
-            ],
-          ),
+            ),
+
+            // Bottom section with button and subtitle
+            BottomActionContainer(
+              child: _buildBottomSection(),
+            ),
+          ],
         ),
       ),
     );
@@ -285,18 +345,6 @@ class _AllowAndSelectButton extends StatelessWidget {
             ),
           ),
         ),
-
-        // Subtitle
-        const SizedBox(height: 16),
-        Text(
-          'Grant Screen Time access and choose which apps to block',
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.white.withOpacity(0.6),
-            letterSpacing: -0.1,
-          ),
-          textAlign: TextAlign.center,
-        ),
       ],
     );
   }
@@ -330,4 +378,46 @@ class _StepIndicator extends StatelessWidget {
   }
 }
 
+/// Value proposition point widget
+class _ValuePoint extends StatelessWidget {
+  final IconData icon;
+  final String text;
 
+  const _ValuePoint({
+    required this.icon,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(
+            icon,
+            color: const Color(0xFF8080FF),
+            size: 24,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w500,
+              color: Colors.white.withOpacity(0.9),
+              letterSpacing: -0.2,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

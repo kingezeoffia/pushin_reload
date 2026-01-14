@@ -130,7 +130,7 @@ class FirstWelcomeScreen extends StatelessWidget {
 
               // Fixed bottom buttons - choice-based
               Padding(
-                padding: const EdgeInsets.all(32),
+                padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
                 child: Column(
                   children: [
                     // Sign Up Button

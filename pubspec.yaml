@@ -43,10 +43,22 @@ dependencies:
   # Camera for workout detection
   camera: ^0.10.5+9
 
+  # ML Kit Pose Detection (Android + iOS) - latest version
+  google_mlkit_pose_detection: ^0.14.0
+
+  # Camera permissions
+  permission_handler: ^11.0.1
+
   # Authentication
   sign_in_with_apple: ^5.0.0
   google_sign_in: ^6.1.0
   flutter_secure_storage: ^9.0.0
+
+  # Local Notifications
+  flutter_local_notifications: ^17.0.0
+
+  # Apple Health Integration
+  health: ^11.0.0
 
 dev_dependencies:
   flutter_test:

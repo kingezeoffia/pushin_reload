@@ -18,4 +18,7 @@ abstract class UnlockService {
 
   /// Get current unlock session (null if none active)
   UnlockSession? getCurrentSession();
+
+  /// Extend current unlock session by additional seconds
+  void extendUnlockSession(int additionalSeconds, DateTime now);
 }

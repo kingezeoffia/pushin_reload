@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,6 +11,8 @@ import 'services/DailyUsageTracker.dart';
 import 'services/MockAppBlockingService.dart';
 import 'services/MockUnlockService.dart';
 import 'services/MockWorkoutTrackingService.dart';
+import 'services/FocusModeService.dart';
+import 'services/ShieldNotificationMonitor.dart';
 
 /// PUSHIN MVP - Production-Ready Main Entry Point
 ///
@@ -57,8 +60,84 @@ void main() async {
 }
 
 /// Root widget containing the ONLY MaterialApp
-class PushinApp extends StatelessWidget {
+/// Handles lifecycle events to check for pending workout navigation from shield
+class PushinApp extends StatefulWidget {
   const PushinApp({super.key});
+
+  @override
+  State<PushinApp> createState() => _PushinAppState();
+}
+
+class _PushinAppState extends State<PushinApp> with WidgetsBindingObserver {
+  FocusModeService? _focusModeService;
+  ShieldNotificationMonitor? _shieldNotificationMonitor;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    // Initialize services for iOS
+    if (Platform.isIOS) {
+      _focusModeService = FocusModeService.forIOS();
+      _shieldNotificationMonitor = ShieldNotificationMonitor();
+
+      // Initialize notification monitor
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _shieldNotificationMonitor?.initialize();
+        _shieldNotificationMonitor?.startMonitoring();
+        _checkPendingWorkoutNavigation();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _shieldNotificationMonitor?.stopMonitoring();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    // Manage notification monitoring based on app state
+    if (Platform.isIOS) {
+      switch (state) {
+        case AppLifecycleState.resumed:
+          debugPrint('📱 App resumed - resuming notification monitoring');
+          _shieldNotificationMonitor?.startMonitoring();
+          _checkPendingWorkoutNavigation();
+          break;
+        case AppLifecycleState.paused:
+        case AppLifecycleState.inactive:
+          debugPrint('📱 App inactive - pausing notification monitoring');
+          _shieldNotificationMonitor?.stopMonitoring();
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  Future<void> _checkPendingWorkoutNavigation() async {
+    if (_focusModeService == null) return;
+
+    try {
+      final shouldNavigate = await _focusModeService!.checkPendingWorkoutNavigation();
+      debugPrint('📱 Pending workout navigation: $shouldNavigate');
+
+      if (shouldNavigate && mounted) {
+        // Signal the app controller to navigate to workout
+        debugPrint('🏋️ Signaling workout navigation from shield action');
+        final controller = Provider.of<PushinAppController>(context, listen: false);
+        controller.setPendingWorkoutNavigation(true);
+      }
+    } catch (e) {
+      debugPrint('Error checking pending workout navigation: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

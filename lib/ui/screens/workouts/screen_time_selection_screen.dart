@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../domain/models/workout_mode.dart';
+import '../../../services/WorkoutRewardCalculator.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import 'workout_type_selection_screen.dart';
@@ -25,9 +26,6 @@ class ScreenTimeSelectionScreen extends StatefulWidget {
 class _ScreenTimeSelectionScreenState extends State<ScreenTimeSelectionScreen> {
   double _selectedMinutes = 15.0;
 
-  // Quick preset options
-  final List<int> _presets = [15, 30, 45, 60];
-
   String get _durationText {
     final minutes = _selectedMinutes.round();
     if (minutes == 60) {
@@ -36,12 +34,20 @@ class _ScreenTimeSelectionScreenState extends State<ScreenTimeSelectionScreen> {
     return '$minutes min';
   }
 
-  /// Calculate required reps based on desired screen time and mode multiplier
+  /// Calculate required reps based on desired screen time and mode
+  /// Uses push-ups as baseline workout type for generic calculation
   int _calculateRequiredReps(int desiredMinutes) {
-    // Cozy (0.7x) = fewer reps needed = easier
-    // Normal (1.0x) = standard
-    // Tuff (1.5x) = more reps needed = harder
-    return (desiredMinutes * widget.selectedMode.multiplier).ceil();
+    final calculator = WorkoutRewardCalculator();
+
+    // Convert minutes to seconds for the calculator
+    final targetSeconds = desiredMinutes * 60;
+
+    // Use push-ups as baseline workout type (balanced difficulty)
+    return calculator.calculateRequiredReps(
+      workoutType: 'push-ups',
+      targetSeconds: targetSeconds,
+      mode: widget.selectedMode,
+    );
   }
 
   void _continue() {
@@ -77,230 +83,204 @@ class _ScreenTimeSelectionScreenState extends State<ScreenTimeSelectionScreen> {
       body: GOStepsBackground(
         blackRatio: 0.25,
         child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Stack(
             children: [
-              // Back button + Mode indicator
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon:
-                          const Icon(Icons.arrow_back_ios, color: Colors.white),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    const Spacer(),
-                    _ModeIndicator(mode: widget.selectedMode),
-                  ],
-                ),
-              ),
-
-              SizedBox(height: screenHeight * 0.02),
-
-              // Heading
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'How much',
-                      style: TextStyle(
-                        fontSize: 40,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        height: 1.05,
-                        letterSpacing: -1,
-                      ),
-                    ),
-                    ShaderMask(
-                      shaderCallback: (bounds) => LinearGradient(
-                        colors: [
-                          widget.selectedMode.color,
-                          widget.selectedMode.color.withOpacity(0.7),
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                      ).createShader(
-                        Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
-                      ),
-                      blendMode: BlendMode.srcIn,
-                      child: const Text(
-                        'Screen Time?',
-                        style: TextStyle(
-                          fontSize: 40,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          height: 1.1,
-                          letterSpacing: -0.5,
+              // Scrollable content
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Back button + Mode indicator
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 12),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back_ios,
+                              color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
                         ),
-                      ),
+                        const Spacer(),
+                        _ModeIndicator(mode: widget.selectedMode),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Choose how long you want your apps unlocked',
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Colors.white.withOpacity(0.6),
-                        letterSpacing: -0.2,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
 
-              SizedBox(height: screenHeight * 0.12),
+                  SizedBox(height: screenHeight * 0.02),
 
-              // Large Duration Display
-              Center(
-                child: Column(
-                  children: [
-                    Text(
-                      _durationText,
-                      style: const TextStyle(
-                        fontSize: 72,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -2,
-                        height: 1.0,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'of screen time',
-                      style: TextStyle(
-                        fontSize: 17,
-                        color: Colors.white.withOpacity(0.5),
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              SizedBox(height: screenHeight * 0.02),
-
-              // Slider for custom selection
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  children: [
-                    SliderTheme(
-                      data: SliderThemeData(
-                        trackHeight: 8,
-                        activeTrackColor: widget.selectedMode.color,
-                        inactiveTrackColor: Colors.white.withOpacity(0.15),
-                        thumbColor: Colors.white,
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 14,
-                          elevation: 4,
+                  // Heading
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'How much',
+                          style: TextStyle(
+                            fontSize: 40,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            height: 1.05,
+                            letterSpacing: -1,
+                          ),
                         ),
-                        overlayColor: Colors.white.withOpacity(0.1),
-                        overlayShape: const RoundSliderOverlayShape(
-                          overlayRadius: 28,
-                        ),
-                      ),
-                      child: Slider(
-                        value: _selectedMinutes,
-                        min: 5,
-                        max: 60,
-                        divisions: 11, // 5-minute intervals
-                        onChanged: (value) {
-                          final snapped = (value / 5).round() * 5.0;
-                          if (snapped != _selectedMinutes) {
-                            HapticFeedback.selectionClick();
-                          }
-                          setState(
-                              () => _selectedMinutes = snapped.clamp(5, 60));
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            '5 min',
+                        ShaderMask(
+                          shaderCallback: (bounds) => LinearGradient(
+                            colors: widget.selectedMode == WorkoutMode.normal
+                                ? const [Color(0xFF6060FF), Color(0xFF9090FF)]
+                                : [
+                                    widget.selectedMode.color,
+                                    widget.selectedMode.color.withOpacity(0.7),
+                                  ],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ).createShader(
+                            Rect.fromLTWH(
+                                0, 0, bounds.width, bounds.height * 1.3),
+                          ),
+                          blendMode: BlendMode.srcIn,
+                          child: const Text(
+                            'Screen Time?',
                             style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.white.withOpacity(0.4),
-                              fontWeight: FontWeight.w500,
+                              fontSize: 40,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              height: 1.1,
+                              letterSpacing: -0.5,
                             ),
                           ),
-                          Text(
-                            '1 hr',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.white.withOpacity(0.4),
-                              fontWeight: FontWeight.w500,
-                            ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Choose how long you want your apps unlocked',
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: Colors.white.withOpacity(0.6),
+                            letterSpacing: -0.2,
+                            height: 1.4,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+
+                  SizedBox(height: screenHeight * 0.16),
+
+                  // Large Duration Display
+                  Center(
+                    child: Column(
+                      children: [
+                        Text(
+                          _durationText,
+                          style: const TextStyle(
+                            fontSize: 72,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: -2,
+                            height: 1.0,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'of screen time',
+                          style: TextStyle(
+                            fontSize: 17,
+                            color: Colors.white.withOpacity(0.5),
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  SizedBox(height: screenHeight * 0.02),
+
+                  // Slider for custom selection
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
+                      children: [
+                        SliderTheme(
+                          data: SliderThemeData(
+                            trackHeight: 8,
+                            activeTrackColor: widget.selectedMode.color,
+                            inactiveTrackColor: Colors.white.withOpacity(0.15),
+                            thumbColor: Colors.white,
+                            thumbShape: const RoundSliderThumbShape(
+                              enabledThumbRadius: 14,
+                              elevation: 4,
+                            ),
+                            overlayColor: Colors.white.withOpacity(0.1),
+                            overlayShape: const RoundSliderOverlayShape(
+                              overlayRadius: 28,
+                            ),
+                          ),
+                          child: Slider(
+                            value: _selectedMinutes,
+                            min: 5,
+                            max: 60,
+                            divisions: 11, // 5-minute intervals
+                            onChanged: (value) {
+                              final snapped = (value / 5).round() * 5.0;
+                              if (snapped != _selectedMinutes) {
+                                HapticFeedback.selectionClick();
+                              }
+                              setState(() =>
+                                  _selectedMinutes = snapped.clamp(5, 60));
+                            },
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '5 min',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.white.withOpacity(0.4),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text(
+                                '1 hr',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.white.withOpacity(0.4),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Add bottom padding to prevent overlap with continue button
+                  const SizedBox(height: 80),
+                ],
               ),
 
-              const Spacer(),
-
-              // Time buttons + Continue button
-              Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  children: [
-                    // Quick Presets (moved from above)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: _presets.map((minutes) {
-                        final isSelected = _selectedMinutes.round() == minutes;
-                        return GestureDetector(
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(
-                                () => _selectedMinutes = minutes.toDouble());
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 18,
-                              vertical: 12,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? widget.selectedMode.color
-                                  : Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(100),
-                              border: Border.all(
-                                color: isSelected
-                                    ? widget.selectedMode.color
-                                    : Colors.white.withOpacity(0.15),
-                                width: 1,
-                              ),
-                            ),
-                            child: Text(
-                              minutes == 60 ? '1 hr' : '$minutes',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: isSelected
-                                    ? Colors.white
-                                    : Colors.white.withOpacity(0.7),
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
+              // Continue Button & Preset Buttons - positioned below the scrollable area within GOStepsBackground
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Continue button
+                        _ContinueButton(onTap: _continue),
+                      ],
                     ),
-
-                    const SizedBox(height: 16),
-
-                    // Continue button
-                    _ContinueButton(onTap: _continue),
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -356,7 +336,7 @@ class _ContinueButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        height: 56,
+        height: 60,
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.95),
           borderRadius: BorderRadius.circular(100),
@@ -372,7 +352,7 @@ class _ContinueButton extends StatelessWidget {
           child: Text(
             'Continue',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 20,
               fontWeight: FontWeight.w700,
               color: Color(0xFF2A2A6A),
               letterSpacing: -0.3,

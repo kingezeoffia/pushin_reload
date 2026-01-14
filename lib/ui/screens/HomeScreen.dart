@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../state/pushin_app_controller.dart';
 import '../../domain/PushinState.dart';
 import '../../state/auth_state_provider.dart';
 import '../../services/StripeCheckoutService.dart';
 import '../widgets/AppBlockOverlay.dart';
+import '../widgets/EmergencyUnlockDialog.dart';
 import '../widgets/DevTools.dart'; // TEMPORARY: Remove before production
 import '../widgets/GOStepsBackground.dart';
 import '../widgets/PressAnimationButton.dart';
@@ -21,8 +23,77 @@ import 'workout/WorkoutSelectionScreen.dart';
 /// - EXPIRED: Grace period overlay
 ///
 /// GO Club-inspired design with dark theme, gradients, pill buttons
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, TickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _slideAnimation;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeAnimations();
+    // Register as lifecycle observer to detect app resume
+    WidgetsBinding.instance.addObserver(this);
+
+    // Set up intent callback to auto-navigate to workout
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final controller = context.read<PushinAppController>();
+      controller.onStartWorkoutFromIntent = (blockedApp) {
+        print('HomeScreen: Navigating to workout from intent');
+        // Navigate to workout selection screen
+        _navigateWithSlideAnimation(context, const WorkoutSelectionScreen());
+      };
+    });
+  }
+
+  void _initializeAnimations() {
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    _slideAnimation = Tween<double>(
+      begin: 30.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutCubic,
+    ));
+
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOut,
+    ));
+
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // When app comes back to foreground, check if overlay should show
+    if (state == AppLifecycleState.resumed) {
+      final controller = context.read<PushinAppController>();
+      controller.onAppResumed();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,26 +117,67 @@ class HomeScreen extends StatelessWidget {
             ),
 
             // Block overlay (shown when blocked app launched or daily cap hit)
-            ValueListenableBuilder<BlockOverlayState?>(
-              valueListenable:
-                  context.watch<PushinAppController>().blockOverlayState,
-              builder: (context, overlayState, _) {
+            Consumer<PushinAppController>(
+              builder: (context, controller, _) {
+                final overlayState = controller.blockOverlayState.value;
                 if (overlayState != null) {
+                  final isSuccessOverlay =
+                      overlayState.reason == BlockReason.workoutCompleted;
+
+                  final emergencyEnabled = isSuccessOverlay ? false : controller.emergencyUnlockEnabled;
                   return AppBlockOverlay(
+                    key: ValueKey('overlay_${overlayState.reason}_${emergencyEnabled}'),
                     reason: overlayState.reason,
                     blockedAppName: overlayState.appName,
+                    emergencyUnlockEnabled: emergencyEnabled,
+                    emergencyUnlocksRemaining: controller.emergencyUnlocksRemaining,
                     onStartWorkout: () {
-                      context.read<PushinAppController>().dismissBlockOverlay();
-                      // Navigate to workout screen
+                      // For success overlay, just dismiss without navigation
+                      if (isSuccessOverlay) {
+                        controller.dismissBlockOverlay();
+                      } else {
+                        controller.dismissBlockOverlay();
+                        _navigateWithSlideAnimation(context, const WorkoutSelectionScreen());
+                      }
                     },
-                    onGoToSettings: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const PushinSettingsScreen(),
-                        ),
-                      );
-                    },
+                    onEmergencyUnlock: isSuccessOverlay
+                        ? null
+                        : () async {
+                            HapticFeedback.mediumImpact();
+                            final confirmed = await EmergencyUnlockDialog.show(
+                              context: context,
+                              appName: overlayState.appName ?? 'App',
+                              unlockMinutes: controller.emergencyUnlockMinutes,
+                              unlocksRemaining:
+                                  controller.emergencyUnlocksRemaining,
+                            );
+                            if (confirmed) {
+                              final success = await controller.useEmergencyUnlock(
+                                overlayState.appName ?? 'App',
+                              );
+                              if (success && context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Emergency unlock activated (${controller.emergencyUnlockMinutes} minutes)',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w500),
+                                    ),
+                                    backgroundColor: const Color(0xFFFFB347),
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                    onGoToSettings: isSuccessOverlay
+                        ? null
+                        : () {
+                            _navigateWithSlideAnimation(context, const PushinSettingsScreen());
+                          },
                   );
                 }
                 return const SizedBox.shrink();
@@ -83,12 +195,7 @@ class HomeScreen extends StatelessWidget {
                   size: 28,
                 ),
                 onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const PushinSettingsScreen(),
-                    ),
-                  );
+                  _navigateWithSlideAnimation(context, const PushinSettingsScreen());
                 },
                 style: IconButton.styleFrom(
                   backgroundColor: Colors.white.withOpacity(0.1),
@@ -148,153 +255,209 @@ class HomeScreen extends StatelessWidget {
         return _ExpiredStateView(controller: controller, now: now);
     }
   }
+
+  void _navigateWithSlideAnimation(BuildContext context, Widget screen) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => screen,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          const curve = Curves.easeOutCubic;
+
+          var tween =
+              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          );
+        },
+      ),
+    );
+  }
 }
 
 /// LOCKED state view - Onboarding-style design
-class _LockedStateView extends StatelessWidget {
+class _LockedStateView extends StatefulWidget {
   final PushinAppController controller;
 
   const _LockedStateView({required this.controller});
 
   @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Spacer for top
-          SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+  State<_LockedStateView> createState() => _LockedStateViewState();
+}
 
-          // Main headline
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Your Apps Are',
-                  style: TextStyle(
-                    fontSize: 44,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    height: 1.05,
-                    letterSpacing: -1,
-                  ),
-                ),
-                ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ).createShader(
-                    Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
-                  ),
-                  blendMode: BlendMode.srcIn,
-                  child: const Text(
-                    'Blocked',
+class _LockedStateViewState extends State<_LockedStateView> {
+  @override
+  Widget build(BuildContext context) {
+    final homeState = context.findAncestorStateOfType<_HomeScreenState>()!;
+
+    return AnimatedBuilder(
+      animation: homeState._animationController,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, homeState._slideAnimation.value),
+          child: Opacity(
+            opacity: homeState._fadeAnimation.value,
+            child: child,
+          ),
+        );
+      },
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Spacer for top
+            SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+
+            // Main headline
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Your Apps Are',
                     style: TextStyle(
                       fontSize: 44,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
-                      height: 1.1,
-                      letterSpacing: -0.5,
+                      height: 1.05,
+                      letterSpacing: -1,
                     ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Complete a workout to unlock screen time',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.white.withOpacity(0.6),
-                    letterSpacing: -0.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 40),
-
-          // Workout option card
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: _OnboardingStyleWorkoutCard(
-              icon: Icons.fitness_center,
-              title: 'Push-Ups',
-              subtitle: controller.getWorkoutRewardDescription('push-ups', 20),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const RepCounterScreen(
-                      workoutType: 'push-ups',
-                      targetReps: 20,
-                      desiredScreenTimeMinutes: 10,
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ).createShader(
+                      Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                    ),
+                    blendMode: BlendMode.srcIn,
+                    child: const Text(
+                      'Blocked',
+                      style: TextStyle(
+                        fontSize: 44,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        height: 1.1,
+                        letterSpacing: -0.5,
+                      ),
                     ),
                   ),
-                );
-              },
-            ),
-          ),
-
-          const Spacer(),
-
-          // Start Workout Button
-          Padding(
-            padding: const EdgeInsets.fromLTRB(32, 16, 32, 16),
-            child: PressAnimationButton(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const WorkoutSelectionScreen(),
-                  ),
-                );
-              },
-              child: Container(
-                width: double.infinity,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.95),
-                  borderRadius: BorderRadius.circular(100),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.white.withOpacity(0.2),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: const Center(
-                  child: Text(
-                    'Choose Workout',
+                  const SizedBox(height: 8),
+                  Text(
+                    'Complete a workout to unlock screen time',
                     style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF2A2A6A),
-                      letterSpacing: -0.3,
+                      fontSize: 15,
+                      color: Colors.white.withOpacity(0.6),
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 40),
+
+            // Workout option card
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: _OnboardingStyleWorkoutCard(
+                icon: Icons.fitness_center,
+                title: 'Push-Ups',
+                subtitle: widget.controller.getWorkoutRewardDescription('push-ups', 20),
+                onTap: () {
+                  _navigateWithSlideAnimation(context, const RepCounterScreen(
+                    workoutType: 'push-ups',
+                    targetReps: 20,
+                    desiredScreenTimeMinutes: 10,
+                  ));
+                },
+              ),
+            ),
+
+            const Spacer(),
+
+            // Start Workout Button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 16, 32, 16),
+              child: PressAnimationButton(
+                onTap: () {
+                  _navigateWithSlideAnimation(context, const WorkoutSelectionScreen());
+                },
+                child: Container(
+                  width: double.infinity,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(100),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.2),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Choose Workout',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF2A2A6A),
+                        letterSpacing: -0.3,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
 
-          // Quick start subtitle
-          Padding(
-            padding: const EdgeInsets.only(bottom: 32),
-            child: Center(
-              child: Text(
-                'Or tap the card above for quick start',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withOpacity(0.5),
+            // Quick start subtitle
+            Padding(
+              padding: const EdgeInsets.only(bottom: 32),
+              child: Center(
+                child: Text(
+                  'Or tap the card above for quick start',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white.withOpacity(0.5),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateWithSlideAnimation(BuildContext context, Widget screen) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => screen,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          const curve = Curves.easeOutCubic;
+
+          var tween =
+              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400),
       ),
     );
   }
@@ -606,7 +769,7 @@ class _EarningStateView extends StatelessWidget {
 }
 
 /// UNLOCKED state view - Onboarding style
-class _UnlockedStateView extends StatelessWidget {
+class _UnlockedStateView extends StatefulWidget {
   final PushinAppController controller;
   final DateTime now;
 
@@ -616,171 +779,208 @@ class _UnlockedStateView extends StatelessWidget {
   });
 
   @override
+  State<_UnlockedStateView> createState() => _UnlockedStateViewState();
+}
+
+class _UnlockedStateViewState extends State<_UnlockedStateView> {
+  @override
   Widget build(BuildContext context) {
-    final remainingSeconds = controller.getUnlockTimeRemaining(now);
+    final homeState = context.findAncestorStateOfType<_HomeScreenState>()!;
+    final remainingSeconds = widget.controller.getUnlockTimeRemaining(widget.now);
     final minutes = remainingSeconds ~/ 60;
     final seconds = remainingSeconds % 60;
 
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Spacer for top
-          SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+    return AnimatedBuilder(
+      animation: homeState._animationController,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, homeState._slideAnimation.value),
+          child: Opacity(
+            opacity: homeState._fadeAnimation.value,
+            child: child,
+          ),
+        );
+      },
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Spacer for top
+            SizedBox(height: MediaQuery.of(context).size.height * 0.06),
 
-          // Main headline
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Apps',
-                  style: TextStyle(
-                    fontSize: 44,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    height: 1.05,
-                    letterSpacing: -1,
-                  ),
-                ),
-                ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [Color(0xFF10B981), Color(0xFF34D399)],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ).createShader(
-                    Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
-                  ),
-                  blendMode: BlendMode.srcIn,
-                  child: const Text(
-                    'Unlocked!',
+            // Main headline
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Apps',
                     style: TextStyle(
                       fontSize: 44,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
-                      height: 1.1,
-                      letterSpacing: -0.5,
+                      height: 1.05,
+                      letterSpacing: -1,
                     ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Great work! Enjoy your screen time',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.white.withOpacity(0.6),
-                    letterSpacing: -0.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const Spacer(),
-
-          // Countdown timer card
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 32,
-                vertical: 40,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Column(
-                children: [
                   ShaderMask(
                     shaderCallback: (bounds) => const LinearGradient(
                       colors: [Color(0xFF10B981), Color(0xFF34D399)],
-                    ).createShader(bounds),
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ).createShader(
+                      Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                    ),
                     blendMode: BlendMode.srcIn,
-                    child: Text(
-                      '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
-                      style: const TextStyle(
-                        fontSize: 72,
-                        fontWeight: FontWeight.bold,
+                    child: const Text(
+                      'Unlocked!',
+                      style: TextStyle(
+                        fontSize: 44,
+                        fontWeight: FontWeight.w800,
                         color: Colors.white,
-                        letterSpacing: 4,
+                        height: 1.1,
+                        letterSpacing: -0.5,
                       ),
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'TIME REMAINING',
+                    'Great work! Enjoy your screen time',
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white.withOpacity(0.5),
-                      letterSpacing: 2,
+                      fontSize: 15,
+                      color: Colors.white.withOpacity(0.6),
+                      letterSpacing: -0.2,
                     ),
                   ),
                 ],
               ),
             ),
-          ),
 
-          const Spacer(),
+            const Spacer(),
 
-          // Earn More Time button
-          Padding(
-            padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
-            child: PressAnimationButton(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const WorkoutSelectionScreen(),
-                  ),
-                );
-              },
+            // Countdown timer card
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Container(
                 width: double.infinity,
-                height: 52,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 40,
+                ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.95),
-                  borderRadius: BorderRadius.circular(100),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.white.withOpacity(0.2),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
+                  color: Colors.white.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Column(
+                  children: [
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Color(0xFF10B981), Color(0xFF34D399)],
+                      ).createShader(bounds),
+                      blendMode: BlendMode.srcIn,
+                      child: Text(
+                        '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
+                        style: const TextStyle(
+                          fontSize: 72,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 4,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'TIME REMAINING',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withOpacity(0.5),
+                        letterSpacing: 2,
+                      ),
                     ),
                   ],
                 ),
-                child: const Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.fitness_center, size: 20, color: Color(0xFF2A2A6A)),
-                      SizedBox(width: 8),
-                      Text(
-                        'Earn More Time',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF2A2A6A),
-                          letterSpacing: -0.3,
-                        ),
+              ),
+            ),
+
+            const Spacer(),
+
+            // Earn More Time button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+              child: PressAnimationButton(
+                onTap: () {
+                  _navigateWithSlideAnimation(context, const WorkoutSelectionScreen());
+                },
+                child: Container(
+                  width: double.infinity,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(100),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.2),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
                       ),
                     ],
+                  ),
+                  child: const Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.fitness_center, size: 20, color: Color(0xFF2A2A6A)),
+                        SizedBox(width: 8),
+                        Text(
+                          'Earn More Time',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF2A2A6A),
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateWithSlideAnimation(BuildContext context, Widget screen) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => screen,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          const curve = Curves.easeOutCubic;
+
+          var tween =
+              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400),
       ),
     );
   }
 }
 
 /// EXPIRED state view (grace period) - Onboarding style
-class _ExpiredStateView extends StatelessWidget {
+class _ExpiredStateView extends StatefulWidget {
   final PushinAppController controller;
   final DateTime now;
 
@@ -790,160 +990,197 @@ class _ExpiredStateView extends StatelessWidget {
   });
 
   @override
+  State<_ExpiredStateView> createState() => _ExpiredStateViewState();
+}
+
+class _ExpiredStateViewState extends State<_ExpiredStateView> {
+  @override
   Widget build(BuildContext context) {
-    final graceRemaining = controller.getGracePeriodRemaining(now);
+    final homeState = context.findAncestorStateOfType<_HomeScreenState>()!;
+    final graceRemaining = widget.controller.getGracePeriodRemaining(widget.now);
 
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Spacer for top
-          SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+    return AnimatedBuilder(
+      animation: homeState._animationController,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, homeState._slideAnimation.value),
+          child: Opacity(
+            opacity: homeState._fadeAnimation.value,
+            child: child,
+          ),
+        );
+      },
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Spacer for top
+            SizedBox(height: MediaQuery.of(context).size.height * 0.06),
 
-          // Main headline
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Time's",
-                  style: TextStyle(
-                    fontSize: 44,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    height: 1.05,
-                    letterSpacing: -1,
-                  ),
-                ),
-                ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [Color(0xFFF59E0B), Color(0xFFFBBF24)],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ).createShader(
-                    Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
-                  ),
-                  blendMode: BlendMode.srcIn,
-                  child: const Text(
-                    'Up!',
+            // Main headline
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Time's",
                     style: TextStyle(
                       fontSize: 44,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
-                      height: 1.1,
-                      letterSpacing: -0.5,
+                      height: 1.05,
+                      letterSpacing: -1,
                     ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Complete a workout to continue using apps',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.white.withOpacity(0.6),
-                    letterSpacing: -0.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const Spacer(),
-
-          // Grace period card
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 32,
-                vertical: 40,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.timer_off,
-                    size: 64,
-                    color: Colors.amber.shade400,
-                  ),
-                  const SizedBox(height: 16),
                   ShaderMask(
                     shaderCallback: (bounds) => const LinearGradient(
                       colors: [Color(0xFFF59E0B), Color(0xFFFBBF24)],
-                    ).createShader(bounds),
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ).createShader(
+                      Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                    ),
                     blendMode: BlendMode.srcIn,
-                    child: Text(
-                      '$graceRemaining',
-                      style: const TextStyle(
-                        fontSize: 56,
-                        fontWeight: FontWeight.bold,
+                    child: const Text(
+                      'Up!',
+                      style: TextStyle(
+                        fontSize: 44,
+                        fontWeight: FontWeight.w800,
                         color: Colors.white,
+                        height: 1.1,
+                        letterSpacing: -0.5,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 8),
                   Text(
-                    'SECONDS GRACE PERIOD',
+                    'Complete a workout to continue using apps',
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white.withOpacity(0.5),
-                      letterSpacing: 1,
+                      fontSize: 15,
+                      color: Colors.white.withOpacity(0.6),
+                      letterSpacing: -0.2,
                     ),
                   ),
                 ],
               ),
             ),
-          ),
 
-          const Spacer(),
+            const Spacer(),
 
-          // Start Workout button
-          Padding(
-            padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
-            child: PressAnimationButton(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const WorkoutSelectionScreen(),
-                  ),
-                );
-              },
+            // Grace period card
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Container(
                 width: double.infinity,
-                height: 52,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 40,
+                ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.95),
-                  borderRadius: BorderRadius.circular(100),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.white.withOpacity(0.2),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
+                  color: Colors.white.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.timer_off,
+                      size: 64,
+                      color: Colors.amber.shade400,
+                    ),
+                    const SizedBox(height: 16),
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Color(0xFFF59E0B), Color(0xFFFBBF24)],
+                      ).createShader(bounds),
+                      blendMode: BlendMode.srcIn,
+                      child: Text(
+                        '$graceRemaining',
+                        style: const TextStyle(
+                          fontSize: 56,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'SECONDS GRACE PERIOD',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withOpacity(0.5),
+                        letterSpacing: 1,
+                      ),
                     ),
                   ],
                 ),
-                child: const Center(
-                  child: Text(
-                    'Start Workout Now',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF2A2A6A),
-                      letterSpacing: -0.3,
+              ),
+            ),
+
+            const Spacer(),
+
+            // Start Workout button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+              child: PressAnimationButton(
+                onTap: () {
+                  _navigateWithSlideAnimation(context, const WorkoutSelectionScreen());
+                },
+                child: Container(
+                  width: double.infinity,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(100),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.2),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Start Workout Now',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF2A2A6A),
+                        letterSpacing: -0.3,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateWithSlideAnimation(BuildContext context, Widget screen) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => screen,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          const curve = Curves.easeOutCubic;
+
+          var tween =
+              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400),
       ),
     );
   }

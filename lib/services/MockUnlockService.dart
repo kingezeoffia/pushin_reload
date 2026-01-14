@@ -36,4 +36,19 @@ class MockUnlockService implements UnlockService {
 
   @override
   UnlockSession? getCurrentSession() => _currentSession;
+
+  @override
+  void extendUnlockSession(int additionalSeconds, DateTime now) {
+    if (_currentSession != null) {
+      // Create a new session with extended duration from the current time
+      final newDuration =
+          _currentSession!.getRemainingSeconds(now) + additionalSeconds;
+      _currentSession = UnlockSession(
+        id: 'extended-${now.millisecondsSinceEpoch}',
+        startTime: now,
+        durationSeconds: newDuration,
+        reason: 'workout_extended',
+      );
+    }
+  }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/dashboard_design_tokens.dart';
 import '../widgets/GOStepsBackground.dart';
 import '../../domain/models/workout_mode.dart';
@@ -25,11 +26,13 @@ class _EnhancedWorkoutsScreenState extends State<EnhancedWorkoutsScreen>
 
   // TODO: MVP - Temporarily disable Custom Mode section
   // Set to true to enable the custom workout functionality
-  static const bool _showCustomMode = false;
+  static const bool _showCustomMode = true;
 
   @override
   void initState() {
     super.initState();
+    _loadSavedMode();
+
     _pageLoadController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
@@ -48,6 +51,23 @@ class _EnhancedWorkoutsScreenState extends State<EnhancedWorkoutsScreen>
     ));
 
     _pageLoadController.forward();
+  }
+
+  /// Load the saved workout mode from SharedPreferences
+  Future<void> _loadSavedMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedModeIndex = prefs.getInt('selected_workout_mode');
+    if (savedModeIndex != null && savedModeIndex < WorkoutMode.values.length) {
+      setState(() {
+        _selectedMode = WorkoutMode.values[savedModeIndex];
+      });
+    }
+  }
+
+  /// Save the workout mode to SharedPreferences
+  Future<void> _saveMode(WorkoutMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('selected_workout_mode', mode.index);
   }
 
   @override
@@ -108,12 +128,12 @@ class _EnhancedWorkoutsScreenState extends State<EnhancedWorkoutsScreen>
                     ),
                   ),
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
 
                   // Workout Mode Selection
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -131,6 +151,7 @@ class _EnhancedWorkoutsScreenState extends State<EnhancedWorkoutsScreen>
                             selectedMode: _selectedMode,
                             onModeChanged: (mode) {
                               setState(() => _selectedMode = mode);
+                              _saveMode(mode);
                             },
                           ),
                         ],
@@ -138,7 +159,7 @@ class _EnhancedWorkoutsScreenState extends State<EnhancedWorkoutsScreen>
                     ),
                   ),
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
                   // Quick Start Section
                   SliverToBoxAdapter(
@@ -150,7 +171,7 @@ class _EnhancedWorkoutsScreenState extends State<EnhancedWorkoutsScreen>
                     ),
                   ),
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
 
                   // Custom Mode Section - Premium section header
                   SliverToBoxAdapter(
@@ -202,18 +223,10 @@ class _EnhancedWorkoutsScreenState extends State<EnhancedWorkoutsScreen>
                   const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
                   // Custom Workout Card with Pro overlay
-                  SliverToBoxAdapter(
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 20),
-                      height: 400,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(
-                            DashboardDesignTokens.cardRadius),
-                      ),
-                      clipBehavior: Clip.hardEdge,
-                      child: _showCustomMode
-                          ? const CustomWorkoutCard()
-                          : const _CustomModeComingSoonPreview(),
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      child: CustomWorkoutCard(),
                     ),
                   ),
 

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../state/auth_state_provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
+import '../../widgets/pill_navigation_bar.dart';
 
 /// Skip Flow: Emergency Unlock Screen
 ///
@@ -33,10 +34,12 @@ class SkipEmergencyUnlockScreen extends StatelessWidget {
       backgroundColor: Colors.black,
       body: GOStepsBackground(
         blackRatio: 0.25,
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: Stack(
+          children: [
+            SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
 
               // Consistent spacing with other screens
               SizedBox(height: screenHeight * 0.06),
@@ -125,8 +128,8 @@ class SkipEmergencyUnlockScreen extends StatelessWidget {
                   children: [
                     _RuleItem(
                       icon: Icons.today,
-                      title: 'Once per day',
-                      description: 'Emergency unlock 1x a day',
+                      title: 'Three times per day',
+                      description: 'Emergency unlock 3x a day',
                     ),
                     const SizedBox(height: 16),
                     _RuleItem(
@@ -144,25 +147,27 @@ class SkipEmergencyUnlockScreen extends StatelessWidget {
                 ),
               ),
 
+              // Spacer to push content up (button will be positioned at bottom)
               const Spacer(),
-
-              // Complete Setup Button
-              Padding(
-                padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
-                child: _CompleteSetupButton(
-                  onTap: () {
-                    print('🎯 Complete Setup button pressed (skip flow)!');
-                    final auth = context.read<AuthStateProvider>();
-                    auth.setGuestCompletedSetup();
-
-                    // Pop all screens to let the router show the main app
-                    Navigator.of(context).popUntil((route) => route.isFirst);
-                    debugPrint('🎯 Guest setup completed – popped to root, router will show main app');
-                  },
-                ),
-              ),
             ],
+            ),
           ),
+
+            // Complete Setup Button
+            BottomActionContainer(
+              child: _CompleteSetupButton(
+                onTap: () {
+                  print('🎯 Complete Setup button pressed (skip flow)!');
+                  final auth = context.read<AuthStateProvider>();
+                  auth.setGuestCompletedSetup();
+
+                  // Pop all screens to let the router show the main app
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                  debugPrint('🎯 Guest setup completed – popped to root, router will show main app');
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -188,6 +193,10 @@ class _RuleItem extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.08),
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.1),
+          width: 1,
+        ),
       ),
       child: Row(
         children: [

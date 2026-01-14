@@ -1,0 +1,500 @@
+    widget.onAmountChanged(_currentAmount);
+    widget.onWaterAdded(amount);
+    _successController.forward(from: 0.0).then((_) {
+      if (mounted) {
+        setState(() => _showSuccess = false);
+      }
+    });
+    _loadTodayLog();
+  }
+
+  void _removeLastEntry() {
+    if (_todayLog.isEmpty) return;
+
+    final lastEntry = _todayLog.last;
+    final amount = lastEntry['amount'] as double;
+
+    setState(() {
+      _currentAmount = (_currentAmount - amount).clamp(0.0, 10.0);
+      _todayLog.removeLast();
+    });
+
+    widget.onAmountChanged(_currentAmount);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('water_log_today', jsonEncode(_todayLog));
+    });
+  }
+
+  void _showErrorFeedback() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Please enter a valid amount (0.1L - 2.0L)'),
+        backgroundColor: Colors.red.shade400,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _customAmountController.dispose();
+    _successController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isSmallScreen = screenHeight < 700;
+
+    return Container(
+      decoration: BoxDecoration(
+        // Sleek dark background matching settings modal
+        color: const Color(0xFF0F0F18),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.08),
+          width: 1,
+        ),
+      ),
+      constraints: BoxConstraints(
+        maxHeight: screenHeight * 0.85,
+      ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildHeader(isSmallScreen),
+              SizedBox(height: isSmallScreen ? 16 : 20),
+              _buildProgressSection(isSmallScreen),
+              SizedBox(height: isSmallScreen ? 16 : 20),
+              _buildGoalSection(isSmallScreen),
+              SizedBox(height: isSmallScreen ? 16 : 20),
+              _buildQuickAddSection(isSmallScreen),
+              SizedBox(height: isSmallScreen ? 12 : 16),
+              _buildCustomAmountSection(isSmallScreen),
+              SizedBox(height: isSmallScreen ? 16 : 20),
+              _buildTodayLogSection(isSmallScreen),
+              SizedBox(height: isSmallScreen ? 16 : 20),
+              _buildActionButtons(isSmallScreen),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(bool isSmallScreen) {
+    return Row(
+      children: [
+        Container(
+          padding: EdgeInsets.all(isSmallScreen ? 8 : 12),
+          decoration: BoxDecoration(
+            color: WorkoutsDesignTokens.waterCyan.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Icon(
+            Icons.water_drop,
+            color: WorkoutsDesignTokens.waterCyan,
+            size: isSmallScreen ? 24 : 28,
+          ),
+        ),
+        SizedBox(width: isSmallScreen ? 8 : 12),
+        Text(
+          'Water Tracker',
+          style: TextStyle(
+            color: DashboardDesignTokens.textPrimary,
+            fontSize: isSmallScreen ? 20 : 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const Spacer(),
+        if (_showSuccess)
+          AnimatedBuilder(
+            animation: _successController,
+            builder: (context, child) {
+              return Transform.scale(
+                scale: _successController.value,
+                child: Icon(
+                  Icons.check_circle,
+                  color: DashboardDesignTokens.accentGreen,
+                  size: isSmallScreen ? 28 : 32,
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildProgressSection(bool isSmallScreen) {
+    final percentage = (_currentAmount / _targetAmount * 100).clamp(0, 100);
+
+    return Container(
+      padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Today\'s Progress',
+                style: TextStyle(
+                  color: DashboardDesignTokens.textSecondary,
+                  fontSize: isSmallScreen ? 12 : 14,
+                ),
+              ),
+              Text(
+                '${percentage.toInt()}%',
+                style: TextStyle(
+                  color: DashboardDesignTokens.accentGreen,
+                  fontSize: isSmallScreen ? 16 : 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: isSmallScreen ? 8 : 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: percentage / 100,
+              backgroundColor: Colors.white.withOpacity(0.1),
+              valueColor:
+                  AlwaysStoppedAnimation(WorkoutsDesignTokens.waterCyan),
+              minHeight: isSmallScreen ? 10 : 12,
+            ),
+          ),
+          SizedBox(height: isSmallScreen ? 8 : 12),
+          Text(
+            '${WaterAmountFormatter.format(_currentAmount)} / ${_targetAmount.toStringAsFixed(1)}L',
+            style: TextStyle(
+              color: DashboardDesignTokens.textPrimary,
+              fontSize: isSmallScreen ? 18 : 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGoalSection(bool isSmallScreen) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Daily Goal',
+          style: TextStyle(
+            color: DashboardDesignTokens.textPrimary,
+            fontSize: isSmallScreen ? 14 : 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        SizedBox(height: isSmallScreen ? 8 : 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Text(
+                '${_targetAmount.toStringAsFixed(1)}L',
+                style: TextStyle(
+                  color: DashboardDesignTokens.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Expanded(
+                child: Slider(
+                  value: _targetAmount,
+                  min: 0.5,
+                  max: 5.0,
+                  divisions: 45,
+                  activeColor: WorkoutsDesignTokens.waterCyan,
+                  inactiveColor: Colors.white.withOpacity(0.2),
+                  onChanged: (value) {
+                    setState(() => _targetAmount = value);
+                  },
+                  onChangeEnd: (value) {
+                    widget.onTargetChanged(value);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQuickAddSection(bool isSmallScreen) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Quick Add',
+          style: TextStyle(
+            color: DashboardDesignTokens.textPrimary,
+            fontSize: isSmallScreen ? 14 : 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        SizedBox(height: isSmallScreen ? 8 : 12),
+        Row(
+          children: [
+            Expanded(child: _buildQuickAddButton(0.25, isSmallScreen)),
+            SizedBox(width: isSmallScreen ? 8 : 12),
+            Expanded(child: _buildQuickAddButton(0.5, isSmallScreen)),
+            SizedBox(width: isSmallScreen ? 8 : 12),
+            Expanded(child: _buildQuickAddButton(1.0, isSmallScreen)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQuickAddButton(double amount, bool isSmallScreen) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _addWater(amount),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: isSmallScreen ? 12 : 16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                WorkoutsDesignTokens.waterCyan.withOpacity(0.2),
+                WorkoutsDesignTokens.waterCyan.withOpacity(0.1),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: WorkoutsDesignTokens.waterCyan.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                Icons.add,
+                color: WorkoutsDesignTokens.waterCyan,
+                size: isSmallScreen ? 20 : 24,
+              ),
+              SizedBox(height: isSmallScreen ? 2 : 4),
+              Text(
+                WaterAmountFormatter.format(amount),
+                style: TextStyle(
+                  color: DashboardDesignTokens.textPrimary,
+                  fontSize: isSmallScreen ? 14 : 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCustomAmountSection(bool isSmallScreen) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Custom Amount',
+          style: TextStyle(
+            color: DashboardDesignTokens.textPrimary,
+            fontSize: isSmallScreen ? 14 : 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        SizedBox(height: isSmallScreen ? 8 : 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _customAmountController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                style: TextStyle(
+                  color: DashboardDesignTokens.textPrimary,
+                  fontSize: isSmallScreen ? 14 : 16,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Enter liters (e.g., 0.3)',
+                  hintStyle: TextStyle(
+                    color: DashboardDesignTokens.textSecondary,
+                    fontSize: isSmallScreen ? 13 : 14,
+                  ),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.05),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: Colors.white.withOpacity(0.1),
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: Colors.white.withOpacity(0.1),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: WorkoutsDesignTokens.waterCyan,
+                      width: 2,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Material(
+              color: WorkoutsDesignTokens.waterCyan,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                onTap: () {
+                  final amount = double.tryParse(_customAmountController.text);
+                  if (amount != null) {
+                    _addWater(amount);
+                    _customAmountController.clear();
+                  } else {
+                    _showErrorFeedback();
+                  }
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  child: const Icon(
+                    Icons.add,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTodayLogSection(bool isSmallScreen) {
+    if (_todayLog.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Today\'s Log',
+              style: TextStyle(
+                color: DashboardDesignTokens.textPrimary,
+                fontSize: isSmallScreen ? 14 : 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _removeLastEntry,
+              icon: const Icon(Icons.remove_circle_outline, size: 18),
+              label: const Text('Remove Last'),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.red.shade400,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          constraints: BoxConstraints(maxHeight: isSmallScreen ? 120 : 150),
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: _todayLog.length,
+            itemBuilder: (context, index) {
+              final entry = _todayLog[_todayLog.length - 1 - index];
+              final time = DateTime.parse(entry['timestamp']);
+              final timeStr =
+                  '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.water_drop,
+                      color: WorkoutsDesignTokens.waterCyan,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '+${WaterAmountFormatter.format(entry['amount'])}',
+                      style: TextStyle(
+                        color: DashboardDesignTokens.textPrimary,
+                        fontSize: isSmallScreen ? 13 : 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      timeStr,
+                      style: TextStyle(
+                        color: DashboardDesignTokens.textSecondary,
+                        fontSize: isSmallScreen ? 11 : 12,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButtons(bool isSmallScreen) {
+    return ElevatedButton(
+      onPressed: () => Navigator.pop(context),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: WorkoutsDesignTokens.waterCyan,
+        foregroundColor: Colors.white,
+        minimumSize: Size(double.infinity, isSmallScreen ? 44 : 50),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+      child: Text(
+        'Close',
+        style: TextStyle(
+          fontSize: isSmallScreen ? 14 : 16,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}

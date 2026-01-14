@@ -61,7 +61,12 @@ class _CurrentStatusCardState extends State<CurrentStatusCard>
     super.dispose();
   }
 
-  String _getStatusKey(PushinState state) {
+  String _getStatusKey(PushinState state, {bool isEmergencyUnlockActive = false}) {
+    // Emergency unlock takes priority over locked/expired states
+    if (isEmergencyUnlockActive) {
+      return 'emergency_unlocked';
+    }
+
     switch (state) {
       case PushinState.locked:
         return 'locked';
@@ -131,12 +136,16 @@ class _CurrentStatusCardState extends State<CurrentStatusCard>
         final remainingSeconds = controller.getUnlockTimeRemaining(now);
         final totalDuration = controller.getTotalUnlockDuration();
         final gracePeriodSeconds = controller.getGracePeriodRemaining(now);
-        final statusKey = _getStatusKey(state);
+        final isEmergencyUnlockActive = controller.isEmergencyUnlockActive;
+        final emergencyUnlockTimeRemaining = controller.emergencyUnlockTimeRemaining;
+        final emergencyUnlockTotalSeconds = controller.emergencyUnlockMinutes * 60;
+        final statusKey = _getStatusKey(state, isEmergencyUnlockActive: isEmergencyUnlockActive);
 
         final config = _getStatusConfig(
           statusKey,
           remainingSeconds: remainingSeconds,
           gracePeriodSeconds: gracePeriodSeconds,
+          emergencyUnlockTimeRemaining: emergencyUnlockTimeRemaining,
         );
 
         return GestureDetector(
@@ -206,12 +215,21 @@ class _CurrentStatusCardState extends State<CurrentStatusCard>
                               ),
                             ),
                             // Right side: circular timer or action indicator
-                            _buildRightWidget(state, config, remainingSeconds, totalDuration, gracePeriodSeconds),
+                            _buildRightWidget(
+                              state,
+                              config,
+                              remainingSeconds,
+                              totalDuration,
+                              gracePeriodSeconds,
+                              isEmergencyUnlockActive: isEmergencyUnlockActive,
+                              emergencyUnlockTimeRemaining: emergencyUnlockTimeRemaining,
+                              emergencyUnlockTotalSeconds: emergencyUnlockTotalSeconds,
+                            ),
                           ],
                         ),
                       ),
-                      // Full-width shimmer overlay - only when unlocked
-                      if (state == PushinState.unlocked)
+                      // Full-width shimmer overlay - only when unlocked (not emergency)
+                      if (state == PushinState.unlocked && !isEmergencyUnlockActive)
                         Positioned.fill(
                           child: IgnorePointer(
                             child: Container(
@@ -267,8 +285,25 @@ class _CurrentStatusCardState extends State<CurrentStatusCard>
     );
   }
 
-  Widget _buildRightWidget(PushinState state, StatusConfig config,
-      int remainingSeconds, int totalDuration, int gracePeriodSeconds) {
+  Widget _buildRightWidget(
+    PushinState state,
+    StatusConfig config,
+    int remainingSeconds,
+    int totalDuration,
+    int gracePeriodSeconds, {
+    bool isEmergencyUnlockActive = false,
+    int emergencyUnlockTimeRemaining = 0,
+    int emergencyUnlockTotalSeconds = 1800,
+  }) {
+    // Show circular timer for emergency unlock
+    if (isEmergencyUnlockActive && emergencyUnlockTimeRemaining > 0) {
+      return _buildCircularTimer(
+        emergencyUnlockTimeRemaining,
+        emergencyUnlockTotalSeconds,
+        config.color,
+      );
+    }
+
     // Show circular timer for unlocked state
     if (state == PushinState.unlocked && remainingSeconds > 0) {
       return _buildCircularTimer(remainingSeconds, totalDuration, config.color);
@@ -449,7 +484,7 @@ class _CurrentStatusCardState extends State<CurrentStatusCard>
   }
 
   StatusConfig _getStatusConfig(String status,
-      {int remainingSeconds = 0, int gracePeriodSeconds = 0}) {
+      {int remainingSeconds = 0, int gracePeriodSeconds = 0, int emergencyUnlockTimeRemaining = 0}) {
     switch (status) {
       case 'earning':
         return StatusConfig(
@@ -473,6 +508,18 @@ class _CurrentStatusCardState extends State<CurrentStatusCard>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [Color(0xFF10B981), Color(0xFF059669)],
+          ),
+        );
+      case 'emergency_unlocked':
+        return StatusConfig(
+          title: 'Emergency Unlock',
+          description: 'Apps unlocked temporarily',
+          icon: Icons.lock_open_rounded,
+          color: const Color(0xFFFFB347), // Orange for emergency
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFFFB347), Color(0xFFFF8C00)],
           ),
         );
       case 'expired':

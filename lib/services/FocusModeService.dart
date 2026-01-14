@@ -171,9 +171,12 @@ class FocusModeService extends ChangeNotifier {
   }
 
   /// Manually override current restrictions
-  Future<OverrideResult> manualOverride() async {
+  /// Optionally pass durationMinutes to show unlock timer in Dynamic Island (iOS 16.1+)
+  Future<OverrideResult> manualOverride({int? durationMinutes}) async {
     try {
-      final response = await _screenTimeService.manualOverride();
+      final response = await _screenTimeService.manualOverride(
+        durationMinutes: durationMinutes,
+      );
 
       if (response.overrideGranted) {
         _sessionState = FocusSessionState.overridden;
@@ -226,6 +229,94 @@ class FocusModeService extends ChangeNotifier {
     } catch (e) {
       _handleError(e);
       return null;
+    }
+  }
+
+  /// Check if user tapped "Earn Screen Time" from shield and should navigate to workout
+  Future<bool> checkPendingWorkoutNavigation() async {
+    try {
+      final result = await _screenTimeService.checkPendingWorkoutNavigation();
+      return result;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error checking pending workout navigation: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Get emergency unlock status (remaining unlocks for today)
+  Future<EmergencyUnlockStatus> getEmergencyUnlockStatus() async {
+    try {
+      final response = await _screenTimeService.getEmergencyUnlockStatus();
+      return EmergencyUnlockStatus(
+        remaining: response.remaining,
+        max: response.max,
+        usedToday: response.usedToday,
+        isActive: response.isActive,
+        expiryTimestamp: response.expiryTimestamp,
+        timeRemaining: response.timeRemaining,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error getting emergency unlock status: $e');
+      }
+      return EmergencyUnlockStatus(remaining: 3, max: 3, usedToday: 0);
+    }
+  }
+
+  /// Start emergency unlock timer Live Activity (shows in Dynamic Island with orange theme)
+  Future<bool> startEmergencyUnlockTimer(int durationSeconds) async {
+    try {
+      return await _screenTimeService.startEmergencyUnlockTimer(durationSeconds);
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error starting emergency unlock timer: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Re-apply blocking after unlock period expires
+  /// This restores the shields that were previously configured
+  Future<bool> reapplyBlocking() async {
+    try {
+      await _screenTimeService.reapplyBlocking();
+      _clearError();
+      return true;
+    } catch (e) {
+      _handleError(e);
+      return false;
+    }
+  }
+
+  /// Grant emergency access to a blocked app for a specified duration
+  ///
+  /// Temporarily removes blocking restrictions for the specified app.
+  /// The restrictions will automatically be re-applied after the duration expires.
+  Future<bool> grantEmergencyAccess({
+    required String appName,
+    required int durationMinutes,
+  }) async {
+    try {
+      // Use manual override to temporarily remove restrictions
+      final overrideResult = await manualOverride();
+      if (overrideResult != OverrideResult.granted) {
+        return false;
+      }
+
+      // Schedule re-application of restrictions after duration
+      // Note: The platform module will handle automatic re-blocking
+      // when the emergency unlock timer expires
+
+      if (kDebugMode) {
+        print('Emergency access granted for $appName ($durationMinutes minutes)');
+      }
+
+      return true;
+    } catch (e) {
+      _handleError(e);
+      return false;
     }
   }
 
@@ -310,4 +401,23 @@ enum OverrideResult {
   granted, // Override allowed
   denied, // Override denied
   error // Error during override
+}
+
+/// Emergency unlock status
+class EmergencyUnlockStatus {
+  final int remaining;
+  final int max;
+  final int usedToday;
+  final bool isActive;
+  final double expiryTimestamp;
+  final int timeRemaining;
+
+  EmergencyUnlockStatus({
+    required this.remaining,
+    required this.max,
+    required this.usedToday,
+    this.isActive = false,
+    this.expiryTimestamp = 0,
+    this.timeRemaining = 0,
+  });
 }

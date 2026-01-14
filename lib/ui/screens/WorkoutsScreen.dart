@@ -14,8 +14,88 @@ class WorkoutsScreen extends StatefulWidget {
   State<WorkoutsScreen> createState() => _WorkoutsScreenState();
 }
 
-class _WorkoutsScreenState extends State<WorkoutsScreen> {
+class _WorkoutsScreenState extends State<WorkoutsScreen> with TickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _headerSlideAnimation;
+  late Animation<double> _headerFadeAnimation;
+  late Animation<double> _contentSlideAnimation;
+  late Animation<double> _contentFadeAnimation;
+  late Animation<double> _buttonSlideAnimation;
+  late Animation<double> _buttonFadeAnimation;
+
   WorkoutMode _selectedMode = WorkoutMode.normal;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeAnimations();
+  }
+
+  void _initializeAnimations() {
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+
+    // Header animations (start immediately)
+    _headerSlideAnimation = Tween<double>(
+      begin: -30.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: const Interval(0.0, 0.5, curve: Curves.easeOutCubic),
+    ));
+
+    _headerFadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+    ));
+
+    // Content animations (staggered slightly after header)
+    _contentSlideAnimation = Tween<double>(
+      begin: 20.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: const Interval(0.2, 0.7, curve: Curves.easeOutCubic),
+    ));
+
+    _contentFadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: const Interval(0.2, 0.7, curve: Curves.easeOut),
+    ));
+
+    // Button animations (last, with nice delay)
+    _buttonSlideAnimation = Tween<double>(
+      begin: 20.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: const Interval(0.4, 0.9, curve: Curves.easeOutCubic),
+    ));
+
+    _buttonFadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: const Interval(0.4, 0.9, curve: Curves.easeOut),
+    ));
+
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,35 +109,83 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
+              // Header with animation
               _buildHeader(),
 
               SizedBox(height: PushinTheme.spacingXl),
 
-              // Mode Selector
-              WorkoutModeSelector(
-                selectedMode: _selectedMode,
-                onModeChanged: (mode) {
-                  setState(() {
-                    _selectedMode = mode;
-                  });
+              // Mode Selector with animation
+              AnimatedBuilder(
+                animation: _animationController,
+                builder: (context, child) {
+                  return Transform.translate(
+                    offset: Offset(0, _contentSlideAnimation.value),
+                    child: Opacity(
+                      opacity: _contentFadeAnimation.value,
+                      child: child,
+                    ),
+                  );
                 },
+                child: WorkoutModeSelector(
+                  selectedMode: _selectedMode,
+                  onModeChanged: (mode) {
+                    setState(() {
+                      _selectedMode = mode;
+                    });
+                  },
+                ),
               ),
 
               SizedBox(height: PushinTheme.spacingXl),
 
-              // Workout Configurator
-              WorkoutConfigurator(mode: _selectedMode),
+              // Workout Configurator with animation
+              AnimatedBuilder(
+                animation: _animationController,
+                builder: (context, child) {
+                  return Transform.translate(
+                    offset: Offset(0, _contentSlideAnimation.value),
+                    child: Opacity(
+                      opacity: _contentFadeAnimation.value,
+                      child: child,
+                    ),
+                  );
+                },
+                child: WorkoutConfigurator(mode: _selectedMode),
+              ),
 
               SizedBox(height: PushinTheme.spacingXl),
 
-              // Recent Workouts
-              const RecentWorkouts(),
+              // Recent Workouts with animation
+              AnimatedBuilder(
+                animation: _animationController,
+                builder: (context, child) {
+                  return Transform.translate(
+                    offset: Offset(0, _contentSlideAnimation.value),
+                    child: Opacity(
+                      opacity: _contentFadeAnimation.value,
+                      child: child,
+                    ),
+                  );
+                },
+                child: const RecentWorkouts(),
+              ),
 
               SizedBox(height: PushinTheme.spacingXl),
 
-              // Quick Start Button
-              _buildQuickStartButton(),
+              // Quick Start Button with animation
+              AnimatedBuilder(
+                animation: _animationController,
+                builder: (context, child) {
+                  return Transform.translate(
+                    offset: Offset(0, _buttonSlideAnimation.value),
+                    child: Opacity(
+                      opacity: _buttonFadeAnimation.value,
+                      child: child,
+                    ),
+                  );
+                },
+                child: _buildQuickStartButton(),
+              ),
             ],
           ),
         ),
@@ -66,19 +194,31 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   }
 
   Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Workouts',
-          style: PushinTheme.headline2,
-        ),
-        SizedBox(height: PushinTheme.spacingXs),
-        Text(
-          'Choose your workout mode and customize settings',
-          style: PushinTheme.body2,
-        ),
-      ],
+    return AnimatedBuilder(
+      animation: _animationController,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, _headerSlideAnimation.value),
+          child: Opacity(
+            opacity: _headerFadeAnimation.value,
+            child: child,
+          ),
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Workouts',
+            style: PushinTheme.headline2,
+          ),
+          SizedBox(height: PushinTheme.spacingXs),
+          Text(
+            'Choose your workout mode and customize settings',
+            style: PushinTheme.body2,
+          ),
+        ],
+      ),
     );
   }
 
