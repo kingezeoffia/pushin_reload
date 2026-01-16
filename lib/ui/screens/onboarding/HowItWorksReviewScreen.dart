@@ -56,17 +56,6 @@ class _HowItWorksReviewScreenState extends State<HowItWorksReviewScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Step Indicator
-              Padding(
-                padding: const EdgeInsets.only(right: 16, top: 8),
-                child: Row(
-                  children: [
-                    const Spacer(),
-                    _StepIndicator(currentStep: 5, totalSteps: 5),
-                  ],
-                ),
-              ),
-
               // Consistent spacing with other screens
               SizedBox(height: screenHeight * 0.08),
 
@@ -281,35 +270,6 @@ class _HowItWorksReviewScreenState extends State<HowItWorksReviewScreen> {
   }
 }
 
-/// Step indicator widget
-class _StepIndicator extends StatelessWidget {
-  final int currentStep;
-  final int totalSteps;
-
-  const _StepIndicator({
-    required this.currentStep,
-    required this.totalSteps,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(100),
-      ),
-      child: Text(
-        'Step $currentStep of $totalSteps',
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: Colors.white.withOpacity(0.7),
-        ),
-      ),
-    );
-  }
-}
 
 
 /// Continue Button Widget

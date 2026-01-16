@@ -6,7 +6,7 @@ import '../../widgets/pill_navigation_bar.dart';
 import '../../theme/pushin_theme.dart';
 import '../../../state/pushin_app_controller.dart';
 import '../../../state/auth_state_provider.dart';
-import 'HowItWorksExerciseScreen.dart';
+import 'HowItWorksExerciseSelectionScreen.dart';
 
 /// Custom route that disables swipe back gesture on iOS
 class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
@@ -92,7 +92,7 @@ class _HowItWorksBlockAppsScreenState extends State<HowItWorksBlockAppsScreen> {
           Navigator.push(
             context,
             _NoSwipeBackRoute(
-              builder: (context) => HowItWorksExerciseScreen(
+              builder: (context) => HowItWorksExerciseSelectionScreen(
                 fitnessLevel: widget.fitnessLevel,
                 goals: widget.goals,
                 otherGoal: widget.otherGoal,
@@ -165,17 +165,6 @@ class _HowItWorksBlockAppsScreenState extends State<HowItWorksBlockAppsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Step Indicator
-                  Padding(
-                    padding: const EdgeInsets.only(right: 16, top: 8),
-                    child: Row(
-                      children: [
-                        const Spacer(),
-                        _StepIndicator(currentStep: 1, totalSteps: 5),
-                      ],
-                    ),
-                  ),
-
                   // Consistent spacing with other screens
                   SizedBox(height: MediaQuery.of(context).size.height * 0.04),
 
@@ -185,6 +174,21 @@ class _HowItWorksBlockAppsScreenState extends State<HowItWorksBlockAppsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Block apps icon
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6060FF).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: const Icon(
+                            Icons.block_rounded,
+                            size: 40,
+                            color: Color(0xFF9090FF),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
                         const Text(
                           'Block',
                           style: TextStyle(
@@ -231,7 +235,7 @@ class _HowItWorksBlockAppsScreenState extends State<HowItWorksBlockAppsScreen> {
                     ),
                   ),
 
-                  SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+                  SizedBox(height: MediaQuery.of(context).size.height * 0.04),
 
                   // Value Proposition Points
                   const Padding(
@@ -242,12 +246,12 @@ class _HowItWorksBlockAppsScreenState extends State<HowItWorksBlockAppsScreen> {
                           icon: Icons.block,
                           text: 'Block social media and games',
                         ),
-                        SizedBox(height: 20),
+                        SizedBox(height: 16),
                         _ValuePoint(
                           icon: Icons.psychology,
                           text: 'Stay focused on what matters',
                         ),
-                        SizedBox(height: 20),
+                        SizedBox(height: 16),
                         _ValuePoint(
                           icon: Icons.phone_android,
                           text: 'Break the scroll habit',
@@ -350,35 +354,8 @@ class _AllowAndSelectButton extends StatelessWidget {
   }
 }
 
-/// Step indicator widget
-class _StepIndicator extends StatelessWidget {
-  final int currentStep;
-  final int totalSteps;
 
-  const _StepIndicator({
-    required this.currentStep,
-    required this.totalSteps,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(100),
-      ),
-      child: Text(
-        'Step $currentStep of $totalSteps',
-        style: PushinTheme.stepIndicatorText.copyWith(
-          color: Colors.white.withOpacity(0.8),
-        ),
-      ),
-    );
-  }
-}
-
-/// Value proposition point widget
+/// Value proposition point widget - styled like emergency unlock
 class _ValuePoint extends StatelessWidget {
   final IconData icon;
   final String text;
@@ -390,34 +367,50 @@ class _ValuePoint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Icon(
-            icon,
-            color: const Color(0xFF8080FF),
-            size: 24,
-          ),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.1),
+          width: 1,
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w500,
-              color: Colors.white.withOpacity(0.9),
-              letterSpacing: -0.2,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFF6060FF).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              icon,
+              color: const Color(0xFF9090FF),
+              size: 24,
             ),
           ),
-        ),
-      ],
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                    letterSpacing: -0.1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import '../../theme/pushin_theme.dart';
 import 'HowItWorksPushUpTestScreen.dart';
+import 'HowItWorksSquatTestScreen.dart';
+import 'HowItWorksGluteBridgeTestScreen.dart';
+import 'HowItWorksPlankTestScreen.dart';
+import 'HowItWorksJumpingJackTestScreen.dart';
 import 'HowItWorksEmergencyUnlockScreen.dart';
 
 /// Custom route that disables swipe back gesture on iOS
@@ -58,12 +61,16 @@ class _HowItWorksExerciseScreenState extends State<HowItWorksExerciseScreen> {
 
   // All workouts available
   final List<_WorkoutInfo> _workouts = [
-    _WorkoutInfo('Push-Ups', Icons.fitness_center, '20 reps = 10 minutes'),
-    _WorkoutInfo(
-        'Squats', Icons.airline_seat_legroom_normal, '30 reps = 15 minutes'),
-    _WorkoutInfo('Plank', Icons.self_improvement, '60 sec = 15 minutes'),
-    _WorkoutInfo('Jumping Jacks', Icons.directions_run, '40 reps = 16 minutes'),
-    _WorkoutInfo('Burpees', Icons.sports_gymnastics, '15 reps = 12 minutes'),
+    _WorkoutInfo('Push-Ups', 'assets/icons/pushup_icon.png',
+        Icons.fitness_center, '20 reps = 10 minutes'),
+    _WorkoutInfo('Squats', 'assets/icons/squats_icon.png',
+        Icons.airline_seat_legroom_normal, '30 reps = 15 minutes'),
+    _WorkoutInfo('Glute Bridge', 'assets/icons/glutebridge_icon.png',
+        Icons.accessibility_new, '15 reps = 12 minutes'),
+    _WorkoutInfo('Plank', 'assets/icons/plank_icon.png', Icons.self_improvement,
+        '60 sec = 15 minutes'),
+    _WorkoutInfo('Jumping Jacks', 'assets/icons/jumping_jacks_icon.png',
+        Icons.sports_gymnastics, '40 reps = 16 minutes'),
   ];
 
   @override
@@ -74,21 +81,12 @@ class _HowItWorksExerciseScreenState extends State<HowItWorksExerciseScreen> {
       backgroundColor: Colors.black,
       body: GOStepsBackground(
         blackRatio: 0.20,
-        child: SafeArea(
+        child: Stack(
+          children: [
+            SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Step Indicator
-              Padding(
-                padding: const EdgeInsets.only(right: 16, top: 8),
-                child: Row(
-                  children: [
-                    const Spacer(),
-                    _StepIndicator(currentStep: 2, totalSteps: 5),
-                  ],
-                ),
-              ),
-
               SizedBox(height: screenHeight * 0.04),
 
               // Title
@@ -162,58 +160,103 @@ class _HowItWorksExerciseScreenState extends State<HowItWorksExerciseScreen> {
                           ),
                         );
                       }),
-                      // Bottom padding for button space
-                      const SizedBox(height: 80),
                     ],
                   ),
                 ),
               ),
             ],
           ),
+            ),
+
+            // Continue Button - positioned like Complete Setup button
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: MediaQuery.of(context).padding.bottom + 8,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _ContinueButton(
+                  enabled: _selectedWorkout != null,
+                  onTap: () {
+                    // Navigate to appropriate try-out screen for each workout
+                    debugPrint('Selected workout: $_selectedWorkout');
+                    Widget testScreen;
+                    switch (_selectedWorkout) {
+                      case 'Push-Ups':
+                        debugPrint('Creating Push-Up Test Screen');
+                        testScreen = HowItWorksPushUpTestScreen(
+                          fitnessLevel: widget.fitnessLevel,
+                          goals: widget.goals,
+                          otherGoal: widget.otherGoal,
+                          workoutHistory: widget.workoutHistory,
+                          blockedApps: widget.blockedApps,
+                        );
+                        break;
+                      case 'Squats':
+                        debugPrint('Creating Squat Test Screen');
+                        testScreen = HowItWorksSquatTestScreen(
+                          fitnessLevel: widget.fitnessLevel,
+                          goals: widget.goals,
+                          otherGoal: widget.otherGoal,
+                          workoutHistory: widget.workoutHistory,
+                          blockedApps: widget.blockedApps,
+                        );
+                        break;
+                      case 'Glute Bridge':
+                        debugPrint('Creating Glute Bridge Test Screen');
+                        testScreen = HowItWorksGluteBridgeTestScreen(
+                          fitnessLevel: widget.fitnessLevel,
+                          goals: widget.goals,
+                          otherGoal: widget.otherGoal,
+                          workoutHistory: widget.workoutHistory,
+                          blockedApps: widget.blockedApps,
+                        );
+                        break;
+                      case 'Plank':
+                        debugPrint('Creating Plank Test Screen');
+                        testScreen = HowItWorksPlankTestScreen(
+                          fitnessLevel: widget.fitnessLevel,
+                          goals: widget.goals,
+                          otherGoal: widget.otherGoal,
+                          workoutHistory: widget.workoutHistory,
+                          blockedApps: widget.blockedApps,
+                        );
+                        break;
+                      case 'Jumping Jacks':
+                        debugPrint('Creating Jumping Jacks Test Screen');
+                        testScreen = HowItWorksJumpingJackTestScreen(
+                          fitnessLevel: widget.fitnessLevel,
+                          goals: widget.goals,
+                          otherGoal: widget.otherGoal,
+                          workoutHistory: widget.workoutHistory,
+                          blockedApps: widget.blockedApps,
+                        );
+                        break;
+                      default:
+                        // Fallback to emergency unlock for any unknown workouts
+                        debugPrint(
+                            'Falling back to emergency unlock for workout: $_selectedWorkout');
+                        testScreen = HowItWorksEmergencyUnlockScreen(
+                          fitnessLevel: widget.fitnessLevel,
+                          goals: widget.goals,
+                          otherGoal: widget.otherGoal,
+                          workoutHistory: widget.workoutHistory,
+                          blockedApps: widget.blockedApps,
+                          selectedWorkout: _selectedWorkout!,
+                          unlockDuration: 15, // Default 15 minutes
+                        );
+                    }
+
+                    Navigator.push(
+                      context,
+                      _NoSwipeBackRoute(builder: (context) => testScreen),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
         ),
-      ),
-      // Continue Button at bottom
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-          child: _ContinueButton(
-            enabled: _selectedWorkout != null,
-            onTap: () {
-              if (_selectedWorkout == 'Push-Ups') {
-                // Navigate to push-up test screen for Push-Ups
-                Navigator.push(
-                  context,
-                  _NoSwipeBackRoute(
-                    builder: (context) => HowItWorksPushUpTestScreen(
-                      fitnessLevel: widget.fitnessLevel,
-                      goals: widget.goals,
-                      otherGoal: widget.otherGoal,
-                      workoutHistory: widget.workoutHistory,
-                      blockedApps: widget.blockedApps,
-                    ),
-                  ),
-                );
-              } else {
-                // Navigate directly to emergency unlock for other workouts
-                Navigator.push(
-                  context,
-                  _NoSwipeBackRoute(
-                    builder: (context) => HowItWorksEmergencyUnlockScreen(
-                      fitnessLevel: widget.fitnessLevel,
-                      goals: widget.goals,
-                      otherGoal: widget.otherGoal,
-                      workoutHistory: widget.workoutHistory,
-                      blockedApps: widget.blockedApps,
-                      selectedWorkout: _selectedWorkout!,
-                      unlockDuration: 15, // Default 15 minutes
-                    ),
-                  ),
-                );
-              }
-            },
-          ),
-        ),
-      ),
     );
   }
 }
@@ -221,10 +264,12 @@ class _HowItWorksExerciseScreenState extends State<HowItWorksExerciseScreen> {
 /// Workout info model
 class _WorkoutInfo {
   final String name;
-  final IconData icon;
+  final String iconPath;
+  final IconData fallbackIcon;
   final String subtitle;
 
-  const _WorkoutInfo(this.name, this.icon, this.subtitle);
+  const _WorkoutInfo(
+      this.name, this.iconPath, this.fallbackIcon, this.subtitle);
 }
 
 /// Row-style Workout Card (matching main app)
@@ -272,10 +317,18 @@ class _WorkoutCard extends StatelessWidget {
                     : Colors.white.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(
-                workout.icon,
-                size: 28,
+              child: Image.asset(
+                workout.iconPath,
+                width: 28,
+                height: 28,
                 color: isSelected ? const Color(0xFF3535A0) : Colors.white,
+                errorBuilder: (context, error, stackTrace) {
+                  return Icon(
+                    workout.fallbackIcon,
+                    size: 28,
+                    color: isSelected ? const Color(0xFF3535A0) : Colors.white,
+                  );
+                },
               ),
             ),
             const SizedBox(width: 16),
@@ -315,34 +368,6 @@ class _WorkoutCard extends StatelessWidget {
                   : Colors.white.withValues(alpha: 0.5),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Step indicator widget
-class _StepIndicator extends StatelessWidget {
-  final int currentStep;
-  final int totalSteps;
-
-  const _StepIndicator({
-    required this.currentStep,
-    required this.totalSteps,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(100),
-      ),
-      child: Text(
-        'Step $currentStep of $totalSteps',
-        style: PushinTheme.stepIndicatorText.copyWith(
-          color: Colors.white.withValues(alpha: 0.8),
         ),
       ),
     );

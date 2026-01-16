@@ -237,17 +237,8 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                     gradient: EnhancedSettingsDesignTokens.accentGradient,
                     delay: 200,
                     children: [
-                      Consumer<PushinAppController>(
-                        builder: (context, controller, child) {
-                          final count = controller.blockedApps.length;
-                          return EnhancedSettingsTile(
-                            icon: Icons.screen_lock_portrait,
-                            title: 'Distracting Apps',
-                            subtitle: count > 0 ? '$count apps blocked' : 'Choose distracting apps to block',
-                            onTap: () => _showFocusSessionsDialog(),
-                            iconColor: const Color(0xFFEF4444), // dangerRed color
-                          );
-                        },
+                      _BlockedAppsTile(
+                        onTap: () => _showFocusSessionsDialog(),
                       ),
                       EnhancedSettingsTile(
                         icon: Icons.timer,
@@ -1068,44 +1059,49 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       ),
     );
   }
+}
 
-  void _showFocusSessionsDialog() async {
-    try {
-      final appController = context.read<PushinAppController>();
-      final focusModeService = appController.focusModeService;
+/// Stateful widget that properly listens to blocked apps changes
+class _BlockedAppsTile extends StatefulWidget {
+  final VoidCallback onTap;
 
-      if (focusModeService == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Screen Time service not available')),
-        );
-        return;
-      }
+  const _BlockedAppsTile({required this.onTap});
 
-      // Check authorization first
-      if (focusModeService.authorizationStatus !=
-          AuthorizationStatus.authorized) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Please enable Screen Time access first')),
-        );
-        return;
-      }
+  @override
+  State<_BlockedAppsTile> createState() => _BlockedAppsTileState();
+}
 
-      // Open the picker directly
-      final result = await focusModeService.presentAppPicker();
+class _BlockedAppsTileState extends State<_BlockedAppsTile> {
+  late PushinAppController _controller;
 
-      // Update blocked apps list with the selected apps
-      if (result != null && context.mounted) {
-        // Update the controller with the selected app tokens
-        await appController.updateBlockedApps(result.appTokens);
-        // The UI will automatically update through the controller's notifyListeners
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to open app picker')),
-        );
-      }
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _controller = Provider.of<PushinAppController>(context, listen: false);
+    _controller.addListener(_onControllerChanged);
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onControllerChanged);
+    super.dispose();
+  }
+
+  void _onControllerChanged() {
+    if (mounted) {
+      setState(() {});
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = _controller.blockedApps.length;
+    return EnhancedSettingsTile(
+      icon: Icons.screen_lock_portrait,
+      title: 'Distracting Apps',
+      subtitle: count > 0 ? '$count apps blocked' : 'Choose distracting apps to block',
+      onTap: widget.onTap,
+      iconColor: const Color(0xFFEF4444), // dangerRed color
+    );
   }
 }

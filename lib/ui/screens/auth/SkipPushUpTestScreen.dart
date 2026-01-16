@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import '../../../state/auth_state_provider.dart';
 import '../../../services/CameraWorkoutService.dart';
-import '../../../services/PoseDetectionService.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import 'SkipPushUpSuccessScreen.dart';
@@ -30,10 +30,10 @@ class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
   }
 }
 
-/// Skip Flow: Push-Up Test Screen
+/// Skip Flow: Workout Try-Out Screen
 ///
 /// Simplified version for users who skip onboarding
-/// Same functionality as HowItWorksPushUpTestScreen but without onboarding dependencies
+/// Handles all workout types dynamically
 class SkipPushUpTestScreen extends StatefulWidget {
   final List<String> blockedApps;
   final String selectedWorkout;
@@ -63,21 +63,154 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
   // Track current camera lens direction for switching
   CameraLensDirection _currentCameraLens = CameraLensDirection.front;
 
-  // Real AI push-up detection
-  static const int _targetReps = 3;
+  // Dynamic workout properties based on selected workout
+  late String _workoutType;
+  late int _targetReps;
+  late String _workoutTitle;
+  late String _workoutInstructions;
+
+  // NEW: Workout initialization state (like main workout screen)
+  bool _isFullBodyDetected = false;
+  bool _isReadyToStart = false;
+  bool _userPressedStart = false; // User intent - pressed START button
+  bool _isPositioning = false; // In positioning state after START pressed
+  bool _workoutActive = false; // Workout is actively counting
+  int _countdownValue = 3;
+  bool _isCountingDown = false;
+  Timer? _countdownTimer;
+  Timer? _stabilityTimer; // Timer to track stable pose before auto-countdown
+  DateTime? _readyStateStartTime; // When pose became ready
+  static const Duration _stabilityDuration =
+      Duration(milliseconds: 1500); // 1.5 seconds stable
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _initializeWorkoutProperties();
     _initializeCameraService();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _countdownTimer?.cancel();
+    _stabilityTimer?.cancel();
     _cameraService?.dispose();
     super.dispose();
+  }
+
+  void _initializeWorkoutProperties() {
+    final selectedWorkout = widget.selectedWorkout.toLowerCase();
+
+    switch (selectedWorkout) {
+      case 'push-ups':
+        _workoutType = 'push-ups';
+        _targetReps = 3;
+        _workoutTitle = 'Push-Up Test';
+        _workoutInstructions = 'Do 3 push-ups to test the workout detection';
+        break;
+      case 'squats':
+        _workoutType = 'squats';
+        _targetReps = 3;
+        _workoutTitle = 'Squat Test';
+        _workoutInstructions = 'Do 3 squats to test the workout detection';
+        break;
+      case 'glute bridge':
+        _workoutType = 'glute-bridge';
+        _targetReps = 3;
+        _workoutTitle = 'Glute Bridge';
+        _workoutInstructions =
+            'Do 3 glute bridges to test the workout detection';
+        break;
+      case 'plank':
+        _workoutType = 'plank';
+        _targetReps = 1; // Will be overridden by timer logic
+        _workoutTitle = 'Plank Test';
+        _workoutInstructions =
+            'Hold a plank for 5 seconds to test the workout detection';
+        break;
+      case 'jumping jacks':
+        _workoutType = 'jumping-jacks';
+        _targetReps = 3;
+        _workoutTitle = 'Jumping Jacks';
+        _workoutInstructions =
+            'Do 3 jumping jacks to test the workout detection';
+        break;
+      default:
+        // Fallback to push-ups
+        _workoutType = 'push-ups';
+        _targetReps = 3;
+        _workoutTitle = 'Push-Up Test';
+        _workoutInstructions = 'Do 3 push-ups to test the workout detection';
+    }
+
+    debugPrint(
+        'Initialized workout: $_workoutType, target: $_targetReps, title: $_workoutTitle');
+  }
+
+  String _getPositioningMessage() {
+    switch (_workoutType) {
+      case 'jumping-jacks':
+        return 'Show full body facing the camera';
+      case 'push-ups':
+      case 'squats':
+      case 'glute-bridge':
+      case 'plank':
+      default:
+        return 'Show full body from the side';
+    }
+  }
+
+  String _getPositionText() {
+    switch (_workoutType) {
+      case 'push-ups':
+        return 'Get in Push-Up position';
+      case 'squats':
+        return 'Get in Squat position';
+      case 'glute-bridge':
+        return 'Lie on your back';
+      case 'plank':
+        return 'Get in Plank position';
+      case 'jumping-jacks':
+        return 'Stand with feet together';
+      default:
+        return 'Get in position';
+    }
+  }
+
+  String _getWorkoutIconPath() {
+    switch (_workoutType) {
+      case 'push-ups':
+        return 'assets/icons/pushup_icon.png';
+      case 'squats':
+        return 'assets/icons/squats_icon.png';
+      case 'glute-bridge':
+        return 'assets/icons/glutebridge_icon.png';
+      case 'plank':
+        return 'assets/icons/plank_icon.png';
+      case 'jumping-jacks':
+        return 'assets/icons/jumping_jacks_icon.png';
+      default:
+        return 'assets/icons/pushup_icon.png';
+    }
+  }
+
+  IconData _getWorkoutFallbackIcon() {
+    switch (_workoutType) {
+      case 'push-ups':
+        return Icons.fitness_center;
+      case 'squats':
+        return Icons.airline_seat_legroom_normal;
+      case 'glute-bridge':
+        return Icons.accessibility_new;
+      case 'plank':
+        return Icons.self_improvement;
+      case 'jumping-jacks':
+        return Icons.sports_gymnastics;
+      default:
+        return Icons.fitness_center;
+    }
   }
 
   @override
@@ -97,7 +230,8 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
     _cameraService = CameraWorkoutService();
 
     _cameraService!.onRepCounted = (count) {
-      if (mounted) {
+      if (mounted && _workoutType != 'plank') {
+        // Only handle reps for non-plank workouts
         debugPrint('🎯 AI DETECTED REP: $count (target: $_targetReps)');
         setState(() {
           _detectedReps = count;
@@ -117,13 +251,55 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
       }
     };
 
+    _cameraService!.onTimerUpdate = (seconds) {
+      if (mounted && _workoutType == 'plank') {
+        // Only handle timer for plank
+        debugPrint('⏱️ TIMER UPDATE: $seconds seconds (target: 5)');
+        setState(() {
+          _detectedReps =
+              seconds; // Use _detectedReps to show progress for plank too
+        });
+
+        if (seconds >= 5 && !_hasCompleted) {
+          debugPrint('🎉 COMPLETED! Plank held for $seconds >= 5 seconds');
+          _hasCompleted = true;
+          _showSuccessScreen();
+        }
+      }
+    };
+
     _cameraService!.onPoseUpdate = (result) {
       if (mounted) {
         debugPrint(
             '🤖 POSE UPDATE: ${result.feedbackMessage}, phase: ${result.phase}, detected: ${result.isPoseDetected}, keypoints: ${result.keyPoints.length}');
+        final wasReady = _isReadyToStart;
         setState(() {
           _feedbackMessage = result.feedbackMessage ?? 'Keep going!';
+          _isFullBodyDetected = result.isFullBodyDetected;
+          _isReadyToStart = result.isReadyToStart;
         });
+
+        // Auto-countdown logic when in positioning state
+        if (_isPositioning && !_isCountingDown) {
+          if (_isReadyToStart) {
+            // Pose is ready - track stability
+            if (!wasReady) {
+              // Just became ready - start tracking
+              _readyStateStartTime = DateTime.now();
+            } else {
+              // Check if stable long enough
+              final now = DateTime.now();
+              if (_readyStateStartTime != null &&
+                  now.difference(_readyStateStartTime!) >= _stabilityDuration) {
+                // Stable for required duration - trigger countdown!
+                _triggerAutoCountdown();
+              }
+            }
+          } else {
+            // Not ready - reset stability timer
+            _readyStateStartTime = null;
+          }
+        }
       }
     };
 
@@ -132,7 +308,7 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
           'Starting camera initialization for skip flow with $_currentCameraLens camera...');
       final success = await _cameraService!
           .initialize(
-        workoutType: 'push-ups',
+        workoutType: _workoutType,
         preferredCamera: _currentCameraLens,
       )
           .timeout(
@@ -206,15 +382,59 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
     await _initializeCameraService();
   }
 
+  /// User pressed START - enter positioning state (always allowed)
   void _startDetection() {
-    debugPrint(
-        '🎬 STARTING DETECTION - Instructions hidden, AI should be active');
+    if (_userPressedStart || _isCountingDown) return;
+
+    debugPrint('🎬 STARTING DETECTION - Entering positioning state');
     setState(() {
-      _showInstructions = false;
+      _userPressedStart = true;
+      _isPositioning = true;
+      _showInstructions = false; // Hide instructions when positioning starts
     });
 
-    // Detection is already running via the CameraWorkoutService
-    // Just hide instructions to show the detection UI
+    // Notify pose detection service to enter positioning state
+    _cameraService!.poseDetectionService?.enterPositioningState();
+
+    HapticFeedback.mediumImpact();
+  }
+
+  /// Auto-trigger countdown when pose is stable (called automatically)
+  void _triggerAutoCountdown() {
+    if (_isCountingDown) return;
+
+    setState(() {
+      _isCountingDown = true;
+      _isPositioning = false; // Exit positioning state
+      _countdownValue = 3;
+    });
+
+    // Notify pose detection service that countdown started
+    _cameraService!.poseDetectionService?.startCountdown();
+
+    HapticFeedback.heavyImpact();
+
+    // Countdown timer
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_countdownValue > 1) {
+        setState(() {
+          _countdownValue--;
+        });
+        HapticFeedback.lightImpact();
+      } else {
+        // Countdown complete!
+        timer.cancel();
+        setState(() {
+          _isCountingDown = false;
+          _workoutActive = true; // Workout is now active
+        });
+
+        // Activate workout in pose detection service
+        _cameraService!.poseDetectionService?.activateWorkout();
+
+        HapticFeedback.heavyImpact();
+      }
+    });
   }
 
   void _showSuccessScreen() {
@@ -230,11 +450,20 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
   }
 
   void _manualRepCount() async {
-    if (_detectedReps < _targetReps) {
+    final targetValue = _workoutType == 'plank' ? 5 : _targetReps;
+
+    if (_detectedReps < targetValue) {
       // Wenn Kamera aktiv ist, verwende den Service-Zähler
       if (_cameraService != null && _cameraService!.isReady) {
-        _cameraService!.addManualRep();
-        // Der onRepCounted Callback wird automatisch _detectedReps aktualisieren
+        if (_workoutType == 'plank') {
+          // For plank, manually add a second
+          setState(() {
+            _detectedReps++;
+          });
+        } else {
+          _cameraService!.addManualRep();
+          // Der onRepCounted Callback wird automatisch _detectedReps aktualisieren
+        }
       } else {
         // Wenn Kamera nicht aktiv, erhöhe manuell
         setState(() {
@@ -243,10 +472,10 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
       }
     }
 
-    if (_detectedReps >= _targetReps && !_hasCompleted) {
+    if (_detectedReps >= targetValue && !_hasCompleted) {
       _hasCompleted = true;
 
-      // Brief pause to let user register the final rep
+      // Brief pause to let user register the completion
       await Future.delayed(const Duration(milliseconds: 800));
 
       if (mounted) {
@@ -354,7 +583,7 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
                       ),
                       blendMode: BlendMode.srcIn,
                       child: Text(
-                        'Push-Up Test',
+                        _workoutTitle,
                         style: TextStyle(
                           fontSize: 38,
                           fontWeight: FontWeight.w800,
@@ -368,7 +597,7 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Do 3 push-ups to test the workout detection',
+                      _workoutInstructions,
                       style: TextStyle(
                         fontSize: 15,
                         color: Colors.white.withOpacity(0.6),
@@ -410,11 +639,20 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
                                   // Fallback when camera not available
                                   Container(
                                     color: Colors.black,
-                                    child: const Center(
-                                      child: Icon(
-                                        Icons.camera_alt_outlined,
+                                    child: Center(
+                                      child: Image.asset(
+                                        _getWorkoutIconPath(),
                                         color: Colors.white24,
-                                        size: 64,
+                                        width: 64,
+                                        height: 64,
+                                        errorBuilder:
+                                            (context, error, stackTrace) {
+                                          return Icon(
+                                            _getWorkoutFallbackIcon(),
+                                            color: Colors.white24,
+                                            size: 64,
+                                          );
+                                        },
                                       ),
                                     ),
                                   ),
@@ -432,15 +670,25 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
                                         mainAxisAlignment:
                                             MainAxisAlignment.center,
                                         children: [
-                                          Icon(
-                                            Icons.camera_alt_rounded,
+                                          Image.asset(
+                                            _getWorkoutIconPath(),
                                             color:
                                                 Colors.white.withOpacity(0.8),
-                                            size: 48,
+                                            width: 48,
+                                            height: 48,
+                                            errorBuilder:
+                                                (context, error, stackTrace) {
+                                              return Icon(
+                                                _getWorkoutFallbackIcon(),
+                                                color: Colors.white
+                                                    .withOpacity(0.8),
+                                                size: 48,
+                                              );
+                                            },
                                           ),
                                           const SizedBox(height: 16),
                                           Text(
-                                            'Get in Push-Up position',
+                                            _getPositionText(),
                                             style: TextStyle(
                                               fontSize: 20,
                                               fontWeight: FontWeight.w700,
@@ -464,8 +712,66 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
                                     ),
                                   ),
 
-                                // Detection Overlay (when not showing instructions)
-                                if (!_showInstructions)
+                                // Positioning Overlay (after start pressed, waiting for pose)
+                                if (!_showInstructions &&
+                                    _isPositioning &&
+                                    !_isCountingDown)
+                                  Positioned.fill(
+                                    child: Container(
+                                      color: Colors.black.withOpacity(0.3),
+                                      child: Center(
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                              'Position yourself in frame',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.white
+                                                    .withOpacity(0.9),
+                                                letterSpacing: -0.2,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              _getPositioningMessage(),
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                color: Colors.white
+                                                    .withOpacity(0.8),
+                                                fontWeight: FontWeight.w400,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                // Countdown Overlay (3-2-1 countdown)
+                                if (_isCountingDown)
+                                  Positioned.fill(
+                                    child: Container(
+                                      color: Colors.black.withOpacity(0.5),
+                                      child: Center(
+                                        child: Text(
+                                          '$_countdownValue',
+                                          style: const TextStyle(
+                                            fontSize: 72,
+                                            fontWeight: FontWeight.w800,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                // Active Workout Overlay (when actually counting)
+                                if (_workoutActive)
                                   Positioned.fill(
                                     child: Container(
                                       color: Colors.black.withOpacity(0.3),
@@ -485,7 +791,9 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
                                               ),
                                               child: Center(
                                                 child: Text(
-                                                  '$_detectedReps',
+                                                  _workoutType == 'plank'
+                                                      ? '${_detectedReps}s'
+                                                      : '$_detectedReps',
                                                   style: const TextStyle(
                                                     fontSize: 32,
                                                     fontWeight: FontWeight.w800,
@@ -607,12 +915,31 @@ class _SkipPushUpTestScreenState extends State<SkipPushUpTestScreen>
                             ),
                           ],
                         )
-                      else
-                        // Manual Count Button
+                      else if (_isPositioning ||
+                          _isCountingDown ||
+                          _workoutActive)
+                        // Button that changes based on state
                         Container(
                           padding: const EdgeInsets.only(top: 8, bottom: 8),
                           child: Center(
-                            child: _ManualCountButton(onTap: _manualRepCount),
+                            child: _workoutActive
+                                ? _ManualCountButton(onTap: _manualRepCount)
+                                : _SkipWorkoutButton(
+                                    onTap: () {
+                                      // Navigate to success screen, skipping the workout
+                                      Navigator.push(
+                                        context,
+                                        _NoSwipeBackRoute(
+                                          builder: (context) =>
+                                              SkipPushUpSuccessScreen(
+                                            blockedApps: widget.blockedApps,
+                                            selectedWorkout:
+                                                widget.selectedWorkout,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
                           ),
                         ),
 
@@ -772,10 +1099,68 @@ class _ManualCountButtonState extends State<_ManualCountButton> {
   }
 }
 
+/// Skip Workout Button
+class _SkipWorkoutButton extends StatefulWidget {
+  final VoidCallback onTap;
+
+  const _SkipWorkoutButton({required this.onTap});
+
+  @override
+  State<_SkipWorkoutButton> createState() => _SkipWorkoutButtonState();
+}
+
+class _SkipWorkoutButtonState extends State<_SkipWorkoutButton> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) => setState(() => _isPressed = false),
+      onTapCancel: () => setState(() => _isPressed = false),
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        widget.onTap();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        transform: Matrix4.identity()..scale(_isPressed ? 0.95 : 1.0),
+        transformAlignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        decoration: BoxDecoration(
+          color: _isPressed
+              ? Colors.white.withOpacity(0.3)
+              : Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: _isPressed
+              ? [
+                  BoxShadow(
+                    color: Colors.white.withOpacity(0.4),
+                    blurRadius: 12,
+                    spreadRadius: 2,
+                  ),
+                ]
+              : null,
+        ),
+        child: const Text(
+          'Skip Workout',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+            letterSpacing: -0.2,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Custom painter for drawing pose detection skeleton
 class _PoseSkeletonPainter extends CustomPainter {
   final Map<String, Offset> keyPoints;
-  final PushUpPhase phase;
+  final dynamic phase;
   final CameraController? cameraController;
 
   _PoseSkeletonPainter({

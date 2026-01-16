@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/SelectionButton.dart';
+import '../../widgets/pill_navigation_bar.dart';
 import 'HowItWorksBlockAppsScreen.dart';
 
 /// Custom route that disables swipe back gesture on iOS
@@ -60,151 +61,155 @@ class _OnboardingWorkoutHistoryScreenState
       backgroundColor: Colors.black,
       body: GOStepsBackground(
         blackRatio: 0.25,
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: Stack(
+          children: [
+            SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
 
-              // Consistent spacing with other screens
-              SizedBox(height: screenHeight * 0.08),
+                  // Consistent spacing with other screens
+                  SizedBox(height: screenHeight * 0.08),
 
-              // Heading - consistent positioning
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Workout history calendar icon
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6060FF).withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: const Icon(
-                        Icons.calendar_today_rounded,
-                        size: 40,
-                        color: Color(0xFF9090FF),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'How long have',
-                      style: TextStyle(
-                        fontSize: 44,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        height: 1.05,
-                        letterSpacing: -1,
-                      ),
-                    ),
-                    ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ).createShader(
-                        Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
-                      ),
-                      blendMode: BlendMode.srcIn,
-                      child: Text(
-                        'you trained?',
-                        style: TextStyle(
-                          fontSize: 44,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          height: 1.1,
-                          letterSpacing: -0.5,
-                          decoration: TextDecoration.none,
-                          fontFamily: 'Inter', // Explicit font family
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              SizedBox(height: screenHeight * 0.06),
-
-              // History Options - 2x2 grid
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  children: [
-                    Row(
+                  // Heading - consistent positioning
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: SelectionButton(
-                            label: 'Just starting',
-                            isSelected: _selectedHistory == 'just_starting',
-                            onTap: () => setState(
-                                () => _selectedHistory = 'just_starting'),
+                        // Workout history calendar icon
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6060FF).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: const Icon(
+                            Icons.calendar_today_rounded,
+                            size: 40,
+                            color: Color(0xFF9090FF),
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: SelectionButton(
-                            label: '3-6 months',
-                            isSelected: _selectedHistory == '3_6_months',
-                            onTap: () =>
-                                setState(() => _selectedHistory = '3_6_months'),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'How long have',
+                          style: TextStyle(
+                            fontSize: 44,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            height: 1.05,
+                            letterSpacing: -1,
+                          ),
+                        ),
+                        ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ).createShader(
+                            Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                          ),
+                          blendMode: BlendMode.srcIn,
+                          child: Text(
+                            'you trained?',
+                            style: TextStyle(
+                              fontSize: 44,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              height: 1.1,
+                              letterSpacing: -0.5,
+                              decoration: TextDecoration.none,
+                              fontFamily: 'Inter', // Explicit font family
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    Row(
+                  ),
+
+                  SizedBox(height: screenHeight * 0.06),
+
+                  // History Options - 2x2 grid
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: SelectionButton(
-                            label: '6-12 months',
-                            isSelected: _selectedHistory == '6_12_months',
-                            onTap: () => setState(
-                                () => _selectedHistory = '6_12_months'),
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: SelectionButton(
+                                label: 'Just starting',
+                                isSelected: _selectedHistory == 'just_starting',
+                                onTap: () => setState(
+                                    () => _selectedHistory = 'just_starting'),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: SelectionButton(
+                                label: '3-6 months',
+                                isSelected: _selectedHistory == '3_6_months',
+                                onTap: () =>
+                                    setState(() => _selectedHistory = '3_6_months'),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: SelectionButton(
-                            label: '1+ years',
-                            isSelected: _selectedHistory == '1_plus_years',
-                            onTap: () => setState(
-                                () => _selectedHistory = '1_plus_years'),
-                          ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: SelectionButton(
+                                label: '6-12 months',
+                                isSelected: _selectedHistory == '6_12_months',
+                                onTap: () => setState(
+                                    () => _selectedHistory = '6_12_months'),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: SelectionButton(
+                                label: '1+ years',
+                                isSelected: _selectedHistory == '1_plus_years',
+                                onTap: () => setState(
+                                    () => _selectedHistory = '1_plus_years'),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+
+                  // Spacer to push content up (button will be positioned at bottom)
+                  const Spacer(),
+                ],
               ),
+            ),
 
-              const Spacer(),
-
-              // Next Button
-              Padding(
-                padding: const EdgeInsets.all(32),
-                child: _NextButton(
-                  enabled: _selectedHistory != null,
-                  onTap: () {
-                    if (_selectedHistory != null) {
-                      Navigator.push(
-                        context,
-                        _NoSwipeBackRoute(
-                          builder: (context) => HowItWorksBlockAppsScreen(
-                            fitnessLevel: widget.fitnessLevel,
-                            goals: widget.goals,
-                            otherGoal: widget.otherGoal,
-                            workoutHistory: _selectedHistory!,
-                          ),
+            // Next Button - positioned at navigation pill level
+            BottomActionContainer(
+              child: _NextButton(
+                enabled: _selectedHistory != null,
+                onTap: () {
+                  if (_selectedHistory != null) {
+                    Navigator.push(
+                      context,
+                      _NoSwipeBackRoute(
+                        builder: (context) => HowItWorksBlockAppsScreen(
+                          fitnessLevel: widget.fitnessLevel,
+                          goals: widget.goals,
+                          otherGoal: widget.otherGoal,
+                          workoutHistory: _selectedHistory!,
                         ),
-                      );
-                    }
-                  },
-                ),
+                      ),
+                    );
+                  }
+                },
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

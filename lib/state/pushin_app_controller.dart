@@ -722,7 +722,9 @@ class PushinAppController extends ChangeNotifier {
       final workoutService = _core.workoutService as MockWorkoutTrackingService;
       // For time-based workouts, record the target value (seconds completed)
       // instead of actualReps (which is 0 for plank)
-      final repsToRecord = isTimeBasedWorkout ? (_core.workoutService.getCurrentWorkout()?.targetReps ?? 0) : actualReps;
+      final repsToRecord = isTimeBasedWorkout
+          ? (_core.workoutService.getCurrentWorkout()?.targetReps ?? 0)
+          : actualReps;
       workoutService.recordReps(repsToRecord, now);
 
       // Use the stored desired screen time (what the user selected)

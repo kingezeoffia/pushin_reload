@@ -208,16 +208,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final keyboardPadding = MediaQuery.of(context).viewInsets.bottom;
-
     return Scaffold(
       backgroundColor: Colors.black,
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       body: GOStepsBackground(
         blackRatio: 0.25,
         child: SafeArea(
           child: SingleChildScrollView(
-            padding: EdgeInsets.only(bottom: keyboardPadding),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

@@ -181,11 +181,10 @@ class _EditNameScreenState extends State<EditNameScreen> {
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
-    final keyboardPadding = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
       backgroundColor: Colors.black,
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       body: GOStepsBackground(
         blackRatio: 0.25,
         child: SafeArea(
@@ -421,7 +420,7 @@ class _EditNameScreenState extends State<EditNameScreen> {
                             onTap: _updateName,
                           ),
 
-                          SizedBox(height: 32 + keyboardPadding),
+                          SizedBox(height: 32),
                         ],
                       ),
                     ),

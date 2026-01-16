@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import '../../widgets/pill_navigation_bar.dart';
 import '../../../state/auth_state_provider.dart';
 
 /// Sign Up Screen - New user registration
@@ -85,6 +85,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   void _navigateToSignIn() {
+    // Add haptic feedback for button press
+    HapticFeedback.lightImpact();
+
     // BMAD v6: State-driven navigation - no Navigator.pushReplacement
     final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
     authProvider.triggerSignInFlow();
@@ -196,428 +199,442 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final passwordStrength =
         _calculatePasswordStrength(_passwordController.text);
     final authProvider = Provider.of<AuthStateProvider>(context);
-    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      resizeToAvoidBottomInset: false,
-      body: GOStepsBackground(
-        blackRatio: 0.25,
-        child: SizedBox.expand(
-          child: Stack(
-            children: [
-              SafeArea(
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: Colors.black,
+          resizeToAvoidBottomInset: true,
+          body: GOStepsBackground(
+            blackRatio: 0.25,
+            child: SizedBox.expand(
+              child: SafeArea(
                 child: SingleChildScrollView(
                   controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Top navigation bar with sign in button
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16, right: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            GestureDetector(
-                              onTap: _navigateToSignIn,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: Colors.white.withOpacity(0.2),
-                                    width: 1,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.white.withOpacity(0.1),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.only(bottom: 120), // Space for button
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Top navigation bar with sign in button
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16, right: 16),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              GestureDetector(
+                                onTap: _navigateToSignIn,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: Colors.white.withOpacity(0.2),
+                                      width: 1,
                                     ),
-                                  ],
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      'Sign In',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: const Color(0xFF2A2A6A),
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: -0.1,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.white.withOpacity(0.1),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
                                       ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Icon(
-                                      Icons.arrow_forward,
-                                      size: 16,
-                                      color: const Color(0xFF2A2A6A)
-                                          .withOpacity(0.7),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'Sign In',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: const Color(0xFF2A2A6A),
+                                          fontWeight: FontWeight.w600,
+                                          letterSpacing: -0.1,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Icon(
+                                        Icons.arrow_forward,
+                                        size: 16,
+                                        color: const Color(0xFF2A2A6A)
+                                            .withOpacity(0.7),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
 
-                      SizedBox(height: screenHeight * 0.04),
+                        SizedBox(height: screenHeight * 0.04),
 
-                      // Title
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 32),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Get started with:',
-                              style: TextStyle(
-                                fontSize: 38,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                                height: 1.05,
-                                letterSpacing: -1,
-                              ),
-                            ),
-                            ShaderMask(
-                              shaderCallback: (bounds) => const LinearGradient(
-                                colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                              ).createShader(
-                                Rect.fromLTWH(
-                                    0, 0, bounds.width, bounds.height * 1.3),
-                              ),
-                              blendMode: BlendMode.srcIn,
-                              child: Text(
-                                'PUSHIN\'',
+                        // Title
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Get started with:',
                                 style: TextStyle(
                                   fontSize: 38,
                                   fontWeight: FontWeight.w800,
                                   color: Colors.white,
-                                  height: 1.1,
-                                  letterSpacing: -0.5,
-                                  decoration: TextDecoration.none,
-                                  fontFamily: 'Inter',
+                                  height: 1.05,
+                                  letterSpacing: -1,
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(
-                          height:
-                              200), // Large spacing between title and content
-
-                      // Input Fields Section
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 32),
-                        child: Column(
-                          children: [
-                            // Third-party signup section (above input fields)
-                            Text(
-                              'Continue with',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.white.withOpacity(0.5),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // Third-party buttons row
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                // Apple Sign Up Button
-                                _RoundThirdPartyButton(
-                                  imageAsset: 'assets/images/apple_logo.png',
-                                  backgroundColor: Colors.white,
-                                  iconColor: Colors.white,
-                                  onTap: () => _handleThirdPartySignUp('apple'),
+                              ShaderMask(
+                                shaderCallback: (bounds) =>
+                                    const LinearGradient(
+                                  colors: [
+                                    Color(0xFF6060FF),
+                                    Color(0xFF9090FF)
+                                  ],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ).createShader(
+                                  Rect.fromLTWH(
+                                      0, 0, bounds.width, bounds.height * 1.3),
                                 ),
-
-                                const SizedBox(width: 20),
-
-                                // Google Sign Up Button
-                                _RoundThirdPartyButton(
-                                  imageAsset: 'assets/images/google_logo.png',
-                                  backgroundColor: Colors.white,
-                                  iconColor: const Color(0xFF2A2A6A),
-                                  onTap: () =>
-                                      _handleThirdPartySignUp('google'),
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 24),
-
-                            // Divider line
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Divider(
-                                    color: Colors.white.withOpacity(0.2),
-                                    thickness: 1,
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16),
-                                  child: Text(
-                                    'or',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.white.withOpacity(0.5),
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Divider(
-                                    color: Colors.white.withOpacity(0.2),
-                                    thickness: 1,
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 24),
-
-                            // Email Field
-                            TextField(
-                              controller: _emailController,
-                              focusNode: _emailFocus,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: 'Email',
-                                hintStyle: TextStyle(
-                                  color: Colors.white.withOpacity(0.6),
-                                  fontSize: 16,
-                                ),
-                                filled: true,
-                                fillColor: Colors.white.withOpacity(0.1),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide.none,
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 16,
-                                ),
-                              ),
-                              keyboardType: TextInputType.emailAddress,
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // Password Field with Strength Indicator
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                TextField(
-                                  controller: _passwordController,
-                                  focusNode: _passwordFocus,
-                                  style: const TextStyle(
+                                blendMode: BlendMode.srcIn,
+                                child: Text(
+                                  'PUSHIN\'',
+                                  style: TextStyle(
+                                    fontSize: 38,
+                                    fontWeight: FontWeight.w800,
                                     color: Colors.white,
-                                    fontSize: 16,
+                                    height: 1.1,
+                                    letterSpacing: -0.5,
+                                    decoration: TextDecoration.none,
+                                    fontFamily: 'Inter',
                                   ),
-                                  decoration: InputDecoration(
-                                    hintText: 'Password',
-                                    hintStyle: TextStyle(
-                                      color: Colors.white.withOpacity(0.6),
-                                      fontSize: 16,
-                                    ),
-                                    filled: true,
-                                    fillColor: Colors.white.withOpacity(0.1),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 16,
-                                    ),
-                                    suffixIcon: IconButton(
-                                      icon: Icon(
-                                        _obscurePassword
-                                            ? Icons.visibility_off_outlined
-                                            : Icons.visibility_outlined,
-                                        color: Colors.white.withOpacity(0.6),
-                                      ),
-                                      onPressed: _togglePasswordVisibility,
-                                    ),
-                                  ),
-                                  obscureText: _obscurePassword,
-                                  onChanged: (value) => setState(() {}),
                                 ),
+                              ),
+                            ],
+                          ),
+                        ),
 
-                                // Password Strength Indicator
-                                if (_passwordController.text.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 60,
-                                        height: 4,
-                                        decoration: BoxDecoration(
-                                          color: _getStrengthColor(
-                                              passwordStrength),
-                                          borderRadius:
-                                              BorderRadius.circular(2),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        _getStrengthText(passwordStrength),
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: _getStrengthColor(
-                                              passwordStrength),
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
+                        const SizedBox(
+                            height:
+                                200), // Large spacing between title and content
+
+                        // Input Fields Section
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Column(
+                            children: [
+                              // Third-party signup section (above input fields)
+                              Text(
+                                'Continue with',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.white.withOpacity(0.5),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+
+                              const SizedBox(height: 16),
+
+                              // Third-party buttons row
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  // Apple Sign Up Button
+                                  _RoundThirdPartyButton(
+                                    imageAsset: 'assets/images/apple_logo.png',
+                                    backgroundColor: Colors.white,
+                                    iconColor: Colors.white,
+                                    onTap: () =>
+                                        _handleThirdPartySignUp('apple'),
+                                  ),
+
+                                  const SizedBox(width: 20),
+
+                                  // Google Sign Up Button
+                                  _RoundThirdPartyButton(
+                                    imageAsset: 'assets/images/google_logo.png',
+                                    backgroundColor: Colors.white,
+                                    iconColor: const Color(0xFF2A2A6A),
+                                    onTap: () =>
+                                        _handleThirdPartySignUp('google'),
                                   ),
                                 ],
-                              ],
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            // Confirm Password Field
-                            TextField(
-                              controller: _confirmPasswordController,
-                              focusNode: _confirmPasswordFocus,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
                               ),
-                              decoration: InputDecoration(
-                                hintText: 'Repeat Password',
-                                hintStyle: TextStyle(
-                                  color: Colors.white.withOpacity(0.6),
-                                  fontSize: 16,
-                                ),
-                                filled: true,
-                                fillColor: Colors.white.withOpacity(0.1),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide.none,
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 16,
-                                ),
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _obscureConfirmPassword
-                                        ? Icons.visibility_off_outlined
-                                        : Icons.visibility_outlined,
-                                    color: Colors.white.withOpacity(0.6),
-                                  ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _obscureConfirmPassword =
-                                          !_obscureConfirmPassword;
-                                    });
-                                  },
-                                ),
-                              ),
-                              obscureText: _obscureConfirmPassword,
-                              onChanged: (value) => setState(() {}),
-                            ),
 
-                            // Password Match Indicator
-                            if (_confirmPasswordController.text.isNotEmpty) ...[
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 24),
+
+                              // Divider line
                               Row(
                                 children: [
-                                  Icon(
-                                    _passwordController.text ==
-                                            _confirmPasswordController.text
-                                        ? Icons.check_circle
-                                        : Icons.error,
-                                    size: 16,
-                                    color: _passwordController.text ==
-                                            _confirmPasswordController.text
-                                        ? const Color(0xFF10B981) // Green
-                                        : const Color(0xFFEF4444), // Red
+                                  Expanded(
+                                    child: Divider(
+                                      color: Colors.white.withOpacity(0.2),
+                                      thickness: 1,
+                                    ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _passwordController.text ==
-                                            _confirmPasswordController.text
-                                        ? 'Passwords match'
-                                        : 'Passwords do not match',
-                                    style: TextStyle(
-                                      fontSize: 12,
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16),
+                                    child: Text(
+                                      'or',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.white.withOpacity(0.5),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Divider(
+                                      color: Colors.white.withOpacity(0.2),
+                                      thickness: 1,
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 24),
+
+                              // Email Field
+                              TextField(
+                                controller: _emailController,
+                                focusNode: _emailFocus,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Email',
+                                  hintStyle: TextStyle(
+                                    color: Colors.white.withOpacity(0.6),
+                                    fontSize: 16,
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.white.withOpacity(0.1),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 16,
+                                  ),
+                                ),
+                                keyboardType: TextInputType.emailAddress,
+                              ),
+
+                              const SizedBox(height: 16),
+
+                              // Password Field with Strength Indicator
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  TextField(
+                                    controller: _passwordController,
+                                    focusNode: _passwordFocus,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: 'Password',
+                                      hintStyle: TextStyle(
+                                        color: Colors.white.withOpacity(0.6),
+                                        fontSize: 16,
+                                      ),
+                                      filled: true,
+                                      fillColor: Colors.white.withOpacity(0.1),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 16,
+                                      ),
+                                      suffixIcon: IconButton(
+                                        icon: Icon(
+                                          _obscurePassword
+                                              ? Icons.visibility_off_outlined
+                                              : Icons.visibility_outlined,
+                                          color: Colors.white.withOpacity(0.6),
+                                        ),
+                                        onPressed: _togglePasswordVisibility,
+                                      ),
+                                    ),
+                                    obscureText: _obscurePassword,
+                                    onChanged: (value) => setState(() {}),
+                                  ),
+
+                                  // Password Strength Indicator
+                                  if (_passwordController.text.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          width: 60,
+                                          height: 4,
+                                          decoration: BoxDecoration(
+                                            color: _getStrengthColor(
+                                                passwordStrength),
+                                            borderRadius:
+                                                BorderRadius.circular(2),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          _getStrengthText(passwordStrength),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: _getStrengthColor(
+                                                passwordStrength),
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              ),
+
+                              const SizedBox(height: 16),
+
+                              // Confirm Password Field
+                              TextField(
+                                controller: _confirmPasswordController,
+                                focusNode: _confirmPasswordFocus,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Repeat Password',
+                                  hintStyle: TextStyle(
+                                    color: Colors.white.withOpacity(0.6),
+                                    fontSize: 16,
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.white.withOpacity(0.1),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 16,
+                                  ),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscureConfirmPassword
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.visibility_outlined,
+                                      color: Colors.white.withOpacity(0.6),
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        _obscureConfirmPassword =
+                                            !_obscureConfirmPassword;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                obscureText: _obscureConfirmPassword,
+                                onChanged: (value) => setState(() {}),
+                              ),
+
+                              // Password Match Indicator
+                              if (_confirmPasswordController
+                                  .text.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      _passwordController.text ==
+                                              _confirmPasswordController.text
+                                          ? Icons.check_circle
+                                          : Icons.error,
+                                      size: 16,
                                       color: _passwordController.text ==
                                               _confirmPasswordController.text
                                           ? const Color(0xFF10B981) // Green
                                           : const Color(0xFFEF4444), // Red
-                                      fontWeight: FontWeight.w500,
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ],
-
-                            // Error message display
-                            if (authProvider.errorMessage != null) ...[
-                              const SizedBox(height: 16),
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                      color: Colors.red.withOpacity(0.3)),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      _passwordController.text ==
+                                              _confirmPasswordController.text
+                                          ? 'Passwords match'
+                                          : 'Passwords do not match',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: _passwordController.text ==
+                                                _confirmPasswordController.text
+                                            ? const Color(0xFF10B981) // Green
+                                            : const Color(0xFFEF4444), // Red
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                child: Text(
-                                  authProvider.errorMessage!,
-                                  style: const TextStyle(
-                                    color: Colors.red,
-                                    fontSize: 14,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            ],
+                              ],
 
-                            // Bottom padding - only add extra space when keyboard is open
-                            SizedBox(height: 90 + keyboardHeight),
-                          ],
+                              // Error message display
+                              if (authProvider.errorMessage != null) ...[
+                                const SizedBox(height: 16),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                        color: Colors.red.withOpacity(0.3)),
+                                  ),
+                                  child: Text(
+                                    authProvider.errorMessage!,
+                                    style: const TextStyle(
+                                      color: Colors.red,
+                                      fontSize: 14,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-
-              // Bottom button container
-              BottomActionContainer(
-                child: _SignUpButton(
-                  enabled: _isFormValid() && !authProvider.isLoading,
-                  loading: authProvider.isLoading,
-                  onTap: _handleSignUp,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
-      ),
+
+        // Button positioned outside Scaffold, not affected by keyboard
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: MediaQuery.of(context).padding.bottom + 8,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: _SignUpButton(
+              enabled: _isFormValid() && !authProvider.isLoading,
+              loading: authProvider.isLoading,
+              onTap: _handleSignUp,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

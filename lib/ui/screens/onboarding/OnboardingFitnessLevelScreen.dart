@@ -5,6 +5,7 @@ import '../../../state/auth_state_provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/SelectionButton.dart';
+import '../../widgets/pill_navigation_bar.dart';
 import 'OnboardingGoalsScreen.dart';
 
 /// Custom route that disables swipe back gesture on iOS
@@ -57,148 +58,155 @@ class _OnboardingFitnessLevelScreenState
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor:
+          Colors.black, // TEMP: Changed to red to debug white screen issue
       body: GOStepsBackground(
         blackRatio: 0.25,
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Consistent spacing with other screens
-              SizedBox(height: screenHeight * 0.08),
+        child: Stack(
+          children: [
+            SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Consistent spacing with other screens
+                  SizedBox(height: screenHeight * 0.08),
 
-              // Heading - consistent positioning
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Athletic sprinting icon
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6060FF).withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: const Icon(
-                        Icons.directions_run_rounded,
-                        size: 40,
-                        color: Color(0xFF9090FF),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Current',
-                      style: TextStyle(
-                        fontSize: 44,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        height: 1.1,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ).createShader(
-                        Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
-                      ),
-                      blendMode: BlendMode.srcIn,
-                      child: const Text(
-                        'fitness level?',
-                        style: TextStyle(
-                          fontSize: 44,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          height: 1.1,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              SizedBox(height: screenHeight * 0.06),
-
-              // Fitness Level Grid - 2x2
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  children: [
-                    Row(
+                  // Heading - consistent positioning
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: SelectionButton(
-                            label: 'Beginner',
-                            isSelected: _selectedLevel == 'beginner',
-                            onTap: () =>
-                                setState(() => _selectedLevel = 'beginner'),
+                        // Athletic sprinting icon
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color:
+                                const Color(0xFF6060FF).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: const Icon(
+                            Icons.directions_run_rounded,
+                            size: 40,
+                            color: Color(0xFF9090FF),
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: SelectionButton(
-                            label: 'Moderate',
-                            isSelected: _selectedLevel == 'moderate',
-                            onTap: () =>
-                                setState(() => _selectedLevel = 'moderate'),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'Current',
+                          style: TextStyle(
+                            fontSize: 44,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            height: 1.1,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ).createShader(
+                            Rect.fromLTWH(
+                                0, 0, bounds.width, bounds.height * 1.3),
+                          ),
+                          blendMode: BlendMode.srcIn,
+                          child: const Text(
+                            'fitness level?',
+                            style: TextStyle(
+                              fontSize: 44,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              height: 1.1,
+                              letterSpacing: -0.5,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    Row(
+                  ),
+
+                  SizedBox(height: screenHeight * 0.06),
+
+                  // Fitness Level Grid - 2x2
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: SelectionButton(
-                            label: 'Advanced',
-                            isSelected: _selectedLevel == 'advanced',
-                            onTap: () =>
-                                setState(() => _selectedLevel = 'advanced'),
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: SelectionButton(
+                                label: 'Beginner',
+                                isSelected: _selectedLevel == 'beginner',
+                                onTap: () =>
+                                    setState(() => _selectedLevel = 'beginner'),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: SelectionButton(
+                                label: 'Moderate',
+                                isSelected: _selectedLevel == 'moderate',
+                                onTap: () =>
+                                    setState(() => _selectedLevel = 'moderate'),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: SelectionButton(
-                            label: 'Athletic',
-                            isSelected: _selectedLevel == 'athletic',
-                            onTap: () =>
-                                setState(() => _selectedLevel = 'athletic'),
-                          ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: SelectionButton(
+                                label: 'Advanced',
+                                isSelected: _selectedLevel == 'advanced',
+                                onTap: () =>
+                                    setState(() => _selectedLevel = 'advanced'),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: SelectionButton(
+                                label: 'Athletic',
+                                isSelected: _selectedLevel == 'athletic',
+                                onTap: () =>
+                                    setState(() => _selectedLevel = 'athletic'),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+
+                  // Spacer to push content up (button will be positioned at bottom)
+                  const Spacer(),
+                ],
               ),
+            ),
 
-              const Spacer(),
-
-              // Next Button
-              Padding(
-                padding: const EdgeInsets.all(32),
-                child: _NextButton(
-                  enabled: _selectedLevel != null,
-                  onTap: () {
-                    if (_selectedLevel != null) {
-                      Navigator.push(
-                        context,
-                        _NoSwipeBackRoute(
-                          builder: (context) => OnboardingGoalsScreen(
-                            fitnessLevel: _selectedLevel!,
-                          ),
+            // Next Button - positioned at navigation pill level
+            BottomActionContainer(
+              child: _NextButton(
+                enabled: _selectedLevel != null,
+                onTap: () {
+                  if (_selectedLevel != null) {
+                    Navigator.push(
+                      context,
+                      _NoSwipeBackRoute(
+                        builder: (context) => OnboardingGoalsScreen(
+                          fitnessLevel: _selectedLevel!,
                         ),
-                      );
-                    }
-                  },
-                ),
+                      ),
+                    );
+                  }
+                },
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

@@ -340,7 +340,7 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Flexible(
-                flex: 3,
+                flex: 9,
                 fit: FlexFit.tight,
                 child: ImprovedWaterIntakeWidget(
                   current: 2.08,
@@ -351,7 +351,7 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
               ),
               SizedBox(width: cardSpacing),
               Flexible(
-                flex: 4,
+                flex: 11,
                 fit: FlexFit.tight,
                 child: _workoutsLoading
                     ? Container(
@@ -489,7 +489,7 @@ class _MostUsedAppsWidgetState extends State<MostUsedAppsWidget>
                       borderRadius: BorderRadius.circular(9),
                     ),
                     child: Icon(
-                      Icons.phone_android_rounded,
+                      Icons.access_time_filled,
                       color: _accentColor,
                       size: 16,
                     ),
@@ -1072,7 +1072,7 @@ class _WorkoutsWidgetState extends State<WorkoutsWidget>
                       borderRadius: BorderRadius.circular(9),
                     ),
                     child: Icon(
-                      Icons.fitness_center_rounded,
+                      Icons.directions_run_rounded,
                       color: _accentColor,
                       size: 16,
                     ),

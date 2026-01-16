@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/SelectionButton.dart';
+import '../../widgets/pill_navigation_bar.dart';
 import 'OnboardingWorkoutHistoryScreen.dart';
 
 /// Custom route that disables swipe back gesture on iOS
@@ -69,150 +70,154 @@ class _OnboardingGoalsScreenState extends State<OnboardingGoalsScreen> {
       backgroundColor: Colors.black,
       body: GOStepsBackground(
         blackRatio: 0.25,
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: Stack(
+          children: [
+            SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
 
-              SizedBox(height: screenHeight * 0.08),
+                  SizedBox(height: screenHeight * 0.08),
 
-              // Heading - consistent with other screens
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Goals target icon
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6060FF).withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: const Icon(
-                        Icons.adjust_rounded,
-                        size: 40,
-                        color: Color(0xFF9090FF),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'What are',
-                      style: TextStyle(
-                        fontSize: 44,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        height: 1.05,
-                        letterSpacing: -1,
-                      ),
-                    ),
-                    ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ).createShader(
-                        Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
-                      ),
-                      blendMode: BlendMode.srcIn,
-                      child: Text(
-                        'your goals?',
-                        style: TextStyle(
-                          fontSize: 44,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          height: 1.1,
-                          letterSpacing: -0.5,
-                          decoration: TextDecoration.none,
-                          fontFamily: 'Inter', // Explicit font family
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              SizedBox(height: screenHeight * 0.06),
-
-              // Goal Options - 2x2 grid, tap only
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  children: [
-                    // Row 1
-                    Row(
+                  // Heading - consistent with other screens
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: SelectionButton(
-                            label: 'Lose weight',
-                            isSelected: _selectedGoals.contains('lose_weight'),
-                            onTap: () => _toggleGoal('lose_weight'),
-                            provideHapticFeedback: false,
+                        // Goals target icon
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6060FF).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: const Icon(
+                            Icons.adjust_rounded,
+                            size: 40,
+                            color: Color(0xFF9090FF),
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: SelectionButton(
-                            label: 'Build muscle',
-                            isSelected: _selectedGoals.contains('build_muscle'),
-                            onTap: () => _toggleGoal('build_muscle'),
-                            provideHapticFeedback: false,
+                        const SizedBox(height: 20),
+                        const Text(
+                          'What are',
+                          style: TextStyle(
+                            fontSize: 44,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            height: 1.05,
+                            letterSpacing: -1,
+                          ),
+                        ),
+                        ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ).createShader(
+                            Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                          ),
+                          blendMode: BlendMode.srcIn,
+                          child: Text(
+                            'your goals?',
+                            style: TextStyle(
+                              fontSize: 44,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              height: 1.1,
+                              letterSpacing: -0.5,
+                              decoration: TextDecoration.none,
+                              fontFamily: 'Inter', // Explicit font family
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    // Row 2
-                    Row(
+                  ),
+
+                  SizedBox(height: screenHeight * 0.06),
+
+                  // Goal Options - 2x2 grid, tap only
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: SelectionButton(
-                            label: 'Less screen time',
-                            isSelected:
-                                _selectedGoals.contains('reduce_screen_time'),
-                            onTap: () => _toggleGoal('reduce_screen_time'),
-                            provideHapticFeedback: false,
-                          ),
+                        // Row 1
+                        Row(
+                          children: [
+                            Expanded(
+                              child: SelectionButton(
+                                label: 'Lose weight',
+                                isSelected: _selectedGoals.contains('lose_weight'),
+                                onTap: () => _toggleGoal('lose_weight'),
+                                provideHapticFeedback: false,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: SelectionButton(
+                                label: 'Build muscle',
+                                isSelected: _selectedGoals.contains('build_muscle'),
+                                onTap: () => _toggleGoal('build_muscle'),
+                                provideHapticFeedback: false,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: SelectionButton(
-                            label: 'Others',
-                            isSelected: _selectedGoals.contains('others'),
-                            onTap: () => _toggleGoal('others'),
-                            provideHapticFeedback: false,
-                          ),
+                        const SizedBox(height: 16),
+                        // Row 2
+                        Row(
+                          children: [
+                            Expanded(
+                              child: SelectionButton(
+                                label: 'Less screen time',
+                                isSelected:
+                                    _selectedGoals.contains('reduce_screen_time'),
+                                onTap: () => _toggleGoal('reduce_screen_time'),
+                                provideHapticFeedback: false,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: SelectionButton(
+                                label: 'Others',
+                                isSelected: _selectedGoals.contains('others'),
+                                onTap: () => _toggleGoal('others'),
+                                provideHapticFeedback: false,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+
+                  // Spacer to push content up (button will be positioned at bottom)
+                  const Spacer(),
+                ],
               ),
+            ),
 
-              const Spacer(),
-
-              // Next Button
-              Padding(
-                padding: const EdgeInsets.all(32),
-                child: _NextButton(
-                  enabled: _canProceed,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      _NoSwipeBackRoute(
-                        builder: (context) => OnboardingWorkoutHistoryScreen(
-                          fitnessLevel: widget.fitnessLevel,
-                          goals: _selectedGoals.toList(),
-                          otherGoal: '', // No text input needed
-                        ),
+            // Next Button - positioned at navigation pill level
+            BottomActionContainer(
+              child: _NextButton(
+                enabled: _canProceed,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    _NoSwipeBackRoute(
+                      builder: (context) => OnboardingWorkoutHistoryScreen(
+                        fitnessLevel: widget.fitnessLevel,
+                        goals: _selectedGoals.toList(),
+                        otherGoal: '', // No text input needed
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

@@ -14,10 +14,11 @@ const cors = require('cors');
 
 const app = express();
 
-// PostgreSQL connection - Always use Railway's DATABASE_URL
+// PostgreSQL connection - Use SSL for Railway, disable for localhost
+const isLocalDatabase = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('localhost');
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
+  ssl: isLocalDatabase ? false : {
     rejectUnauthorized: false
   }
 });

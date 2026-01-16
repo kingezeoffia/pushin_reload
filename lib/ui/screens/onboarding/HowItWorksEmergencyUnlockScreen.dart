@@ -49,21 +49,12 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
       backgroundColor: Colors.black,
       body: GOStepsBackground(
         blackRatio: 0.25,
-        child: SafeArea(
-          child: Column(
+        child: Stack(
+          children: [
+            SafeArea(
+              child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Step Indicator
-              Padding(
-                padding: const EdgeInsets.only(right: 16, top: 8),
-                child: Row(
-                  children: [
-                    const Spacer(),
-                    _StepIndicator(currentStep: 5, totalSteps: 5),
-                  ],
-                ),
-              ),
-
               // Consistent spacing with other screens
               SizedBox(height: screenHeight * 0.06),
 
@@ -150,15 +141,15 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     _RuleItem(
-                      icon: Icons.today,
-                      title: 'Three times per day',
-                      description: 'Emergency unlock 3x a day',
-                    ),
-                    const SizedBox(height: 16),
-                    _RuleItem(
                       icon: Icons.timer,
                       title: 'Temporary Access',
                       description: 'Customizable duration',
+                    ),
+                    const SizedBox(height: 16),
+                    _RuleItem(
+                      icon: Icons.today,
+                      title: 'Three times per day',
+                      description: 'Emergency unlock 3x a day',
                     ),
                     const SizedBox(height: 16),
                     _RuleItem(
@@ -170,10 +161,14 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
                 ),
               ),
 
-              const Spacer(),
+                  // Spacer to push content up (button will be positioned at bottom)
+                  const Spacer(),
+                ],
+              ),
+            ),
 
-              // Continue Button
-              Positioned(
+            // Complete Setup Button - properly positioned in Stack
+            Positioned(
                 left: 0,
                 right: 0,
                 bottom: MediaQuery.of(context).padding.bottom + 8,
@@ -209,8 +204,7 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
                 ),
               ),
             ),
-            ],
-          ),
+          ],
         ),
       ),
     );
@@ -236,7 +230,10 @@ class _RuleItem extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.08),
         borderRadius: BorderRadius.circular(20),
-        // NO border - flat modern design
+        border: Border.all(
+          color: Colors.white.withOpacity(0.1),
+          width: 1,
+        ),
       ),
       child: Row(
         children: [
@@ -284,37 +281,6 @@ class _RuleItem extends StatelessWidget {
     );
   }
 }
-
-/// Step indicator widget
-class _StepIndicator extends StatelessWidget {
-  final int currentStep;
-  final int totalSteps;
-
-  const _StepIndicator({
-    required this.currentStep,
-    required this.totalSteps,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(100),
-      ),
-      child: Text(
-        'Step $currentStep of $totalSteps',
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: Colors.white.withOpacity(0.7),
-        ),
-      ),
-    );
-  }
-}
-
 
 /// Continue Button Widget
 class _ContinueButton extends StatelessWidget {

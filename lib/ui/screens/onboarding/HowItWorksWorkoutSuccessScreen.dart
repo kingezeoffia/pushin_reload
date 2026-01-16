@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import '../../widgets/pill_navigation_bar.dart';
 import 'HowItWorksEmergencyUnlockScreen.dart';
 
 /// Custom route that disables swipe back gesture on iOS
@@ -25,29 +24,31 @@ class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
   }
 }
 
-/// Step 2.6: Push-Up Test Success Screen
+/// Generic Workout Success Screen
 ///
 /// BMAD V6 Spec:
-/// - Dedicated success confirmation screen after push-up test completion
+/// - Dedicated success confirmation screen after workout test completion
 /// - Green color scheme (success, growth, progress)
 /// - Large stylized checkmark as hero element
 /// - Clean, modern, confident design
 /// - Motivational green gradient background
 /// - Manual continue button (no auto-advance)
-class HowItWorksPushUpSuccessScreen extends StatelessWidget {
+class HowItWorksWorkoutSuccessScreen extends StatelessWidget {
   final String fitnessLevel;
   final List<String> goals;
   final String otherGoal;
   final String workoutHistory;
   final List<String> blockedApps;
+  final String workoutType; // 'Push-Ups', 'Squats', 'Plank', etc.
 
-  const HowItWorksPushUpSuccessScreen({
+  const HowItWorksWorkoutSuccessScreen({
     super.key,
     required this.fitnessLevel,
     required this.goals,
     required this.otherGoal,
     required this.workoutHistory,
     required this.blockedApps,
+    required this.workoutType,
   });
 
   @override
@@ -116,13 +117,14 @@ class HowItWorksPushUpSuccessScreen extends StatelessWidget {
 
                         // Supporting Text
                         Text(
-                          'Look at you!',
+                          _getSuccessMessage(workoutType),
                           style: TextStyle(
                             fontSize: 18,
                             color: Colors.white.withOpacity(0.7),
                             fontWeight: FontWeight.w500,
                             letterSpacing: -0.3,
                           ),
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),
@@ -133,32 +135,54 @@ class HowItWorksPushUpSuccessScreen extends StatelessWidget {
               ),
             ),
 
-            // Action Button - positioned at bottom like Emergency Unlock screen
-            BottomActionContainer(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: _ContinueButton(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    _NoSwipeBackRoute(
-                      builder: (context) => HowItWorksEmergencyUnlockScreen(
-                        fitnessLevel: fitnessLevel,
-                        goals: goals,
-                        otherGoal: otherGoal,
-                        workoutHistory: workoutHistory,
-                        blockedApps: blockedApps,
-                        selectedWorkout: 'Push-Ups',
-                        unlockDuration: 15, // Default 15 minutes
+            // Continue Button - properly positioned in Stack
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: MediaQuery.of(context).padding.bottom + 8,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _ContinueButton(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      _NoSwipeBackRoute(
+                        builder: (context) => HowItWorksEmergencyUnlockScreen(
+                          fitnessLevel: fitnessLevel,
+                          goals: goals,
+                          otherGoal: otherGoal,
+                          workoutHistory: workoutHistory,
+                          blockedApps: blockedApps,
+                          selectedWorkout: workoutType,
+                          unlockDuration: 15, // Default 15 minutes
+                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  String _getSuccessMessage(String workoutType) {
+    switch (workoutType.toLowerCase()) {
+      case 'push-ups':
+        return 'Look at you crushing those push-ups!';
+      case 'squats':
+        return 'Your legs are getting stronger!';
+      case 'plank':
+        return 'Core strength on point!';
+      case 'jumping jacks':
+        return 'You\'re jumping with energy!';
+      case 'glute bridge':
+        return 'Those glutes are firing up!';
+      default:
+        return 'You\'re doing amazing!';
+    }
   }
 }
 

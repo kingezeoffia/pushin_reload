@@ -87,7 +87,7 @@ class _ImprovedLargeStepsWidgetState extends State<ImprovedLargeStepsWidget>
               letterSpacing: -0.5,
             ),
           ),
-          SizedBox(height: widget.compact ? 1 : 2),
+          SizedBox(height: widget.compact ? 0 : 1),
 
           // "Steps" Label
           Row(

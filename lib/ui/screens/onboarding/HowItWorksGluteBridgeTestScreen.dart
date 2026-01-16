@@ -6,8 +6,8 @@ import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../theme/pushin_theme.dart';
 import '../../../services/CameraWorkoutService.dart';
-import '../../../services/PoseDetectionService.dart';
-import 'HowItWorksPushUpSuccessScreen.dart';
+import '../../../services/PoseDetectionService.dart' show GluteBridgeState;
+import 'HowItWorksWorkoutSuccessScreen.dart';
 
 /// Custom route that disables swipe back gesture on iOS
 class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
@@ -30,20 +30,20 @@ class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
   }
 }
 
-/// Step 3: Push-Up Test Screen
+/// Step 2.3: Glute Bridge Screen
 ///
 /// BMAD V6 Spec:
-/// - Camera-based push-up detection
+/// - Camera-based glute bridge detection
 /// - Manual count fallback
-/// - Target: 3 push-ups
-class HowItWorksPushUpTestScreen extends StatefulWidget {
+/// - Target: 3 glute bridges
+class HowItWorksGluteBridgeTestScreen extends StatefulWidget {
   final String fitnessLevel;
   final List<String> goals;
   final String otherGoal;
   final String workoutHistory;
   final List<String> blockedApps;
 
-  const HowItWorksPushUpTestScreen({
+  const HowItWorksGluteBridgeTestScreen({
     super.key,
     required this.fitnessLevel,
     required this.goals,
@@ -53,11 +53,11 @@ class HowItWorksPushUpTestScreen extends StatefulWidget {
   });
 
   @override
-  State<HowItWorksPushUpTestScreen> createState() =>
-      _HowItWorksPushUpTestScreenState();
+  State<HowItWorksGluteBridgeTestScreen> createState() =>
+      _HowItWorksGluteBridgeTestScreenState();
 }
 
-class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
+class _HowItWorksGluteBridgeTestScreenState extends State<HowItWorksGluteBridgeTestScreen>
     with WidgetsBindingObserver {
   CameraWorkoutService? _cameraService;
   bool _isInitialized = false;
@@ -85,7 +85,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
   DateTime? _readyStateStartTime; // When pose became ready
   static const Duration _stabilityDuration = Duration(milliseconds: 1500); // 1.5 seconds stable
 
-  // Mock push-up detection for demo
+  // Mock glute bridge detection for demo
   static const int _targetReps = 3;
 
   @override
@@ -98,8 +98,6 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _countdownTimer?.cancel();
-    _stabilityTimer?.cancel();
     _cameraService?.dispose();
     super.dispose();
   }
@@ -172,7 +170,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
           'Starting camera initialization for onboarding with $_currentCameraLens camera...');
       final success = await _cameraService!
           .initialize(
-        workoutType: 'push-ups',
+        workoutType: 'glute-bridge',
         preferredCamera: _currentCameraLens,
       )
           .timeout(
@@ -186,7 +184,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
       debugPrint('Camera initialization result: $success');
 
       if (success && mounted) {
-        debugPrint('Starting push-up test workout...');
+        debugPrint('Starting glute bridge test workout...');
         await _cameraService!.startWorkout();
         setState(() {
           _isInitialized = true;
@@ -301,12 +299,13 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
     Navigator.push(
       context,
       _NoSwipeBackRoute(
-        builder: (context) => HowItWorksPushUpSuccessScreen(
+        builder: (context) => HowItWorksWorkoutSuccessScreen(
           fitnessLevel: widget.fitnessLevel,
           goals: widget.goals,
           otherGoal: widget.otherGoal,
           workoutHistory: widget.workoutHistory,
           blockedApps: widget.blockedApps,
+          workoutType: 'Glute Bridge',
         ),
       ),
     );
@@ -431,7 +430,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                       ),
                       blendMode: BlendMode.srcIn,
                       child: Text(
-                        'Push-Up Test',
+                        'Glute Bridge',
                         style: TextStyle(
                           fontSize: 38,
                           fontWeight: FontWeight.w800,
@@ -445,7 +444,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Do 3 push-ups to test the workout detection',
+                      'Do 3 glute bridges to test the workout detection',
                       style: TextStyle(
                         fontSize: 15,
                         color: Colors.white.withOpacity(0.6),
@@ -489,13 +488,13 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                     color: Colors.black,
                                     child: Center(
                                       child: Image.asset(
-                                        'assets/icons/pushup_icon.png',
+                                        'assets/icons/glutebridge_icon.png',
                                         color: Colors.white24,
                                         width: 64,
                                         height: 64,
                                         errorBuilder: (context, error, stackTrace) {
                                           return Icon(
-                                            Icons.fitness_center,
+                                            Icons.accessibility_new,
                                             color: Colors.white24,
                                             size: 64,
                                           );
@@ -514,13 +513,13 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                             MainAxisAlignment.center,
                                         children: [
                                           Image.asset(
-                                            'assets/icons/pushup_icon.png',
+                                            'assets/icons/glutebridge_icon.png',
                                             color: Colors.white.withOpacity(0.8),
                                             width: 48,
                                             height: 48,
                                             errorBuilder: (context, error, stackTrace) {
                                               return Icon(
-                                                Icons.fitness_center,
+                                                Icons.accessibility_new,
                                                 color: Colors.white.withOpacity(0.8),
                                                 size: 48,
                                               );
@@ -528,7 +527,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                           ),
                                           const SizedBox(height: 16),
                                           Text(
-                                            'Get in Push-Up position',
+                                            'Lie on your back',
                                             style: TextStyle(
                                               fontSize: 20,
                                               fontWeight: FontWeight.w700,
@@ -538,7 +537,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                           ),
                                           const SizedBox(height: 1),
                                           Text(
-                                            'Place phone angled up slightly',
+                                            'Knees bent, feet flat on floor',
                                             style: TextStyle(
                                               fontSize: 14,
                                               color:
@@ -763,12 +762,13 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                         context,
                                         _NoSwipeBackRoute(
                                           builder: (context) =>
-                                              HowItWorksPushUpSuccessScreen(
+                                              HowItWorksWorkoutSuccessScreen(
                                             fitnessLevel: widget.fitnessLevel,
                                             goals: widget.goals,
                                             otherGoal: widget.otherGoal,
                                             workoutHistory: widget.workoutHistory,
                                             blockedApps: widget.blockedApps,
+                                            workoutType: 'Glute Bridge',
                                           ),
                                         ),
                                       );
@@ -972,7 +972,7 @@ class _SkipWorkoutButtonState extends State<_SkipWorkoutButton> {
 /// Custom painter for drawing pose detection skeleton
 class _PoseSkeletonPainter extends CustomPainter {
   final Map<String, Offset> keyPoints;
-  final PushUpPhase phase;
+  final dynamic phase;
 
   _PoseSkeletonPainter({
     required this.keyPoints,
@@ -1035,18 +1035,16 @@ class _PoseSkeletonPainter extends CustomPainter {
   }
 
   Color _getPhaseColor(dynamic phase) {
-    if (phase is PushUpPhase) {
+    if (phase is GluteBridgeState) {
       switch (phase) {
-        case PushUpPhase.up:
+        case GluteBridgeState.up:
           return Colors.green;
-        case PushUpPhase.goingDown:
+        case GluteBridgeState.goingUp:
           return Colors.yellow;
-        case PushUpPhase.down:
+        case GluteBridgeState.goingDown:
           return Colors.orange;
-        case PushUpPhase.goingUp:
+        case GluteBridgeState.down:
           return Colors.blue;
-        case PushUpPhase.unknown:
-          return Colors.white.withOpacity(0.7);
       }
     }
     return Colors.white.withOpacity(0.7);

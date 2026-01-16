@@ -253,6 +253,7 @@ class AuthStateProvider extends ChangeNotifier {
       if (result.success && result.data != null) {
         // Update local user data
         final updatedUser = result.data!.user;
+        debugPrint('🔄 AuthStateProvider.updateProfile() - updating user data: name=${updatedUser.firstname}');
         _currentUser = AuthUser(
           id: updatedUser.id.toString(),
           email: updatedUser.email,
@@ -260,13 +261,15 @@ class AuthStateProvider extends ChangeNotifier {
         );
 
         _isLoading = false;
-        debugPrint('✅ AuthStateProvider.updateProfile() - profile updated successfully');
+        debugPrint(
+            '✅ AuthStateProvider.updateProfile() - profile updated successfully, new name: ${_currentUser?.name}');
         notifyListeners();
         return true;
       } else {
         _isLoading = false;
         _errorMessage = result.error ?? 'Profile update failed';
-        debugPrint('❌ AuthStateProvider.updateProfile() - failed: ${result.error}');
+        debugPrint(
+            '❌ AuthStateProvider.updateProfile() - failed: ${result.error}');
         notifyListeners();
         return false;
       }
@@ -443,7 +446,8 @@ class AuthStateProvider extends ChangeNotifier {
     await _prefs.setBool(_guestSetupCompletedKey, false);
 
     // Required debug print for state tracking
-    debugPrint('🧭 FINAL ONBOARDING COMPLETE STATE: initialized=$isInitialized, authenticated=$isAuthenticated, onboardingCompleted=$isOnboardingCompleted, onboardingStep=$onboardingStep, justRegistered=$justRegistered, guestMode=$isGuestMode, guestCompletedSetup=$guestCompletedSetup');
+    debugPrint(
+        '🧭 FINAL ONBOARDING COMPLETE STATE: initialized=$isInitialized, authenticated=$isAuthenticated, onboardingCompleted=$isOnboardingCompleted, onboardingStep=$onboardingStep, justRegistered=$justRegistered, guestMode=$isGuestMode, guestCompletedSetup=$guestCompletedSetup');
 
     // Single notifyListeners call for consistent state transition
     notifyListeners();
@@ -611,8 +615,7 @@ class AuthStateProvider extends ChangeNotifier {
         _isLoading = false;
         _errorMessage = result.error ?? 'Registration failed';
         _justRegistered = false;
-        debugPrint(
-            '❌ AuthStateProvider.register() - failed: ${result.error}');
+        debugPrint('❌ AuthStateProvider.register() - failed: ${result.error}');
         notifyListeners();
         return false;
       }
@@ -621,8 +624,7 @@ class AuthStateProvider extends ChangeNotifier {
       _errorMessage = 'Registration failed: ${e.toString()}';
       // Ensure clean failure state
       _justRegistered = false;
-      debugPrint(
-          '❌ AuthStateProvider.register() - exception: $e');
+      debugPrint('❌ AuthStateProvider.register() - exception: $e');
       notifyListeners();
       return false;
     }
@@ -684,8 +686,7 @@ class AuthStateProvider extends ChangeNotifier {
       _isLoading = false;
       _errorMessage = 'Google sign-in failed: ${e.toString()}';
       _justRegistered = false;
-      debugPrint(
-          '❌ AuthStateProvider.signInWithGoogle() - exception: $e');
+      debugPrint('❌ AuthStateProvider.signInWithGoogle() - exception: $e');
       notifyListeners();
       return false;
     }
@@ -747,8 +748,7 @@ class AuthStateProvider extends ChangeNotifier {
       _isLoading = false;
       _errorMessage = 'Apple sign-in failed: ${e.toString()}';
       _justRegistered = false;
-      debugPrint(
-          '❌ AuthStateProvider.signInWithApple() - exception: $e');
+      debugPrint('❌ AuthStateProvider.signInWithApple() - exception: $e');
       notifyListeners();
       return false;
     }
@@ -770,7 +770,8 @@ class AuthStateProvider extends ChangeNotifier {
       if (success) {
         debugPrint('✅ AuthStateProvider.logout() - logout successful');
       } else {
-        debugPrint('⚠️ AuthStateProvider.logout() - logout completed with warnings');
+        debugPrint(
+            '⚠️ AuthStateProvider.logout() - logout completed with warnings');
       }
 
       notifyListeners();

@@ -75,7 +75,7 @@ class FirstWelcomeScreen extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w400,
-                          color: Colors.white70,
+                          color: Colors.white,
                           letterSpacing: -0.5,
                         ),
                       ),
@@ -84,7 +84,9 @@ class FirstWelcomeScreen extends StatelessWidget {
 
                       ShaderMask(
                         shaderCallback: (bounds) => const LinearGradient(
-                          colors: [Colors.white, Color(0xFFB0B8FF)],
+                          colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
                         ).createShader(
                           Rect.fromLTWH(
                               0, 0, bounds.width, bounds.height * 1.3),
@@ -106,7 +108,7 @@ class FirstWelcomeScreen extends StatelessWidget {
 
                       // Value Proposition Points
                       _ValuePoint(
-                        icon: Icons.lock_open,
+                        icon: Icons.key,
                         text: 'Complete workouts to unlock apps',
                       ),
 
@@ -153,7 +155,9 @@ class FirstWelcomeScreen extends StatelessWidget {
                       label: 'Continue as Guest',
                       onTap: () async {
                         // Set guest mode and navigate to main app
-                        final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
+                        final authProvider = Provider.of<AuthStateProvider>(
+                            context,
+                            listen: false);
                         authProvider.enterGuestMode();
 
                         // Navigation handled by AppRouter state change
@@ -190,6 +194,17 @@ class _ValuePoint extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.1),
             borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.2),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.white.withOpacity(0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Icon(
             icon,

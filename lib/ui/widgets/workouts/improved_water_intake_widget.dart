@@ -5,7 +5,7 @@ import 'dart:math' as math;
 import '../../theme/workouts_design_tokens.dart';
 import '../../theme/dashboard_design_tokens.dart';
 import '../../screens/WaterIntakeScreen.dart';
-import '../WaterGoalSetupDialog.dart';
+import '../../screens/WaterIntakeSetupScreen.dart';
 
 // Utility class for water amount formatting
 class WaterAmountFormatter {
@@ -164,13 +164,6 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
     }
   }
 
-  void _showWaterGoalSetup() {
-    showDialog(
-      context: context,
-      builder: (context) => const WaterGoalSetupDialog(),
-    );
-  }
-
   void _showWaterTracker() {
     Navigator.push(
       context,
@@ -194,17 +187,16 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
           onWaterAdded: (amount) {
             _addWaterLog(amount);
           },
-          onEditGoal: () {
-            Navigator.of(context).pop(); // Close water screen
-            // Show setup dialog after a short delay
-            Future.delayed(const Duration(milliseconds: 200), () {
-              if (context.mounted) {
-                showDialog(
-                  context: context,
-                  builder: (context) => const WaterGoalSetupDialog(),
-                );
-              }
-            });
+          onEditGoal: () async {
+            // Navigate to the setup screen (don't replace, so we can navigate back to water screen)
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const WaterIntakeSetupScreen(),
+              ),
+            );
+            // Reload the goal from preferences after returning
+            _loadData();
           },
         ),
       ),
@@ -229,12 +221,22 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
       onTapDown: (_) {
         _scaleController.forward();
       },
-      onTapUp: (_) {
+      onTapUp: (_) async {
         _scaleController.reverse();
         if (_hasCustomGoal) {
           _showWaterTracker();
         } else {
-          _showWaterGoalSetup();
+          // Navigate to setup screen for first-time setup
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const WaterIntakeSetupScreen(),
+            ),
+          );
+          // Reload data after returning from setup
+          if (mounted) {
+            _loadData();
+          }
         }
       },
       onTapCancel: () {
@@ -303,26 +305,17 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
   Widget _buildHeader() {
     return Row(
       children: [
-        // Premium gradient icon with glow
+        // Clean icon matching other widgets
         Container(
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF60A5FA), Color(0xFF3B82F6)],
-            ),
+            color: const Color(0xFF7C8CFF).withOpacity(0.15),
             borderRadius: BorderRadius.circular(9),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF60A5FA).withOpacity(0.4),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
           ),
           child: const Icon(
             Icons.water_drop_rounded,
-            color: Colors.white,
+            color: Color(0xFF7C8CFF),
             size: 16,
           ),
         ),
@@ -331,7 +324,7 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
           'Water Intake',
           style: TextStyle(
             color: Colors.white,
-            fontSize: 14,
+            fontSize: 15,
             fontWeight: FontWeight.w600,
             letterSpacing: -0.3,
           ),
@@ -387,7 +380,7 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
           ),
           SizedBox(height: widget.compact ? 2 : 4),
           Text(
-            'of ${_targetAmount.toStringAsFixed(1)}L goal',
+            'of ${_targetAmount.toStringAsFixed(1)}L',
             style: TextStyle(
               color: Colors.white.withOpacity(0.4),
               fontSize: widget.compact ? 10 : 11,

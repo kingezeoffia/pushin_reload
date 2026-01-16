@@ -4,26 +4,66 @@ import 'package:provider/provider.dart';
 import '../../../state/auth_state_provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
+import 'HowItWorksPushUpTestScreen.dart';
+import 'HowItWorksSquatTestScreen.dart';
+import 'HowItWorksGluteBridgeTestScreen.dart';
+import 'HowItWorksPlankTestScreen.dart';
+import 'HowItWorksJumpingJackTestScreen.dart';
+import 'HowItWorksEmergencyUnlockScreen.dart';
 
-/// Skip Flow: Exercise to Unlock Screen Time
+/// Custom route that disables swipe back gesture on iOS
+class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
+  _NoSwipeBackRoute({
+    required WidgetBuilder builder,
+    RouteSettings? settings,
+  }) : super(builder: builder, settings: settings);
+
+  @override
+  bool get hasScopedWillPopCallback => true;
+
+  @override
+  bool get canPop => false;
+
+  @override
+  Widget buildTransitions(BuildContext context, Animation<double> animation,
+      Animation<double> secondaryAnimation, Widget child) {
+    // Disable the default iOS swipe back transition
+    return child;
+  }
+}
+
+/// How It Works: Exercise Selection for Sign Up Flow
 ///
-/// Matches workout_type_selection_screen.dart layout exactly
-class SkipExerciseScreen extends StatefulWidget {
+/// Matches SkipExerciseScreen design/layout exactly:
+/// - Grid layout (2 columns) with card-style workout selection
+/// - Large workout icons, no reward text
+/// - Clean card-based interface
+class HowItWorksExerciseSelectionScreen extends StatefulWidget {
+  final String fitnessLevel;
+  final List<String> goals;
+  final String otherGoal;
+  final String workoutHistory;
   final List<String> blockedApps;
 
-  const SkipExerciseScreen({
+  const HowItWorksExerciseSelectionScreen({
     super.key,
+    required this.fitnessLevel,
+    required this.goals,
+    required this.otherGoal,
+    required this.workoutHistory,
     required this.blockedApps,
   });
 
   @override
-  State<SkipExerciseScreen> createState() => _SkipExerciseScreenState();
+  State<HowItWorksExerciseSelectionScreen> createState() =>
+      _HowItWorksExerciseSelectionScreenState();
 }
 
-class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
+class _HowItWorksExerciseSelectionScreenState
+    extends State<HowItWorksExerciseSelectionScreen> {
   String? _selectedWorkout;
 
-  // Workouts list - all unlocked (matching main app)
+  // Workouts list - all unlocked (matching guest mode design)
   final List<_WorkoutInfo> _workouts = [
     _WorkoutInfo(
       name: 'Push-Ups',
@@ -66,7 +106,7 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
             children: [
               SizedBox(height: screenHeight * 0.04),
 
-              // Header
+              // Header - matching guest mode design
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: Column(
@@ -118,7 +158,7 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
 
               const SizedBox(height: 24),
 
-              // Workout Grid
+              // Workout Grid - exact copy of guest mode design
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -151,7 +191,7 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
 
                       const SizedBox(height: 20),
 
-                      // More workouts coming soon
+                      // More workouts coming soon - matching guest mode
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -176,18 +216,92 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
                 ),
               ),
 
-              // Start button
+              // Continue button - navigate to appropriate test screen
               Container(
                 padding: const EdgeInsets.all(24),
-                child: _StartButton(
+                child: _ContinueButton(
                   enabled: _selectedWorkout != null,
                   onTap: () {
                     if (_selectedWorkout != null) {
+                      // Save selected workout to auth provider
                       final authProvider = Provider.of<AuthStateProvider>(
                           context,
                           listen: false);
                       authProvider.setSelectedWorkout(_selectedWorkout!);
-                      authProvider.advanceGuestSetupStep();
+
+                      // Navigate to appropriate try-out screen for each workout
+                      debugPrint('Selected workout: $_selectedWorkout');
+                      Widget testScreen;
+                      switch (_selectedWorkout) {
+                        case 'Push-Ups':
+                          debugPrint('Creating Push-Up Test Screen');
+                          testScreen = HowItWorksPushUpTestScreen(
+                            fitnessLevel: widget.fitnessLevel,
+                            goals: widget.goals,
+                            otherGoal: widget.otherGoal,
+                            workoutHistory: widget.workoutHistory,
+                            blockedApps: widget.blockedApps,
+                          );
+                          break;
+                        case 'Squats':
+                          debugPrint('Creating Squat Test Screen');
+                          testScreen = HowItWorksSquatTestScreen(
+                            fitnessLevel: widget.fitnessLevel,
+                            goals: widget.goals,
+                            otherGoal: widget.otherGoal,
+                            workoutHistory: widget.workoutHistory,
+                            blockedApps: widget.blockedApps,
+                          );
+                          break;
+                        case 'Glute Bridge':
+                          debugPrint('Creating Glute Bridge Test Screen');
+                          testScreen = HowItWorksGluteBridgeTestScreen(
+                            fitnessLevel: widget.fitnessLevel,
+                            goals: widget.goals,
+                            otherGoal: widget.otherGoal,
+                            workoutHistory: widget.workoutHistory,
+                            blockedApps: widget.blockedApps,
+                          );
+                          break;
+                        case 'Plank':
+                          debugPrint('Creating Plank Test Screen');
+                          testScreen = HowItWorksPlankTestScreen(
+                            fitnessLevel: widget.fitnessLevel,
+                            goals: widget.goals,
+                            otherGoal: widget.otherGoal,
+                            workoutHistory: widget.workoutHistory,
+                            blockedApps: widget.blockedApps,
+                          );
+                          break;
+                        case 'Jumping Jacks':
+                          debugPrint('Creating Jumping Jacks Test Screen');
+                          testScreen = HowItWorksJumpingJackTestScreen(
+                            fitnessLevel: widget.fitnessLevel,
+                            goals: widget.goals,
+                            otherGoal: widget.otherGoal,
+                            workoutHistory: widget.workoutHistory,
+                            blockedApps: widget.blockedApps,
+                          );
+                          break;
+                        default:
+                          // Fallback to emergency unlock for any unknown workouts
+                          debugPrint(
+                              'Falling back to emergency unlock for workout: $_selectedWorkout');
+                          testScreen = HowItWorksEmergencyUnlockScreen(
+                            fitnessLevel: widget.fitnessLevel,
+                            goals: widget.goals,
+                            otherGoal: widget.otherGoal,
+                            workoutHistory: widget.workoutHistory,
+                            blockedApps: widget.blockedApps,
+                            selectedWorkout: _selectedWorkout!,
+                            unlockDuration: 15, // Default 15 minutes
+                          );
+                      }
+
+                      Navigator.push(
+                        context,
+                        _NoSwipeBackRoute(builder: (context) => testScreen),
+                      );
                     }
                   },
                 ),
@@ -200,7 +314,7 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
   }
 }
 
-/// Workout info model
+/// Workout info model - exact copy from guest mode
 class _WorkoutInfo {
   final String name;
   final String iconPath;
@@ -213,7 +327,7 @@ class _WorkoutInfo {
   });
 }
 
-/// Workout Card Widget
+/// Workout Card Widget - exact copy from guest mode
 class _WorkoutCard extends StatelessWidget {
   final _WorkoutInfo workout;
   final bool isSelected;
@@ -252,7 +366,7 @@ class _WorkoutCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Spacer(),
-              // Icon container
+              // Icon container - exact copy from guest mode
               Center(
                 child: Container(
                   width: 80,
@@ -283,7 +397,7 @@ class _WorkoutCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              // Workout name
+              // Workout name - exact copy from guest mode
               Text(
                 workout.name,
                 style: TextStyle(
@@ -305,12 +419,12 @@ class _WorkoutCard extends StatelessWidget {
   }
 }
 
-/// Start Button Widget
-class _StartButton extends StatelessWidget {
+/// Continue Button Widget - exact copy from guest mode
+class _ContinueButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
 
-  const _StartButton({
+  const _ContinueButton({
     required this.enabled,
     required this.onTap,
   });

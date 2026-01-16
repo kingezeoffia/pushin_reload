@@ -127,15 +127,15 @@ class SkipEmergencyUnlockScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     _RuleItem(
-                      icon: Icons.today,
-                      title: 'Three times per day',
-                      description: 'Emergency unlock 3x a day',
-                    ),
-                    const SizedBox(height: 16),
-                    _RuleItem(
                       icon: Icons.timer,
                       title: 'Temporary Access',
                       description: 'Customizable duration',
+                    ),
+                    const SizedBox(height: 16),
+                    _RuleItem(
+                      icon: Icons.today,
+                      title: 'Three times per day',
+                      description: 'Emergency unlock 3x a day',
                     ),
                     const SizedBox(height: 16),
                     _RuleItem(

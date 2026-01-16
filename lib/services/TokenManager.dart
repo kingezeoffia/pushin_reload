@@ -12,7 +12,7 @@ class TokenManager {
   final String _baseUrl;
 
   TokenManager({
-    String baseUrl = 'https://pushin-production.up.railway.app/api',
+    String baseUrl = 'http://192.168.1.89:3000/api',  // Local development server
   }) : _baseUrl = baseUrl;
 
   /// Save access and refresh tokens securely

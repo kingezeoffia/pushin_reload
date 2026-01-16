@@ -6,8 +6,8 @@ import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../theme/pushin_theme.dart';
 import '../../../services/CameraWorkoutService.dart';
-import '../../../services/PoseDetectionService.dart';
-import 'HowItWorksPushUpSuccessScreen.dart';
+import '../../../services/PoseDetectionService.dart' show PlankPhase;
+import 'HowItWorksWorkoutSuccessScreen.dart';
 
 /// Custom route that disables swipe back gesture on iOS
 class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
@@ -30,20 +30,21 @@ class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
   }
 }
 
-/// Step 3: Push-Up Test Screen
+/// Step 2.4: Plank Test Screen
 ///
 /// BMAD V6 Spec:
-/// - Camera-based push-up detection
-/// - Manual count fallback
-/// - Target: 3 push-ups
-class HowItWorksPushUpTestScreen extends StatefulWidget {
+/// - Camera-based plank detection
+/// - Time-based workout (5 seconds)
+/// - Manual timer fallback
+/// - Target: 5 seconds holding plank
+class HowItWorksPlankTestScreen extends StatefulWidget {
   final String fitnessLevel;
   final List<String> goals;
   final String otherGoal;
   final String workoutHistory;
   final List<String> blockedApps;
 
-  const HowItWorksPushUpTestScreen({
+  const HowItWorksPlankTestScreen({
     super.key,
     required this.fitnessLevel,
     required this.goals,
@@ -53,21 +54,22 @@ class HowItWorksPushUpTestScreen extends StatefulWidget {
   });
 
   @override
-  State<HowItWorksPushUpTestScreen> createState() =>
-      _HowItWorksPushUpTestScreenState();
+  State<HowItWorksPlankTestScreen> createState() =>
+      _HowItWorksPlankTestScreenState();
 }
 
-class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
+class _HowItWorksPlankTestScreenState extends State<HowItWorksPlankTestScreen>
     with WidgetsBindingObserver {
   CameraWorkoutService? _cameraService;
   bool _isInitialized = false;
   bool _isInitializing = true;
   bool _cameraFailed = false;
   String _errorMessage = '';
-  int _detectedReps = 0;
+  int _elapsedSeconds = 0;
   bool _showInstructions = true;
   bool _hasCompleted = false;
   String _feedbackMessage = 'Position yourself in frame';
+  Timer? _manualTimer;
 
   // Track current camera lens direction for switching
   CameraLensDirection _currentCameraLens = CameraLensDirection.front;
@@ -85,8 +87,8 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
   DateTime? _readyStateStartTime; // When pose became ready
   static const Duration _stabilityDuration = Duration(milliseconds: 1500); // 1.5 seconds stable
 
-  // Mock push-up detection for demo
-  static const int _targetReps = 3;
+  // Target time for plank test
+  static const int _targetSeconds = 5;
 
   @override
   void initState() {
@@ -98,6 +100,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _manualTimer?.cancel();
     _countdownTimer?.cancel();
     _stabilityTimer?.cancel();
     _cameraService?.dispose();
@@ -112,6 +115,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
 
     if (state == AppLifecycleState.inactive) {
       _cameraService?.dispose();
+      _manualTimer?.cancel();
     } else if (state == AppLifecycleState.resumed) {
       _initializeCameraService();
     }
@@ -120,14 +124,13 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
   Future<void> _initializeCameraService() async {
     _cameraService = CameraWorkoutService();
 
-    _cameraService!.onRepCounted = (count) {
+    _cameraService!.onTimerUpdate = (seconds) {
       if (mounted) {
         setState(() {
-          _detectedReps = count;
+          _elapsedSeconds = seconds;
         });
-        HapticFeedback.mediumImpact();
 
-        if (_detectedReps >= _targetReps && !_hasCompleted) {
+        if (_elapsedSeconds >= _targetSeconds && !_hasCompleted) {
           _hasCompleted = true;
           _showSuccessScreen();
         }
@@ -138,7 +141,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
       if (mounted) {
         final wasReady = _isReadyToStart;
         setState(() {
-          _feedbackMessage = result.feedbackMessage ?? 'Keep going!';
+          _feedbackMessage = result.feedbackMessage ?? 'Hold that plank!';
           _isFullBodyDetected = result.isFullBodyDetected;
           _isReadyToStart = result.isReadyToStart;
         });
@@ -172,7 +175,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
           'Starting camera initialization for onboarding with $_currentCameraLens camera...');
       final success = await _cameraService!
           .initialize(
-        workoutType: 'push-ups',
+        workoutType: 'plank',
         preferredCamera: _currentCameraLens,
       )
           .timeout(
@@ -186,7 +189,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
       debugPrint('Camera initialization result: $success');
 
       if (success && mounted) {
-        debugPrint('Starting push-up test workout...');
+        debugPrint('Starting plank test workout...');
         await _cameraService!.startWorkout();
         setState(() {
           _isInitialized = true;
@@ -198,12 +201,12 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
             'Camera initialization failed. Error: ${_cameraService!.errorMessage}');
         if (mounted) {
           String errorMsg = _cameraService!.errorMessage ??
-              'Camera initialization failed. You can still count reps manually.';
+              'Camera initialization failed. You can still time manually.';
 
           if (_cameraService!.errorMessage?.contains('permission denied') ??
               false) {
             errorMsg =
-                'Camera permission is required for AI rep counting. Please enable camera access in Settings > Privacy > Camera. You can still count reps manually.';
+                'Camera permission is required for AI timing. Please enable camera access in Settings > Privacy > Camera. You can still time manually.';
           }
 
           setState(() {
@@ -220,7 +223,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
           _isInitializing = false;
           _cameraFailed = true;
           _errorMessage =
-              'Camera error: $e. You can still count reps manually.';
+              'Camera error: $e. You can still time manually.';
         });
       }
     }
@@ -229,6 +232,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
   void _switchCamera() async {
     // Dispose current service
     await _cameraService?.dispose();
+    _manualTimer?.cancel();
 
     // Switch camera lens direction
     setState(() {
@@ -237,6 +241,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
           : CameraLensDirection.front;
       _isInitialized = false;
       _isInitializing = true;
+      _elapsedSeconds = 0;
     });
 
     // Initialize with the new camera
@@ -257,6 +262,25 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
     _cameraService!.poseDetectionService?.enterPositioningState();
 
     HapticFeedback.mediumImpact();
+  }
+
+  void _startManualTimer() {
+    _manualTimer?.cancel();
+    _manualTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _elapsedSeconds++;
+        });
+
+        if (_elapsedSeconds >= _targetSeconds && !_hasCompleted) {
+          _hasCompleted = true;
+          timer.cancel();
+          _showSuccessScreen();
+        }
+      } else {
+        timer.cancel();
+      }
+    });
   }
 
   /// Auto-trigger countdown when pose is stable (called automatically)
@@ -298,43 +322,32 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
   }
 
   void _showSuccessScreen() {
+    _manualTimer?.cancel();
+    _countdownTimer?.cancel();
+    _stabilityTimer?.cancel();
     Navigator.push(
       context,
       _NoSwipeBackRoute(
-        builder: (context) => HowItWorksPushUpSuccessScreen(
+        builder: (context) => HowItWorksWorkoutSuccessScreen(
           fitnessLevel: widget.fitnessLevel,
           goals: widget.goals,
           otherGoal: widget.otherGoal,
           workoutHistory: widget.workoutHistory,
           blockedApps: widget.blockedApps,
+          workoutType: 'Plank',
         ),
       ),
     );
   }
 
-  void _manualRepCount() async {
-    if (_detectedReps < _targetReps) {
-      // Wenn Kamera aktiv ist, verwende den Service-Zähler
-      if (_cameraService != null && _cameraService!.isReady) {
-        _cameraService!.addManualRep();
-        // Der onRepCounted Callback wird automatisch _detectedReps aktualisieren
-      } else {
-        // Wenn Kamera nicht aktiv, erhöhe manuell
-        setState(() {
-          _detectedReps++;
-        });
-      }
-    }
-
-    if (_detectedReps >= _targetReps && !_hasCompleted) {
-      _hasCompleted = true;
-
-      // Brief pause to let user register the final rep
-      await Future.delayed(const Duration(milliseconds: 800));
-
-      if (mounted) {
-        _showSuccessScreen();
-      }
+  void _manualStartStop() {
+    if (_manualTimer == null || !_manualTimer!.isActive) {
+      _startManualTimer();
+    } else {
+      _manualTimer?.cancel();
+      setState(() {
+        _manualTimer = null;
+      });
     }
   }
 
@@ -431,7 +444,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                       ),
                       blendMode: BlendMode.srcIn,
                       child: Text(
-                        'Push-Up Test',
+                        'Plank Test',
                         style: TextStyle(
                           fontSize: 38,
                           fontWeight: FontWeight.w800,
@@ -445,7 +458,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Do 3 push-ups to test the workout detection',
+                      'Hold a plank for 5 seconds to test the workout detection',
                       style: TextStyle(
                         fontSize: 15,
                         color: Colors.white.withOpacity(0.6),
@@ -489,13 +502,13 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                     color: Colors.black,
                                     child: Center(
                                       child: Image.asset(
-                                        'assets/icons/pushup_icon.png',
+                                        'assets/icons/plank_icon.png',
                                         color: Colors.white24,
                                         width: 64,
                                         height: 64,
                                         errorBuilder: (context, error, stackTrace) {
                                           return Icon(
-                                            Icons.fitness_center,
+                                            Icons.self_improvement,
                                             color: Colors.white24,
                                             size: 64,
                                           );
@@ -504,7 +517,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                     ),
                                   ),
 
-                                // Instructions Overlay (initial state - before start pressed)
+                                // Instructions Overlay (when not detecting)
                                 if (_showInstructions)
                                   Positioned.fill(
                                     child: Container(
@@ -514,13 +527,13 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                             MainAxisAlignment.center,
                                         children: [
                                           Image.asset(
-                                            'assets/icons/pushup_icon.png',
+                                            'assets/icons/plank_icon.png',
                                             color: Colors.white.withOpacity(0.8),
                                             width: 48,
                                             height: 48,
                                             errorBuilder: (context, error, stackTrace) {
                                               return Icon(
-                                                Icons.fitness_center,
+                                                Icons.self_improvement,
                                                 color: Colors.white.withOpacity(0.8),
                                                 size: 48,
                                               );
@@ -528,7 +541,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                           ),
                                           const SizedBox(height: 16),
                                           Text(
-                                            'Get in Push-Up position',
+                                            'Get in Plank position',
                                             style: TextStyle(
                                               fontSize: 20,
                                               fontWeight: FontWeight.w700,
@@ -538,7 +551,7 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                           ),
                                           const SizedBox(height: 1),
                                           Text(
-                                            'Place phone angled up slightly',
+                                            'Forearms on ground, body straight',
                                             style: TextStyle(
                                               fontSize: 14,
                                               color:
@@ -616,10 +629,10 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
                                           children: [
-                                            // Rep counter
+                                            // Timer display
                                             Container(
-                                              width: 80,
-                                              height: 80,
+                                              width: 100,
+                                              height: 100,
                                               decoration: BoxDecoration(
                                                 color: const Color(0xFF6060FF)
                                                     .withOpacity(0.9),
@@ -627,9 +640,9 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                               ),
                                               child: Center(
                                                 child: Text(
-                                                  '$_detectedReps',
+                                                  '$_elapsedSeconds',
                                                   style: const TextStyle(
-                                                    fontSize: 32,
+                                                    fontSize: 36,
                                                     fontWeight: FontWeight.w800,
                                                     color: Colors.white,
                                                   ),
@@ -755,7 +768,10 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                           padding: const EdgeInsets.only(top: 8, bottom: 8),
                           child: Center(
                             child: _workoutActive
-                                ? _ManualCountButton(onTap: _manualRepCount)
+                                ? _ManualTimerButton(
+                                    onTap: _manualStartStop,
+                                    isRunning: _manualTimer?.isActive ?? false,
+                                  )
                                 : _SkipWorkoutButton(
                                     onTap: () {
                                       // Navigate to success screen, skipping the workout
@@ -763,12 +779,13 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
                                         context,
                                         _NoSwipeBackRoute(
                                           builder: (context) =>
-                                              HowItWorksPushUpSuccessScreen(
+                                              HowItWorksWorkoutSuccessScreen(
                                             fitnessLevel: widget.fitnessLevel,
                                             goals: widget.goals,
                                             otherGoal: widget.otherGoal,
                                             workoutHistory: widget.workoutHistory,
                                             blockedApps: widget.blockedApps,
+                                            workoutType: 'Plank',
                                           ),
                                         ),
                                       );
@@ -854,17 +871,21 @@ class _HowItWorksPushUpTestScreenState extends State<HowItWorksPushUpTestScreen>
 }
 
 
-/// Manual Count Button with light-up effect
-class _ManualCountButton extends StatefulWidget {
+/// Manual Timer Button with play/pause functionality
+class _ManualTimerButton extends StatefulWidget {
   final VoidCallback onTap;
+  final bool isRunning;
 
-  const _ManualCountButton({required this.onTap});
+  const _ManualTimerButton({
+    required this.onTap,
+    required this.isRunning,
+  });
 
   @override
-  State<_ManualCountButton> createState() => _ManualCountButtonState();
+  State<_ManualTimerButton> createState() => _ManualTimerButtonState();
 }
 
-class _ManualCountButtonState extends State<_ManualCountButton> {
+class _ManualTimerButtonState extends State<_ManualTimerButton> {
   bool _isPressed = false;
 
   @override
@@ -899,9 +920,9 @@ class _ManualCountButtonState extends State<_ManualCountButton> {
                 ]
               : null,
         ),
-        child: const Center(
+        child: Center(
           child: Icon(
-            Icons.add,
+            widget.isRunning ? Icons.pause : Icons.play_arrow,
             size: 28,
             color: Colors.white,
           ),
@@ -972,7 +993,7 @@ class _SkipWorkoutButtonState extends State<_SkipWorkoutButton> {
 /// Custom painter for drawing pose detection skeleton
 class _PoseSkeletonPainter extends CustomPainter {
   final Map<String, Offset> keyPoints;
-  final PushUpPhase phase;
+  final dynamic phase;
 
   _PoseSkeletonPainter({
     required this.keyPoints,
@@ -1035,17 +1056,13 @@ class _PoseSkeletonPainter extends CustomPainter {
   }
 
   Color _getPhaseColor(dynamic phase) {
-    if (phase is PushUpPhase) {
+    if (phase is PlankPhase) {
       switch (phase) {
-        case PushUpPhase.up:
+        case PlankPhase.holding:
           return Colors.green;
-        case PushUpPhase.goingDown:
-          return Colors.yellow;
-        case PushUpPhase.down:
-          return Colors.orange;
-        case PushUpPhase.goingUp:
-          return Colors.blue;
-        case PushUpPhase.unknown:
+        case PlankPhase.broken:
+          return Colors.red;
+        case PlankPhase.unknown:
           return Colors.white.withOpacity(0.7);
       }
     }

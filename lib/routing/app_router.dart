@@ -16,7 +16,7 @@ import '../ui/screens/onboarding/OnboardingFitnessLevelScreen.dart';
 import '../ui/screens/onboarding/OnboardingGoalsScreen.dart';
 import '../ui/screens/onboarding/OnboardingWorkoutHistoryScreen.dart';
 import '../ui/screens/onboarding/HowItWorksBlockAppsScreen.dart';
-import '../ui/screens/onboarding/HowItWorksExerciseScreen.dart';
+import '../ui/screens/onboarding/HowItWorksExerciseSelectionScreen.dart';
 import '../ui/screens/onboarding/HowItWorksPushUpTestScreen.dart';
 import '../ui/screens/onboarding/HowItWorksEmergencyUnlockScreen.dart';
 
@@ -64,8 +64,19 @@ class AppRouter extends StatelessWidget {
     AuthStateProvider authProvider,
     PushinAppController pushinController,
   ) {
+    debugPrint('🧭 Router: Building route with state:');
+    debugPrint('  - isInitialized: ${authProvider.isInitialized}');
+    debugPrint('  - isAuthenticated: ${authProvider.isAuthenticated}');
+    debugPrint('  - isGuestMode: ${authProvider.isGuestMode}');
+    debugPrint('  - isOnboardingCompleted: ${authProvider.isOnboardingCompleted}');
+    debugPrint('  - onboardingStep: ${authProvider.onboardingStep}');
+    debugPrint('  - showSignUpScreen: ${authProvider.showSignUpScreen}');
+    debugPrint('  - showSignInScreen: ${authProvider.showSignInScreen}');
+    debugPrint('  - justRegistered: ${authProvider.justRegistered}');
+
     // 1. App loading
     if (!authProvider.isInitialized) {
+      debugPrint('🧭 Router: App not initialized yet → Loading screen');
       return const Scaffold(
         key: ValueKey('loading_screen'),
         body: Center(child: CircularProgressIndicator()),
@@ -102,11 +113,12 @@ class AppRouter extends StatelessWidget {
     // 5. ONBOARDING FLOW - authenticated users who haven't completed onboarding
     if (!authProvider.isOnboardingCompleted) {
       debugPrint(
-          '🧭 Router: ONBOARDING - authenticated=${authProvider.isAuthenticated}, onboardingCompleted=${authProvider.isOnboardingCompleted}');
+          '🧭 Router: ONBOARDING - authenticated=${authProvider.isAuthenticated}, onboardingCompleted=${authProvider.isOnboardingCompleted}, onboardingStep=${authProvider.onboardingStep}');
       switch (authProvider.onboardingStep) {
         case OnboardingStep.fitnessLevel:
+          debugPrint('🧭 Router: Showing OnboardingFitnessLevelScreen');
           return const OnboardingFitnessLevelScreen(
-            key: ValueKey('onboarding_fitness_screen'),
+            key: ValueKey('onboarding_fitness_level_screen'),
           );
         case OnboardingStep.goals:
           return OnboardingGoalsScreen(
@@ -134,7 +146,7 @@ class AppRouter extends StatelessWidget {
             workoutHistory: authProvider.workoutHistory,
           );
         case OnboardingStep.exercise:
-          return HowItWorksExerciseScreen(
+          return HowItWorksExerciseSelectionScreen(
             key: const ValueKey('onboarding_exercise_screen'),
             fitnessLevel: authProvider.fitnessLevel ?? '',
             goals: authProvider.goals,

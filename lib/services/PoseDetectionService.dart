@@ -1057,18 +1057,18 @@ class PoseDetectionService {
 
     // 1. BODY ORIENTATION CHECK (PRIMARY CRITERION)
     // Research shows horizontal body orientation is most important for plank detection
-    // Optimal threshold: shoulder-hip vertical difference < 15% of frame height
+    // STRICT threshold: shoulder-hip vertical difference < 8% of frame height for true plank
     final shoulderY = avgShoulder.dy / imageSize.height;
     final hipY = avgHip.dy / imageSize.height;
     final ankleY = avgAnkle.dy / imageSize.height;
     final verticalDifference = (hipY - shoulderY).abs();
 
-    // Scientific threshold: body horizontal when vertical difference < 15%
-    final isHorizontalOrientation = verticalDifference < 0.15;
+    // STRICT threshold: body must be nearly horizontal (< 8% vertical difference)
+    final isHorizontalOrientation = verticalDifference < 0.08;
 
-    // Anti-standing check: ankles shouldn't be excessively higher than shoulders
-    final notStanding = (ankleY - shoulderY) <
-        0.5; // Ankles < 50% higher than shoulders (more lenient)
+    // STRICT anti-standing check: ankles should NOT be significantly higher than shoulders
+    // In plank, all body parts should be roughly at same height (horizontal position)
+    final notStanding = (ankleY - shoulderY) < 0.15; // Ankles only slightly higher (STRICT)
 
     // 2. BODY ALIGNMENT (SHOULDER-HIP-ANKLE STRAIGHTNESS)
     // Studies show optimal plank angle range is 160-200 degrees for proper form
@@ -1100,65 +1100,53 @@ class PoseDetectionService {
 
     // 4. HIP STABILITY (PREVENTS SAG OR PIKE)
     // Studies show hips should be level with shoulders in proper plank
-    // Threshold: hip-shoulder vertical difference < 15% of screen height (more lenient)
+    // STRICT threshold: hip-shoulder vertical difference < 8% of screen height
     final hipYNorm = avgHip.dy / imageSize.height;
     final shoulderYNorm = avgShoulder.dy / imageSize.height;
     final hipShoulderDifferenceNorm = (hipYNorm - shoulderYNorm).abs();
-    final hipsLevelWithShoulders = hipShoulderDifferenceNorm < 0.15;
+    final hipsLevelWithShoulders = hipShoulderDifferenceNorm < 0.08; // STRICT
 
     // 5. KNEE EXTENSION (LEGS STRAIGHT)
     // Research indicates knees should be straight and aligned with hips
-    // Optimal: knee-hip vertical difference < 12% of screen height (more lenient)
+    // STRICT threshold: knee-hip vertical difference < 6% of screen height
     final kneeYNorm = avgKnee.dy / imageSize.height;
     final hipYNormKnee = avgHip.dy / imageSize.height;
     final kneeHipDifferenceNorm = (kneeYNorm - hipYNormKnee).abs();
-    final legsRelativelyStraight = kneeHipDifferenceNorm < 0.12;
+    final legsRelativelyStraight = kneeHipDifferenceNorm < 0.06; // STRICT
 
     // === MULTI-CRITERIA SCIENTIFIC VALIDATION ===
-    // Research-based thresholds for optimal plank detection accuracy
+    // STRICT research-based thresholds to prevent false positives
 
-    // Primary validation: All research-based criteria must pass
-    final primaryValidPlank =
-        isHorizontalOrientation && // Body horizontal (< 15% vertical diff)
-            notStanding && // Not standing (< 50% ankle-shoulder diff)
+    // Primary validation: ALL criteria must pass (no fallback)
+    final isValidPlank =
+        isHorizontalOrientation && // Body horizontal (< 8% vertical diff) - STRICT
+            notStanding && // Not standing (< 15% ankle-shoulder diff) - STRICT
             isBodyStraight && // Body straight (160-200° angle)
-            armsSupporting && // Arms supporting weight
-            hipsLevelWithShoulders && // Hips level with shoulders (< 10%)
-            legsRelativelyStraight; // Legs straight (< 8% knee-hip diff)
-
-    // Fallback: Allow if core body position perfect even if arms unclear
-    final fallbackValidPlank = isHorizontalOrientation &&
-        notStanding &&
-        isBodyStraight &&
-        hipsLevelWithShoulders &&
-        legsRelativelyStraight &&
-        verticalDifference < 0.15; // Consistent with primary validation
-
-    final isValidPlank = primaryValidPlank || fallbackValidPlank;
+            armsSupporting && // Arms supporting weight - REQUIRED
+            hipsLevelWithShoulders && // Hips level with shoulders (< 8%) - STRICT
+            legsRelativelyStraight; // Legs straight (< 6% knee-hip diff) - STRICT
 
     // === DETAILED SCIENTIFIC DEBUG LOGGING ===
-    final validationPath = primaryValidPlank
-        ? 'PRIMARY'
-        : (fallbackValidPlank ? 'FALLBACK' : 'INVALID');
-    final armStatus = avgArmSupportY >= avgShoulder.dy ? 'ABOVE' : 'BELOW';
+    final validationPath = isValidPlank ? 'VALID' : 'INVALID';
+    final armStatus = avgArmSupportY >= avgShoulder.dy ? 'SUPPORTING' : 'NOT_SUPPORTING';
     debugPrint(
-        '🔍 PLANK Debug: horiz=$isHorizontalOrientation (${verticalDifference.toStringAsFixed(3)}), notStanding=$notStanding, straight=$isBodyStraight (${bodyAngle.toStringAsFixed(1)}°), arms=$armsSupporting ($armStatus), hips=$hipsLevelWithShoulders (${hipShoulderDifferenceNorm.toStringAsFixed(3)}), knees=$legsRelativelyStraight (${kneeHipDifferenceNorm.toStringAsFixed(3)}), path=$validationPath, valid=$isValidPlank');
+        '🔍 PLANK Debug (STRICT): horiz=$isHorizontalOrientation (${verticalDifference.toStringAsFixed(3)}), notStanding=$notStanding (${(ankleY - shoulderY).toStringAsFixed(3)}), straight=$isBodyStraight (${bodyAngle.toStringAsFixed(1)}°), arms=$armsSupporting ($armStatus), hips=$hipsLevelWithShoulders (${hipShoulderDifferenceNorm.toStringAsFixed(3)}), knees=$legsRelativelyStraight (${kneeHipDifferenceNorm.toStringAsFixed(3)}), result=$validationPath');
 
-    // === CONFIDENCE SYSTEM FOR PLANK (Prevent flickering) ===
+    // === CONFIDENCE SYSTEM FOR PLANK (Prevent flickering and false positives) ===
     final rawPhase = isValidPlank ? PlankPhase.holding : PlankPhase.broken;
 
-    // Track consecutive detections
+    // Track consecutive detections - STRICT: require 5 consecutive frames for plank hold
     if (rawPhase == _currentPhase) {
-      _plankConfidence = (_plankConfidence + 1).clamp(0, 3);
+      _plankConfidence = (_plankConfidence + 1).clamp(0, 5);
     } else {
       _plankConfidence = 0;
     }
 
     _currentPhase = rawPhase;
 
-    // Confirm state after 3 consecutive frames (more stable)
-    // But don't confirm as "holding" unless we have valid plank detection
-    if (_plankConfidence >= 3 && rawPhase == PlankPhase.holding) {
+    // STRICT: Require 5 consecutive frames to confirm plank hold (prevents false positives)
+    // But only 3 frames to confirm broken state (allows quick feedback)
+    if (_plankConfidence >= 5 && rawPhase == PlankPhase.holding) {
       _confirmedPlankPhase = PlankPhase.holding;
     } else if (_plankConfidence >= 3 && rawPhase == PlankPhase.broken) {
       _confirmedPlankPhase = PlankPhase.broken;
@@ -1171,7 +1159,7 @@ class PoseDetectionService {
     final isHoldingStable = _confirmedPlankPhase == PlankPhase.holding;
 
     debugPrint(
-        '🏋️ PLANK STATE: confirmedPhase=$_confirmedPlankPhase, isHoldingStable=$isHoldingStable, confidence=$_plankConfidence/3, rawPhase=$rawPhase');
+        '🏋️ PLANK STATE (STRICT): confirmedPhase=$_confirmedPlankPhase, isHoldingStable=$isHoldingStable, confidence=$_plankConfidence/5, rawPhase=$rawPhase');
 
     // Only update time if workout is active AND full body detected with high confidence AND actually in plank position
     if (isCountingEnabled) {

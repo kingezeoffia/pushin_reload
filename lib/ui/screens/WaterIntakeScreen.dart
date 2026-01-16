@@ -25,7 +25,7 @@ class WaterIntakeScreen extends StatefulWidget {
   final Function(double) onAmountChanged;
   final Function(double) onTargetChanged;
   final Function(double) onWaterAdded;
-  final VoidCallback? onEditGoal;
+  final Future<void> Function()? onEditGoal;
 
   const WaterIntakeScreen({
     super.key,
@@ -90,6 +90,79 @@ class _WaterIntakeScreenState extends State<WaterIntakeScreen>
     _fillController.value = 1.0;
 
     _loadTodayLog();
+  }
+
+  Future<void> _reloadGoalFromPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final newGoal = prefs.getDouble('water_daily_goal') ?? 2.5;
+
+      if (newGoal != _targetAmount) {
+        final oldPercentage =
+            ((_currentAmount / _targetAmount * 100).clamp(0, 100)).toDouble();
+
+        setState(() {
+          _targetAmount = newGoal;
+        });
+
+        // Update the animation to reflect new percentage with new target
+        final newPercentage =
+            ((_currentAmount / _targetAmount * 100).clamp(0, 100)).toDouble();
+
+        _fillAnimation = Tween<double>(
+          begin: oldPercentage,
+          end: newPercentage,
+        ).animate(
+          CurvedAnimation(
+            parent: _fillController,
+            curve: Curves.easeInOutCubic,
+          ),
+        );
+
+        _fillController.forward(from: 0.0);
+
+        // Notify parent about the updated target
+        widget.onTargetChanged(_targetAmount);
+      }
+    } catch (e) {
+      debugPrint('Error reloading water goal: $e');
+    }
+  }
+
+  @override
+  void didUpdateWidget(WaterIntakeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Update local state when widget properties change
+    if (oldWidget.currentAmount != widget.currentAmount) {
+      setState(() {
+        _currentAmount = widget.currentAmount;
+      });
+    }
+    if (oldWidget.targetAmount != widget.targetAmount) {
+      final oldPercentage =
+          ((_currentAmount / oldWidget.targetAmount * 100).clamp(0, 100))
+              .toDouble();
+
+      setState(() {
+        _targetAmount = widget.targetAmount;
+      });
+
+      // Update the animation to reflect new percentage with new target
+      final newPercentage =
+          ((_currentAmount / _targetAmount * 100).clamp(0, 100)).toDouble();
+
+      _fillAnimation = Tween<double>(
+        begin: oldPercentage,
+        end: newPercentage,
+      ).animate(
+        CurvedAnimation(
+          parent: _fillController,
+          curve: Curves.easeInOutCubic,
+        ),
+      );
+
+      _fillController.forward(from: 0.0);
+    }
   }
 
   Future<void> _loadTodayLog() async {
@@ -244,7 +317,14 @@ class _WaterIntakeScreenState extends State<WaterIntakeScreen>
         actions: widget.onEditGoal != null
             ? [
                 TextButton(
-                  onPressed: widget.onEditGoal,
+                  onPressed: () async {
+                    // Await the edit goal navigation to complete
+                    await widget.onEditGoal!();
+                    // Then reload the goal from preferences
+                    if (mounted) {
+                      _reloadGoalFromPreferences();
+                    }
+                  },
                   child: Text(
                     'Edit',
                     style: TextStyle(

@@ -45,42 +45,36 @@ class WelcomeScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(height: screenHeight * 0.08),
-
-                      // App Logo
-                      Center(
-                        child: Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(28),
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Color(0xFF4040C0),
-                                Color(0xFF3535A0),
-                              ],
+                      // Logo Space - Reserved for PNG logo (approximately 1/2 of screen)
+                      SizedBox(
+                        height: screenHeight * 0.5,
+                        child: Center(
+                          child: Container(
+                            width: 200,
+                            height: 200,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(28),
+                              color: Colors.white.withOpacity(0.05),
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF4040C0).withOpacity(0.4),
-                                blurRadius: 24,
-                                offset: const Offset(0, 8),
+                            child: Center(
+                              child: Text(
+                                'LOGO',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white.withOpacity(0.3),
+                                  letterSpacing: 2,
+                                ),
                               ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.fitness_center,
-                            size: 48,
-                            color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
 
-                      SizedBox(height: screenHeight * 0.06),
+                      // Spacer to push title down towards buttons
+                      SizedBox(height: screenHeight * 0.15),
 
-                      // Welcome Title
+                      // Welcome Title (left-aligned)
                       const Text(
                         'Welcome to',
                         style: TextStyle(
@@ -91,7 +85,6 @@ class WelcomeScreen extends StatelessWidget {
                         ),
                       ),
 
-                      const SizedBox(height: 4),
 
                       ShaderMask(
                         shaderCallback: (bounds) => const LinearGradient(
@@ -111,28 +104,6 @@ class WelcomeScreen extends StatelessWidget {
                             height: 1.1,
                           ),
                         ),
-                      ),
-
-                      SizedBox(height: screenHeight * 0.06),
-
-                      // Value Proposition Points
-                      _ValuePoint(
-                        icon: Icons.lock_open,
-                        text: 'Complete workouts to unlock apps',
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      _ValuePoint(
-                        icon: Icons.timer,
-                        text: 'Earn screen time based on effort',
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      _ValuePoint(
-                        icon: Icons.favorite,
-                        text: 'Build healthy digital habits',
                       ),
                     ],
                   ),
@@ -204,6 +175,7 @@ class WelcomeScreen extends StatelessWidget {
     );
   }
 }
+
 
 /// Value proposition point widget
 class _ValuePoint extends StatelessWidget {

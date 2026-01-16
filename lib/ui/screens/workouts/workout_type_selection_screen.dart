@@ -35,32 +35,32 @@ class _WorkoutTypeSelectionScreenState
   final List<_WorkoutInfo> _workouts = [
     _WorkoutInfo(
       name: 'Push-Ups',
-      iconPath: 'assets/icons/pushups.png',
+      iconPath: 'assets/icons/pushup_icon.png',
       fallbackIcon: Icons.fitness_center,
       isLocked: false,
     ),
     _WorkoutInfo(
       name: 'Squats',
-      iconPath: 'assets/icons/squats.png',
+      iconPath: 'assets/icons/squats_icon.png',
       fallbackIcon: Icons.airline_seat_legroom_normal,
       isLocked: false,
     ),
     _WorkoutInfo(
       name: 'Glute Bridge',
-      iconPath: 'assets/icons/glute_bridge.png',
+      iconPath: 'assets/icons/glutebridge_icon.png',
       fallbackIcon: Icons.accessibility_new,
       isLocked: false,
     ),
     _WorkoutInfo(
       name: 'Plank',
-      iconPath: 'assets/icons/plank.png',
+      iconPath: 'assets/icons/plank_icon.png',
       fallbackIcon: Icons.self_improvement,
       isLocked: false,
     ),
     _WorkoutInfo(
       name: 'Jumping Jacks',
-      iconPath: 'assets/icons/jumping_jacks.png',
-      fallbackIcon: Icons.directions_run,
+      iconPath: 'assets/icons/jumping_jacks_icon.png',
+      fallbackIcon: Icons.sports_gymnastics,
       isLocked: false,
     ),
   ];
@@ -72,7 +72,8 @@ class _WorkoutTypeSelectionScreenState
 
     // Calculate appropriate target value using the sophisticated reward calculator
     final calculator = WorkoutRewardCalculator();
-    final targetSeconds = widget.desiredScreenTime * 60; // Convert minutes to seconds
+    final targetSeconds =
+        widget.desiredScreenTime * 60; // Convert minutes to seconds
 
     final targetValue = calculator.calculateRequiredReps(
       workoutType: _selectedWorkout!.toLowerCase().replaceAll(' ', '-'),
@@ -86,7 +87,8 @@ class _WorkoutTypeSelectionScreenState
         pageBuilder: (context, animation, secondaryAnimation) =>
             CameraRepCounterScreen(
           workoutType: _selectedWorkout!.toLowerCase().replaceAll(' ', '-'),
-          targetReps: targetValue, // Uses proper calculation for each workout type
+          targetReps:
+              targetValue, // Uses proper calculation for each workout type
           desiredScreenTimeMinutes: widget.desiredScreenTime,
           workoutMode: widget.selectedMode.name,
         ),
@@ -122,9 +124,8 @@ class _WorkoutTypeSelectionScreenState
       // Format time for planks
       final minutes = targetValue ~/ 60;
       final seconds = targetValue % 60;
-      final timeString = minutes > 0
-          ? '${minutes}m ${seconds}s'
-          : '${seconds}s';
+      final timeString =
+          minutes > 0 ? '${minutes}m ${seconds}s' : '${seconds}s';
 
       return 'Hold for $timeString to unlock ${widget.desiredScreenTime} min';
     } else {

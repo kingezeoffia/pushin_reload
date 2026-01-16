@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
@@ -18,7 +19,7 @@ class AuthenticationService {
   late final http.Client _httpClient;
 
   AuthenticationService._internal({
-    this.baseUrl = 'https://pushin-production.up.railway.app/api',
+    this.baseUrl = 'http://192.168.1.89:3000/api', // Local development server
   }) {
     _httpClient = _createHttpClient();
   }
@@ -389,6 +390,9 @@ class AuthenticationService {
       if (name != null) requestBody['name'] = name;
       if (password != null) requestBody['password'] = password;
 
+      debugPrint(
+          '🔄 AuthenticationService.updateProfile() - sending request: $requestBody');
+
       final response = await _httpClient.put(
         Uri.parse('$baseUrl/auth/me'),
         headers: {
@@ -398,11 +402,33 @@ class AuthenticationService {
         body: jsonEncode(requestBody),
       );
 
+      debugPrint(
+          '🔄 AuthenticationService.updateProfile() - response status: ${response.statusCode}');
       final data = jsonDecode(response.body);
+      debugPrint(
+          '🔄 AuthenticationService.updateProfile() - response data: $data');
 
       if (response.statusCode == 200 && data['success'] == true) {
-        final authData = AuthData.fromJson(data['data']);
-        return AuthResult.success(authData);
+        try {
+          // For profile updates, we only get user data back, not full AuthData with tokens
+          final userData = data['data']['user'];
+          if (userData == null) {
+            return AuthResult.failure('Invalid response: missing user data');
+          }
+
+          final user = User.fromJson(userData);
+          // Create a minimal AuthData with the updated user (tokens are not needed for profile updates)
+          final authData = AuthData(
+            user: user,
+            isNewUser: false, // Not relevant for profile updates
+            accessToken: '', // Will be ignored by the caller
+            refreshToken: '', // Will be ignored by the caller
+          );
+          return AuthResult.success(authData);
+        } catch (parseError) {
+          return AuthResult.failure(
+              'Failed to parse profile update response: ${parseError.toString()}');
+        }
       } else {
         final errorMessage = data['error'] ?? 'Profile update failed';
         return AuthResult.failure(errorMessage);
@@ -478,10 +504,11 @@ class User {
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
-      id: json['id'],
-      email: json['email'],
-      firstname: json['firstname'],
-      createdAt: DateTime.parse(json['createdAt'] ?? json['created_at']),
+      id: json['id'] as int,
+      email: json['email'] as String,
+      firstname: json['firstname'] as String?, // Explicitly cast to handle null
+      createdAt:
+          DateTime.parse((json['createdAt'] ?? json['created_at']) as String),
     );
   }
 
