@@ -543,32 +543,34 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
           // Pose skeleton overlay
           if (_isInitialized && !_cameraFailed) _buildPoseOverlay(),
 
-          // Main UI content (Header and Counter)
-          SafeArea(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: Column(
-                children: [
-                  // Header
-                  _buildHeader(),
+          // Main UI content (Header and Counter) - hide during positioning
+          if (!_isPositioning)
+            SafeArea(
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: Column(
+                  children: [
+                    // Header
+                    _buildHeader(),
 
-                  // Small rep counter below header
-                  _buildSmallRepCounter(),
+                    // Small rep counter below header
+                    _buildSmallRepCounter(),
 
-                  // Large spacer for camera visibility
-                  const Spacer(),
-                ],
+                    // Large spacer for camera visibility
+                    const Spacer(),
+                  ],
+                ),
               ),
             ),
-          ),
 
-          // Bottom action buttons positioned at navigation pill level
-          BottomActionContainer(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: _buildBottomSectionWithFeedback(isComplete),
+          // Bottom action buttons positioned at navigation pill level - hide during positioning
+          if (!_isPositioning)
+            BottomActionContainer(
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: _buildBottomSectionWithFeedback(isComplete),
+              ),
             ),
-          ),
 
           // Positioning instructions overlay (show immediately when entering workout)
           if (_isPositioning && !_isCountingDown) _buildPositioningOverlay(),
