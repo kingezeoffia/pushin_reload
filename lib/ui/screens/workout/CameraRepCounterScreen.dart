@@ -575,8 +575,8 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
           // Positioning instructions overlay (show immediately when entering workout)
           if (_isPositioning && !_isCountingDown) _buildPositioningOverlay(),
 
-          // Back button for positioning mode (top left)
-          if (_isPositioning && !_isCountingDown)
+          // Back button for positioning mode (top left) - hide when ready to avoid visual distraction
+          if (_isPositioning && !_isCountingDown && !_isReadyToStart)
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.all(16),
