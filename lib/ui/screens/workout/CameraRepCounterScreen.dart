@@ -741,71 +741,77 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
 
   /// Build countdown overlay with large number
   Widget _buildCountdownOverlay() {
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
       color: Colors.black.withOpacity(0.4),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Large countdown number
-            TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0.8, end: 1.2),
-              duration: const Duration(milliseconds: 500),
-              curve: Curves.elasticOut,
-              builder: (context, scale, child) {
-                return Transform.scale(
-                  scale: scale,
-                  child: Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [_primaryColor, _secondaryColor],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _primaryColor.withOpacity(0.5),
-                          blurRadius: 40,
-                          spreadRadius: 10,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            children: [
+              const Spacer(),
+              // Large countdown number
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.8, end: 1.2),
+                duration: const Duration(milliseconds: 500),
+                curve: Curves.elasticOut,
+                builder: (context, scale, child) {
+                  return Transform.scale(
+                    scale: scale,
+                    child: Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [_primaryColor, _secondaryColor],
                         ),
-                      ],
-                    ),
-                    child: Center(
-                      child: Text(
-                        '$_countdownValue',
-                        style: const TextStyle(
-                          fontSize: 64,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                          height: 1.0,
+                        boxShadow: [
+                          BoxShadow(
+                            color: _primaryColor.withOpacity(0.5),
+                            blurRadius: 40,
+                            spreadRadius: 10,
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Text(
+                          '$_countdownValue',
+                          style: const TextStyle(
+                            fontSize: 64,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            height: 1.0,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 32),
-            // Get Ready text
-            Text(
-              'Get Ready!',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                color: Colors.white.withOpacity(0.9),
+                  );
+                },
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Workout starts in $_countdownValue...',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: Colors.white.withOpacity(0.6),
+              const SizedBox(height: 32),
+              // Get Ready text
+              Text(
+                'Get Ready!',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white.withOpacity(0.9),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                'Workout starts in $_countdownValue...',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white.withOpacity(0.6),
+                ),
+              ),
+              const Spacer(),
+            ],
+          ),
         ),
       ),
     );
