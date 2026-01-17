@@ -615,9 +615,7 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
   Widget _buildPositioningOverlay() {
     final isReady = _isReadyToStart;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeInOut,
+    return Container(
       color: Colors.black.withOpacity(0.3),
       child: SafeArea(
         child: Padding(
@@ -627,9 +625,7 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
               const Spacer(),
 
               // Simple frame outline with person icon
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 500),
-                curve: Curves.easeInOut,
+              Container(
                 width: 200,
                 height: 300,
                 decoration: BoxDecoration(
@@ -642,58 +638,50 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Center(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child: Icon(
-                      isReady
-                          ? Icons.check_circle_rounded
-                          : Icons.person_outline_rounded,
-                      size: 100,
-                      color: isReady
-                          ? const Color(0xFF10B981)
-                          : Colors.white.withOpacity(0.4),
-                      key: ValueKey(isReady), // Important for AnimatedSwitcher
-                    ),
+                  child: Icon(
+                    isReady
+                        ? Icons.check_circle_rounded
+                        : Icons.person_outline_rounded,
+                    size: 100,
+                    color: isReady
+                        ? const Color(0xFF10B981)
+                        : Colors.white.withOpacity(0.4),
                   ),
                 ),
               ),
 
               const SizedBox(height: 40),
 
-              // Status or instructions with smooth transition
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 400),
-                child: isReady
-                    ? const Text(
-                        'Perfect! Starting soon...',
-                        key: ValueKey('ready'), // Important for AnimatedSwitcher
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF10B981),
-                        ),
-                        textAlign: TextAlign.center,
-                      )
-                    : Column(
-                        key: const ValueKey('instructions'), // Important for AnimatedSwitcher
-                        children: [
-                          const Text(
-                            'Position Yourself',
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-                          _buildStep('1', 'Place phone 2-3 feet away'),
-                          const SizedBox(height: 14),
-                          _buildStep('2', 'Step back until full body is visible'),
-                          const SizedBox(height: 14),
-                          _buildStep('3', 'Ensure arms and legs are in frame'),
-                        ],
+              // Status or instructions
+              if (isReady)
+                const Text(
+                  'Perfect! Starting soon...',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF10B981),
+                  ),
+                  textAlign: TextAlign.center,
+                )
+              else
+                Column(
+                  children: [
+                    const Text(
+                      'Position Yourself',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
                       ),
-              ),
+                    ),
+                    const SizedBox(height: 28),
+                    _buildStep('1', 'Place phone 2-3 feet away'),
+                    const SizedBox(height: 14),
+                    _buildStep('2', 'Step back until full body is visible'),
+                    const SizedBox(height: 14),
+                    _buildStep('3', 'Ensure arms and legs are in frame'),
+                  ],
+                ),
 
               const Spacer(),
             ],
@@ -741,9 +729,7 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
 
   /// Build countdown overlay with large number
   Widget _buildCountdownOverlay() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
+    return Container(
       color: Colors.black.withOpacity(0.4),
       child: SafeArea(
         child: Padding(
