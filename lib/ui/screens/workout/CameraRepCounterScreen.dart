@@ -614,10 +614,10 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
   /// Build positioning instructions overlay
   Widget _buildPositioningOverlay() {
     final isReady = _isReadyToStart;
-    final frameColor =
-        isReady ? const Color(0xFF10B981) : Colors.white.withOpacity(0.4);
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
       color: Colors.black.withOpacity(0.3),
       child: SafeArea(
         child: Padding(
@@ -627,56 +627,73 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
               const Spacer(),
 
               // Simple frame outline with person icon
-              Container(
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 500),
+                curve: Curves.easeInOut,
                 width: 200,
                 height: 300,
                 decoration: BoxDecoration(
-                  border: Border.all(color: frameColor, width: 3),
+                  border: Border.all(
+                    color: isReady
+                        ? const Color(0xFF10B981)
+                        : Colors.white.withOpacity(0.4),
+                    width: 3,
+                  ),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Center(
-                  child: Icon(
-                    isReady
-                        ? Icons.check_circle_rounded
-                        : Icons.person_outline_rounded,
-                    size: 100,
-                    color: frameColor,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: Icon(
+                      isReady
+                          ? Icons.check_circle_rounded
+                          : Icons.person_outline_rounded,
+                      size: 100,
+                      color: isReady
+                          ? const Color(0xFF10B981)
+                          : Colors.white.withOpacity(0.4),
+                      key: ValueKey(isReady), // Important for AnimatedSwitcher
+                    ),
                   ),
                 ),
               ),
 
               const SizedBox(height: 40),
 
-              // Status or instructions
-              if (isReady)
-                const Text(
-                  'Perfect! Starting soon...',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF10B981),
-                  ),
-                  textAlign: TextAlign.center,
-                )
-              else
-                Column(
-                  children: [
-                    const Text(
-                      'Position Yourself',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
+              // Status or instructions with smooth transition
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 400),
+                child: isReady
+                    ? const Text(
+                        'Perfect! Starting soon...',
+                        key: ValueKey('ready'), // Important for AnimatedSwitcher
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF10B981),
+                        ),
+                        textAlign: TextAlign.center,
+                      )
+                    : Column(
+                        key: const ValueKey('instructions'), // Important for AnimatedSwitcher
+                        children: [
+                          const Text(
+                            'Position Yourself',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+                          _buildStep('1', 'Place phone 2-3 feet away'),
+                          const SizedBox(height: 14),
+                          _buildStep('2', 'Step back until full body is visible'),
+                          const SizedBox(height: 14),
+                          _buildStep('3', 'Ensure arms and legs are in frame'),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 28),
-                    _buildStep('1', 'Place phone 2-3 feet away'),
-                    const SizedBox(height: 14),
-                    _buildStep('2', 'Step back until full body is visible'),
-                    const SizedBox(height: 14),
-                    _buildStep('3', 'Ensure arms and legs are in frame'),
-                  ],
-                ),
+              ),
 
               const Spacer(),
             ],
