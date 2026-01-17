@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui';
-import '../theme/pushin_theme.dart';
+import 'native_liquid_glass.dart';
 
-/// Standardized bottom button container that positions content at navigation pill level
+/// Standardized bottom button container that positions content at screen edge level (like Continue As Guest button)
 class BottomActionContainer extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
@@ -21,7 +21,7 @@ class BottomActionContainer extends StatelessWidget {
     return Positioned(
       left: 0,
       right: 0,
-      bottom: safePadding + 8, // Same positioning as navigation pill
+      bottom: safePadding, // Right at screen edge like Continue As Guest button
       child: Padding(
         padding: padding!,
         child: child,
@@ -52,7 +52,7 @@ class _PillNavigationBarState extends State<PillNavigationBar>
 
   // EXACTLY 3 TABS: Workouts, Home, Settings
   final List<Map<String, dynamic>> _tabs = [
-    {'icon': Icons.fitness_center, 'label': 'Workouts'},
+    {'icon': Icons.directions_run, 'label': 'Workouts'},
     {'icon': Icons.home, 'label': 'Home'},
     {'icon': Icons.settings, 'label': 'Settings'},
   ];
@@ -92,78 +92,63 @@ class _PillNavigationBarState extends State<PillNavigationBar>
     return Positioned(
       left: 0,
       right: 0,
-      bottom: safePadding + 8, // VERY BOTTOM - only 8px padding
+      bottom:
+          safePadding, // RIGHT AT SCREEN EDGE - no extra padding like Continue As Guest button
       child: Center(
-        child: Container(
+        child: SizedBox(
           width: pillWidth,
-          height: 64, // TALLER for text space
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(32), // Full pill radius
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.08),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.15),
-                    width: 1.5,
-                  ),
-                  borderRadius: BorderRadius.circular(32),
-                ),
-                child: Stack(
-                  children: [
-                    // Animated background indicator
-                    AnimatedBuilder(
-                      animation: _controller,
-                      builder: (context, child) {
-                        final position = widget.selectedIndex * tabWidth;
-                        final animatedPosition = Tween<double>(
-                          begin: _prevIndex * tabWidth,
-                          end: position,
-                        )
-                            .animate(CurvedAnimation(
-                              parent: _controller,
-                              curve: Curves.easeInOutCubicEmphasized,
-                            ))
-                            .value;
+          height: 64, // BACK TO ORIGINAL HEIGHT - text space
+          child: NativeLiquidGlass(
+            borderRadius: 32, // Full pill radius
+            blurSigma: 20.0,
+            useUltraThinMaterial:
+                true, // Use Apple's ultra-thin material for navigation
+            child: Stack(
+              children: [
+                // Animated background indicator with enhanced glass
+                AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, child) {
+                    final position = widget.selectedIndex * tabWidth;
+                    final animatedPosition = Tween<double>(
+                      begin: _prevIndex * tabWidth,
+                      end: position,
+                    )
+                        .animate(CurvedAnimation(
+                          parent: _controller,
+                          curve: Curves.easeInOutCubicEmphasized,
+                        ))
+                        .value;
 
-                        return Positioned(
-                          left: animatedPosition + 6,
-                          top: 6,
-                          bottom: 6,
-                          child: Container(
-                            width: tabWidth - 12,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(26),
-                              color: Colors.white.withOpacity(0.12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color:
-                                      PushinTheme.primaryBlue.withOpacity(0.3),
-                                  blurRadius: 16,
-                                  spreadRadius: 1,
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    // Tabs row - evenly distributed
-                    Row(
-                      children: List.generate(_tabs.length, (index) {
-                        return Expanded(
-                          child: _buildTab(
-                            index: index,
-                            icon: _tabs[index]['icon'] as IconData,
-                            label: _tabs[index]['label'] as String,
-                          ),
-                        );
-                      }),
-                    ),
-                  ],
+                    return Positioned(
+                      left: animatedPosition + 6,
+                      top: 6,
+                      bottom: 6,
+                      child: Container(
+                        width: tabWidth - 12,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(26),
+                          // Flat, minimal background - no gradient depth
+                          color: Colors.white.withOpacity(0.08),
+                          // No shadows - completely flat, modern look
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              ),
+                // Tabs row - evenly distributed
+                Row(
+                  children: List.generate(_tabs.length, (index) {
+                    return Expanded(
+                      child: _buildTab(
+                        index: index,
+                        icon: _tabs[index]['icon'] as IconData,
+                        label: _tabs[index]['label'] as String,
+                      ),
+                    );
+                  }),
+                ),
+              ],
             ),
           ),
         ),
@@ -194,51 +179,38 @@ class _PillNavigationBarState extends State<PillNavigationBar>
         }
       },
       onTapCancel: () => setState(() => _pressedIndex = null),
-      child: AnimatedScale(
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOutBack,
-        scale: isPressed ? 0.92 : 1.0,
-        child: Container(
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(
-              horizontal: 8), // Extra horizontal padding
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Icon without background
-              Icon(
-                icon,
-                size: isActive ? 26 : 24, // Slightly larger icons
-                color: isActive ? Colors.white : Colors.white.withOpacity(0.5),
-              ),
-              const SizedBox(height: 4),
-              // Animated text label - NO CUTOFF
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOutCubic,
-                height: isActive ? 20 : 0, // More height for text
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 300),
-                  opacity: isActive ? 1.0 : 0.0,
-                  child: isActive
-                      ? Text(
-                          label,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13, // Slightly bigger text
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.2,
-                            height: 1.0,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.visible,
-                          textAlign: TextAlign.center,
-                        )
-                      : const SizedBox.shrink(),
-                ),
-              ),
-            ],
+      child: Container(
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(
+            horizontal: 8), // Extra horizontal padding
+        child: // ULTRA-BRIGHT ICONS - Maximum reflectivity for light-bouncing glass with tap scaling
+            AnimatedScale(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOutCubicEmphasized,
+          scale: isPressed
+              ? 1.2
+              : (isActive
+                  ? 1.1
+                  : 1.0), // Bigger when pressed, slightly bigger when active
+          child: ShaderMask(
+            shaderCallback: (bounds) => LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isActive
+                  ? [
+                      Colors.white.withOpacity(1.0), // MAXIMUM BRIGHTNESS
+                      Colors.white.withOpacity(0.98),
+                    ]
+                  : [
+                      Colors.white.withOpacity(0.85), // Very bright inactive
+                      Colors.white.withOpacity(0.75),
+                    ],
+            ).createShader(bounds),
+            blendMode: BlendMode.srcIn,
+            child: Icon(
+              icon,
+              size: isActive ? 28 : 24, // Larger base size for active state
+            ),
           ),
         ),
       ),

@@ -211,6 +211,9 @@ class PushinAppController extends ChangeNotifier {
     IOSSettingsBridge.instance
         .setEmergencyUnlockMinutes(_emergencyUnlockMinutes);
 
+    // Check for pending emergency unlocks initiated from shield
+    await _checkForPendingEmergencyUnlock();
+
     // Load current plan tier
     // TODO: Integrate with subscription service
     _planTier = 'free'; // Hardcoded for MVP
@@ -1398,6 +1401,41 @@ class PushinAppController extends ChangeNotifier {
       _emergencyUnlocksUsedToday = 0;
       _emergencyUnlockResetTime = today;
       notifyListeners();
+    }
+  }
+
+  /// Check for pending emergency unlocks initiated from shield extension
+  Future<void> _checkForPendingEmergencyUnlock() async {
+    if (!kIsWeb && Platform.isIOS && _focusModeService != null) {
+      debugPrint('🔍 Checking for pending shield-initiated emergency unlock...');
+
+      try {
+        final status = await _focusModeService!.getEmergencyUnlockStatus();
+        if (status.isActive) {
+          debugPrint('🚨 Found active emergency unlock from shield - starting timer management');
+
+          if (status.timeRemaining > 0) {
+            // Start the emergency unlock Live Activity and schedule re-blocking
+            await _focusModeService!.startEmergencyUnlockTimer(status.timeRemaining);
+
+            // Schedule re-blocking after remaining time
+            Future.delayed(Duration(seconds: status.timeRemaining), () {
+              debugPrint('⏰ Shield-initiated emergency unlock expired, re-blocking apps');
+              _restoreIOSBlocking();
+            });
+
+            debugPrint('✅ Shield emergency unlock timer started - ${status.timeRemaining}s remaining');
+          } else {
+            // Already expired, re-block immediately
+            debugPrint('⏰ Shield emergency unlock already expired, re-blocking apps');
+            _restoreIOSBlocking();
+          }
+        } else {
+          debugPrint('ℹ️ No active emergency unlock from shield');
+        }
+      } catch (e) {
+        debugPrint('❌ Error checking for pending emergency unlock: $e');
+      }
     }
   }
 

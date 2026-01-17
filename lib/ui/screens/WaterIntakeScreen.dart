@@ -1,22 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:ui';
 import '../theme/workouts_design_tokens.dart';
-import '../widgets/GOStepsBackground.dart';
-import '../widgets/pill_navigation_bar.dart';
 
-// Utility class for water amount formatting
 class WaterAmountFormatter {
   static String format(double amount) {
-    // Convert to string with 2 decimal places
-    String formatted = amount.toStringAsFixed(2);
-    // Remove trailing zeros after decimal point
-    if (formatted.contains('.')) {
-      formatted = formatted.replaceAll(RegExp(r'\.?0+$'), '');
+    if (amount >= 1.0) {
+      return '${amount.toStringAsFixed(1)}L';
+    } else {
+      return '${(amount * 1000).toInt()}ml';
     }
-    return '${formatted}L';
   }
+}
+
+class Bubble {
+  double x, y, radius, speed, opacity;
+  Bubble(
+      {required this.x,
+      required this.y,
+      required this.radius,
+      required this.speed,
+      required this.opacity});
 }
 
 class WaterIntakeScreen extends StatefulWidget {
@@ -47,224 +54,94 @@ class _WaterIntakeScreenState extends State<WaterIntakeScreen>
   late double _targetAmount;
   List<Map<String, dynamic>> _todayLog = [];
 
-  late AnimationController _fillController;
-  late AnimationController _glowController;
+  late AnimationController _mainController;
   late AnimationController _waveController;
   late Animation<double> _fillAnimation;
+
+  List<Bubble> _bubbles = [];
+  final math.Random _random = math.Random();
 
   @override
   void initState() {
     super.initState();
     _currentAmount = widget.currentAmount;
     _targetAmount = widget.targetAmount;
-
-    _fillController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    );
-
-    _glowController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat(reverse: true);
-
-    _waveController = AnimationController(
-      duration: const Duration(milliseconds: 3000),
-      vsync: this,
-    )..repeat();
-
-    // Initialize fill animation to current percentage
-    final initialPercentage =
-        ((_currentAmount / _targetAmount * 100).clamp(0, 100)).toDouble();
-    _fillAnimation = Tween<double>(
-      begin: initialPercentage,
-      end: initialPercentage,
-    ).animate(
-      CurvedAnimation(
-        parent: _fillController,
-        curve: Curves.easeInOutCubic,
-      ),
-    );
-
-    // Start with full animation (no entrance delay for water screen)
-    _fillController.value = 1.0;
-
     _loadTodayLog();
-  }
 
-  Future<void> _reloadGoalFromPreferences() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final newGoal = prefs.getDouble('water_daily_goal') ?? 2.5;
+    _mainController = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1000));
+    _waveController =
+        AnimationController(vsync: this, duration: const Duration(seconds: 4))
+          ..repeat();
 
-      if (newGoal != _targetAmount) {
-        final oldPercentage =
-            ((_currentAmount / _targetAmount * 100).clamp(0, 100)).toDouble();
+    _fillAnimation = Tween<double>(
+            begin: 0, end: (_currentAmount / _targetAmount).clamp(0.0, 1.0))
+        .animate(CurvedAnimation(
+            parent: _mainController, curve: Curves.easeInOutCubic));
 
-        setState(() {
-          _targetAmount = newGoal;
-        });
-
-        // Update the animation to reflect new percentage with new target
-        final newPercentage =
-            ((_currentAmount / _targetAmount * 100).clamp(0, 100)).toDouble();
-
-        _fillAnimation = Tween<double>(
-          begin: oldPercentage,
-          end: newPercentage,
-        ).animate(
-          CurvedAnimation(
-            parent: _fillController,
-            curve: Curves.easeInOutCubic,
-          ),
-        );
-
-        _fillController.forward(from: 0.0);
-
-        // Notify parent about the updated target
-        widget.onTargetChanged(_targetAmount);
-      }
-    } catch (e) {
-      debugPrint('Error reloading water goal: $e');
-    }
-  }
-
-  @override
-  void didUpdateWidget(WaterIntakeScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Update local state when widget properties change
-    if (oldWidget.currentAmount != widget.currentAmount) {
-      setState(() {
-        _currentAmount = widget.currentAmount;
-      });
-    }
-    if (oldWidget.targetAmount != widget.targetAmount) {
-      final oldPercentage =
-          ((_currentAmount / oldWidget.targetAmount * 100).clamp(0, 100))
-              .toDouble();
-
-      setState(() {
-        _targetAmount = widget.targetAmount;
-      });
-
-      // Update the animation to reflect new percentage with new target
-      final newPercentage =
-          ((_currentAmount / _targetAmount * 100).clamp(0, 100)).toDouble();
-
-      _fillAnimation = Tween<double>(
-        begin: oldPercentage,
-        end: newPercentage,
-      ).animate(
-        CurvedAnimation(
-          parent: _fillController,
-          curve: Curves.easeInOutCubic,
-        ),
-      );
-
-      _fillController.forward(from: 0.0);
-    }
+    _mainController.forward();
+    _generateBubbles();
   }
 
   Future<void> _loadTodayLog() async {
-    // Load today's log for water tracking
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final logJson = prefs.getString('water_log_today') ?? '[]';
-      final List<dynamic> log = jsonDecode(logJson);
-      setState(() {
-        _todayLog = log.cast<Map<String, dynamic>>();
-      });
-    } catch (e) {
-      debugPrint('Error loading today log: $e');
-    }
+    final prefs = await SharedPreferences.getInstance();
+    final logJson = prefs.getString('water_log_today') ?? '[]';
+    setState(() {
+      _todayLog = List<Map<String, dynamic>>.from(jsonDecode(logJson));
+    });
+  }
+
+  void _generateBubbles() {
+    _bubbles = List.generate(15, (_) => _createBubble());
+  }
+
+  Bubble _createBubble() {
+    return Bubble(
+      x: _random.nextDouble(),
+      y: 1.1,
+      radius: _random.nextDouble() * 3 + 1,
+      speed: _random.nextDouble() * 0.002 + 0.001,
+      opacity: _random.nextDouble() * 0.4,
+    );
   }
 
   void _addWater(double amount) {
-    if (amount <= 0 || amount > 2.0) return;
-
-    final oldAmount = _currentAmount;
-    final oldPercentage =
-        ((oldAmount / _targetAmount * 100).clamp(0, 100)).toDouble();
-
+    HapticFeedback.lightImpact();
+    final double oldFill = _currentAmount / _targetAmount;
     setState(() {
       _currentAmount = (_currentAmount + amount).clamp(0.0, 10.0);
+      _todayLog
+          .add({'amount': amount, 'time': DateTime.now().toIso8601String()});
     });
-
-    final newPercentage =
-        ((_currentAmount / _targetAmount * 100).clamp(0, 100)).toDouble();
-
-    widget.onAmountChanged(_currentAmount);
+    _syncAndAnimate(oldFill);
     widget.onWaterAdded(amount);
-
-    // Add to today's log
-    final newEntry = {
-      'amount': amount,
-      'timestamp': DateTime.now().toIso8601String(),
-    };
-    _todayLog.add(newEntry);
-
-    // Animate incrementally from current level to new level
-    _fillAnimation = Tween<double>(
-      begin: oldPercentage,
-      end: newPercentage,
-    ).animate(
-      CurvedAnimation(
-        parent: _fillController,
-        curve: Curves.easeInOutCubic,
-      ),
-    );
-
-    _fillController.forward(from: 0.0);
+    widget.onAmountChanged(_currentAmount);
   }
 
-  Future<void> _removeLastEntry() async {
-    if (_currentAmount <= 0) return;
+  void _removeLastEntry() {
+    if (_todayLog.isEmpty) return;
+    HapticFeedback.mediumImpact();
+    final double oldFill = _currentAmount / _targetAmount;
+    final lastEntry = _todayLog.removeLast();
+    setState(() {
+      _currentAmount =
+          (_currentAmount - (lastEntry['amount'] as double)).clamp(0.0, 10.0);
+    });
+    _syncAndAnimate(oldFill);
+    widget.onAmountChanged(_currentAmount);
+  }
 
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final logJson = prefs.getString('water_log_today') ?? '[]';
-      final List<dynamic> log = jsonDecode(logJson);
+  void _syncAndAnimate(double oldFill) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('water_log_today', jsonEncode(_todayLog));
 
-      if (log.isEmpty) return;
-
-      final lastEntry = log.removeLast();
-      final amount = lastEntry['amount'] as double;
-
-      // Calculate new values
-      final newAmount = (_currentAmount - amount).clamp(0.0, _targetAmount);
-      final newPercentage = (newAmount / _targetAmount * 100).clamp(0, 100);
-
-      // Smooth animation transition
-      if (mounted) {
-        setState(() {
-          _currentAmount = newAmount;
-          _fillAnimation = Tween<double>(
-            begin: _fillAnimation.value,
-            end: newPercentage.toDouble(),
-          ).animate(CurvedAnimation(
-            parent: _fillController,
-            curve: Curves.easeInOutCubic,
-          ));
-
-          _fillController.forward(from: 0.0);
-        });
-      }
-
-      // Update local state and storage
-      setState(() {
-        _todayLog = log.cast<Map<String, dynamic>>();
-      });
-      await prefs.setString('water_log_today', jsonEncode(log));
-      widget.onAmountChanged(newAmount);
-    } catch (e) {
-      debugPrint('Error removing entry: $e');
-    }
+    // Update the animation to reflect the new fill level without transition
+    setState(() {});
   }
 
   @override
   void dispose() {
-    _fillController.dispose();
-    _glowController.dispose();
+    _mainController.dispose();
     _waveController.dispose();
     super.dispose();
   }
@@ -272,167 +149,156 @@ class _WaterIntakeScreenState extends State<WaterIntakeScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back_ios_new,
+              color: Colors.white, size: 22),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Water ',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-            ShaderMask(
-              shaderCallback: (bounds) => LinearGradient(
-                colors: [
-                  WorkoutsDesignTokens.waterCyan,
-                  WorkoutsDesignTokens.waterCyan.withOpacity(0.8),
-                ],
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-              ).createShader(
-                Rect.fromLTWH(0, 0, bounds.width, bounds.height),
-              ),
-              blendMode: BlendMode.srcIn,
-              child: const Text(
-                'Intake',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ],
+        title: const Text(
+          "Water Intake",
+          style: TextStyle(
+              fontWeight: FontWeight.w700, color: Colors.white, fontSize: 20),
         ),
-        actions: widget.onEditGoal != null
-            ? [
-                TextButton(
-                  onPressed: () async {
-                    // Await the edit goal navigation to complete
-                    await widget.onEditGoal!();
-                    // Then reload the goal from preferences
-                    if (mounted) {
-                      _reloadGoalFromPreferences();
-                    }
-                  },
-                  child: Text(
-                    'Edit',
+        actions: [
+          IconButton(
+            onPressed: widget.onEditGoal,
+            icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+          )
+        ],
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+          ),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Ambient Background Glow
+            Positioned(
+              top: 100,
+              child: Container(
+                width: 250,
+                height: 250,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: WorkoutsDesignTokens.waterCyan.withOpacity(0.15),
+                ),
+                child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+                    child: Container()),
+              ),
+            ),
+
+            // LAYER 1: Massive Liter Count (Behind Glass)
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: _currentAmount),
+                  duration: const Duration(milliseconds: 800),
+                  builder: (context, value, child) => Text(
+                    value >= 1.0
+                        ? value.toStringAsFixed(1)
+                        : (value * 1000).toInt().toString(),
                     style: TextStyle(
-                      color: WorkoutsDesignTokens.waterCyan,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 140,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white.withOpacity(0.15),
+                      letterSpacing: -5,
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-              ]
-            : null,
-      ),
-      body: GOStepsBackground(
-        blackRatio: 0.25,
-        child: Stack(
-          children: [
-            // Main content
+                Text(
+                  _currentAmount >= 1.0 ? "LITERS" : "MILLILITERS",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white.withOpacity(0.1),
+                    letterSpacing: 8,
+                  ),
+                ),
+              ],
+            ),
+
+            // LAYER 2: Glass & Water Visualization
             SafeArea(
               child: Column(
                 children: [
-                  // Water glass (takes most of screen)
-                  Expanded(
-                    flex: 3,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Center(
-                        child: AnimatedBuilder(
-                          animation: Listenable.merge([
-                            _fillController,
-                            _glowController,
-                            _waveController,
-                          ]),
-                          builder: (context, child) {
-                            return CustomPaint(
-                              size: const Size(250, 350),
-                              painter: WaterGlassPainter(
-                                fillPercentage: _fillAnimation.value,
-                                animationValue:
-                                    1.0, // Always fully animated now
-                                glowValue: _glowController.value,
-                                waveValue: _waveController.value,
-                                waterColor: WorkoutsDesignTokens.waterCyan,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Big cool water amount text - positioned higher up
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
+                  const SizedBox(height: 20),
+                  // Top Percentage
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(
+                        begin: 0, end: (_currentAmount / _targetAmount) * 100),
+                    duration: const Duration(milliseconds: 1000),
+                    builder: (context, value, child) => Column(
                       children: [
-                        // Animated water amount display - using same animation as water glass
-                        AnimatedBuilder(
-                          animation: _fillController,
-                          builder: (context, child) {
-                            // Calculate the animated amount based on the fill animation progress
-                            final animatedPercentage = _fillAnimation.value;
-                            final animatedAmount =
-                                (animatedPercentage / 100) * _targetAmount;
-
-                            return Text(
-                              '${WaterAmountFormatter.format(animatedAmount)} / ${WaterAmountFormatter.format(_targetAmount)}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 48,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -1.5,
-                                height: 1.0,
-                              ),
-                            );
-                          },
+                        Text(
+                          "${value.toInt()}%",
+                          style: const TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white),
                         ),
-
-                        const SizedBox(height: 16),
-
-                        // Minus button directly below
-                        AnimatedBuilder(
-                          animation: _fillAnimation,
-                          builder: (context, child) {
-                            final hasEntries = _currentAmount > 0;
-                            return _buildMinusButton(hasEntries);
-                          },
+                        Text(
+                          "DAILY GOAL",
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white.withOpacity(0.5),
+                              letterSpacing: 2),
                         ),
                       ],
                     ),
                   ),
 
-                  // Spacer to push content up (buttons will be positioned at bottom)
-                  const Spacer(),
-                ],
-              ),
-            ),
+                  // The Glass Container
+                  Expanded(
+                    child: AnimatedBuilder(
+                      animation:
+                          Listenable.merge([_mainController, _waveController]),
+                      builder: (context, child) {
+                        _updateBubbles();
+                        return CustomPaint(
+                          size: const Size(200, 450),
+                          painter: PremiumWaterPainter(
+                            fillProgress: _fillAnimation.value,
+                            wavePhase: _waveController.value,
+                            bubbles: _bubbles,
+                            accentColor: WorkoutsDesignTokens.waterCyan,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
 
-            // Water intake buttons positioned at navigation pill level
-            BottomActionContainer(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildWaterButton(0.25),
-                  _buildWaterButton(0.5),
-                  _buildWaterButton(1.0),
+                  // Minus Button (Undo Last)
+                  _buildRemoveButton(),
+
+                  const SizedBox(height: 30),
+
+                  // Pill Shape Intake Buttons
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildPillButton("250ml", 0.25),
+                        const SizedBox(width: 12),
+                        _buildPillButton("500ml", 0.5),
+                        const SizedBox(width: 12),
+                        _buildPillButton("1.0L", 1.0),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -442,34 +308,78 @@ class _WaterIntakeScreenState extends State<WaterIntakeScreen>
     );
   }
 
-  Widget _buildWaterButton(double amount) {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: GestureDetector(
-          onTap: () => _addWater(amount),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.95),
-              borderRadius: BorderRadius.circular(100), // Pill shape
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.white.withOpacity(0.2),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+  void _updateBubbles() {
+    for (var b in _bubbles) {
+      b.y -= b.speed;
+      if (b.y < -0.1) {
+        b.y = 1.1;
+        b.x = _random.nextDouble();
+      }
+    }
+  }
+
+  Widget _buildRemoveButton() {
+    final bool hasData = _todayLog.isNotEmpty;
+    return GestureDetector(
+      onTap: hasData ? _removeLastEntry : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: hasData
+              ? Colors.red.withOpacity(0.15)
+              : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: hasData
+                ? Colors.red.withOpacity(0.5)
+                : Colors.white.withOpacity(0.1),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.remove_circle_outline,
+                size: 18, color: hasData ? Colors.redAccent : Colors.white24),
+            const SizedBox(width: 8),
+            Text(
+              "REMOVE LAST",
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: hasData ? Colors.redAccent : Colors.white24,
+              ),
             ),
-            child: Center(
-              child: Text(
-                WaterAmountFormatter.format(amount),
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF2A2A6A),
-                  letterSpacing: -0.3,
-                ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPillButton(String label, double amount) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _addWater(amount),
+        child: Container(
+          height: 56,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(100),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF1E293B),
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
               ),
             ),
           ),
@@ -477,175 +387,163 @@ class _WaterIntakeScreenState extends State<WaterIntakeScreen>
       ),
     );
   }
-
-  Widget _buildMinusButton(bool enabled) {
-    return GestureDetector(
-      onTap: enabled ? () => _removeLastEntry() : null,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: enabled
-              ? Colors.red.shade400.withOpacity(0.9)
-              : Colors.grey.shade600.withOpacity(0.3),
-          shape: BoxShape.circle,
-          boxShadow: enabled
-              ? [
-                  BoxShadow(
-                    color: Colors.red.shade400.withOpacity(0.4),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : [],
-        ),
-        child: Icon(
-          Icons.remove,
-          color: enabled ? Colors.white : Colors.white.withOpacity(0.3),
-          size: 20,
-        ),
-      ),
-    );
-  }
 }
 
-// Keep the exact same WaterGlassPainter from the original widget
-class WaterGlassPainter extends CustomPainter {
-  final double fillPercentage;
-  final double animationValue;
-  final double glowValue;
-  final double waveValue;
-  final Color waterColor;
+class PremiumWaterPainter extends CustomPainter {
+  final double fillProgress;
+  final double wavePhase;
+  final List<Bubble> bubbles;
+  final Color accentColor;
 
-  WaterGlassPainter({
-    required this.fillPercentage,
-    required this.animationValue,
-    required this.glowValue,
-    required this.waveValue,
-    required this.waterColor,
+  PremiumWaterPainter({
+    required this.fillProgress,
+    required this.wavePhase,
+    required this.bubbles,
+    required this.accentColor,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..color = Colors.white.withOpacity(0.3);
+    final double w = size.width;
+    final double h = size.height;
+    final double centerX = w / 2;
 
-    // Glass outline
-    final glassPath = Path();
-    final glassWidth = size.width * 0.6;
-    final glassHeight = size.height * 0.8;
-    final centerX = size.width / 2;
-    final startY = size.height * 0.1;
+    // --- Bottle Dimensions ---
+    final double neckWidth = w * 0.35;
+    final double neckHeight = h * 0.12;
+    final double shoulderWidth = w * 0.85;
+    final double bodyWidth = w * 0.82; // Slight taper
+    final double capHeight = 12.0;
 
-    glassPath.moveTo(centerX - glassWidth / 2, startY);
-    glassPath.lineTo(centerX - glassWidth / 2 + 10, startY + glassHeight);
-    glassPath.lineTo(centerX + glassWidth / 2 - 10, startY + glassHeight);
-    glassPath.lineTo(centerX + glassWidth / 2, startY);
+    // --- Define the Bottle Silhouette Path ---
+    final Path bottlePath = Path();
 
-    canvas.drawPath(glassPath, paint);
+    // Start at top left of the neck (just below the cap)
+    bottlePath.moveTo(centerX - neckWidth / 2, capHeight + 5);
 
-    // Water fill
-    final currentFill = fillPercentage * animationValue / 100;
-    if (currentFill > 0) {
+    // Neck down to shoulder
+    bottlePath.lineTo(centerX - neckWidth / 2, neckHeight);
+
+    // Left Shoulder (Curved)
+    bottlePath.quadraticBezierTo(
+      centerX - neckWidth / 2, neckHeight + 30, // Control point
+      centerX - shoulderWidth / 2, neckHeight + 60, // End point
+    );
+
+    // Left Body down to base
+    bottlePath.lineTo(centerX - bodyWidth / 2, h - 30);
+
+    // Rounded Base Left
+    bottlePath.quadraticBezierTo(centerX - bodyWidth / 2, h, centerX, h);
+
+    // Rounded Base Right
+    bottlePath.quadraticBezierTo(
+        centerX + bodyWidth / 2, h, centerX + bodyWidth / 2, h - 30);
+
+    // Right Body up to shoulder
+    bottlePath.lineTo(centerX + shoulderWidth / 2, neckHeight + 60);
+
+    // Right Shoulder (Curved)
+    bottlePath.quadraticBezierTo(centerX + neckWidth / 2, neckHeight + 30,
+        centerX + neckWidth / 2, neckHeight);
+
+    // Neck up to top
+    bottlePath.lineTo(centerX + neckWidth / 2, capHeight + 5);
+    bottlePath.close();
+
+    // 1. Draw Bottle Back (Translucent Surface)
+    final backPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+        colors: [
+          Colors.white.withOpacity(0.05),
+          Colors.white.withOpacity(0.01),
+          Colors.white.withOpacity(0.05),
+        ],
+      ).createShader(Offset.zero & size);
+    canvas.drawPath(bottlePath, backPaint);
+
+    // 2. Draw Cap (The "Hardware" look)
+    final capPaint = Paint()..color = Colors.white.withOpacity(0.15);
+    final capRect = Rect.fromCenter(
+      center: Offset(centerX, capHeight / 2),
+      width: neckWidth + 10,
+      height: capHeight,
+    );
+    canvas.drawRRect(
+        RRect.fromRectAndRadius(capRect, const Radius.circular(4)), capPaint);
+
+    // 3. Water Fill with Waves
+    if (fillProgress > 0) {
+      canvas.save();
+      canvas.clipPath(bottlePath); // Clips water precisely to bottle shape
+
+      final waterPath = Path();
+      // Calculate height based on full bottle height including neck
+      final currentWaterTop = h - (h * fillProgress);
+
+      waterPath.moveTo(-20, h + 20); // Move below base
+
+      // Dynamic Wave across the width
+      for (double x = 0; x <= w; x++) {
+        double wave1 = math.sin((x / 40) + (wavePhase * 2 * math.pi)) * 6;
+        double wave2 = math.cos((x / 70) - (wavePhase * 2 * math.pi)) * 3;
+        waterPath.lineTo(x, currentWaterTop + wave1 + wave2);
+      }
+
+      waterPath.lineTo(w + 20, h + 20);
+      waterPath.close();
+
       final waterPaint = Paint()
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            waterColor.withOpacity(0.6),
-            waterColor,
+            accentColor.withOpacity(0.4), // See-through top
+            accentColor.withOpacity(0.75), // Deeper bottom
           ],
-        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-
-      final waterHeight = glassHeight * currentFill;
-      final waterPath = Path();
-
-      final bottomY = startY + glassHeight;
-      final topY = bottomY - waterHeight;
-
-      // Calculate water edge positions that follow the glass shape
-      // Glass gets narrower towards bottom by 10px on each side (20px total)
-      final glassTopWidth = glassWidth;
-      final glassBottomWidth = glassWidth - 20;
-
-      // Calculate the width of the glass at the current water level
-      final waterLevelRatio = waterHeight / glassHeight; // 0.0 to 1.0
-      final waterWidthAtLevel = glassBottomWidth +
-          (glassTopWidth - glassBottomWidth) * waterLevelRatio;
-
-      // Water edges at current level
-      final waterLeftX = centerX - waterWidthAtLevel / 2;
-      final waterRightX = centerX + waterWidthAtLevel / 2;
-
-      // Bottom reference points (always at glass bottom width)
-      final waterBottomWidth = glassBottomWidth;
-      final waterBottomLeftX = centerX - waterBottomWidth / 2;
-      final waterBottomRightX = centerX + waterBottomWidth / 2;
-
-      // Start from bottom left
-      waterPath.moveTo(waterBottomLeftX, bottomY);
-
-      // Draw left edge following glass slant to water level
-      waterPath.lineTo(waterLeftX, topY);
-
-      // Add wave effect across the water surface at current level
-      final waveAmplitude = 3.0;
-      final waveFrequency = 2.0;
-      final wavePoints = <Offset>[];
-
-      for (double i = 0; i <= waterWidthAtLevel; i += 2) {
-        final x = waterLeftX + i;
-        final wave = math.sin(
-                (i / waterWidthAtLevel) * math.pi * waveFrequency +
-                    waveValue * math.pi * 2) *
-            waveAmplitude;
-        wavePoints.add(Offset(x, topY + wave));
-      }
-
-      // Add all wave points
-      for (final point in wavePoints) {
-        waterPath.lineTo(point.dx, point.dy);
-      }
-
-      // Draw right edge following glass slant back to bottom
-      waterPath.lineTo(waterRightX, topY);
-      waterPath.lineTo(waterBottomRightX, bottomY);
-
-      // Close the path
-      waterPath.close();
+        ).createShader(
+            Offset(0, currentWaterTop) & Size(w, h - currentWaterTop));
 
       canvas.drawPath(waterPath, waterPaint);
 
-      // Glow effect
-      if (currentFill > 0.5) {
-        final glowPaint = Paint()
-          ..color = waterColor.withOpacity(0.2 * glowValue)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15);
-        canvas.drawPath(waterPath, glowPaint);
+      // 4. Bubbles (Constrained by bottle clip)
+      for (var b in bubbles) {
+        double bubbleY = h - (b.y * h);
+        if (bubbleY > currentWaterTop) {
+          canvas.drawCircle(
+            Offset(centerX - (bodyWidth / 2) + (b.x * bodyWidth), bubbleY),
+            b.radius,
+            Paint()..color = Colors.white.withOpacity(b.opacity),
+          );
+        }
       }
-
-      // Reflection/highlight
-      final highlightPaint = Paint()
-        ..color = Colors.white.withOpacity(0.3)
-        ..style = PaintingStyle.fill;
-
-      final highlightPath = Path();
-      highlightPath.addOval(Rect.fromLTWH(
-        centerX - glassWidth / 4,
-        topY + 10,
-        glassWidth / 6,
-        waterHeight / 3,
-      ));
-      canvas.drawPath(highlightPath, highlightPaint);
+      canvas.restore();
     }
+
+    // 5. Bottle Outline & 3D Reflections
+    final outlinePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = Colors.white.withOpacity(0.15);
+    canvas.drawPath(bottlePath, outlinePaint);
+
+    // Vertical "Specular" Highlight for Cylindrical Look
+    final highlightPath = Path()
+      ..addRRect(RRect.fromRectAndCorners(
+        Rect.fromLTWH(
+            centerX - (neckWidth / 2) + 5, capHeight + 20, 4, h * 0.7),
+        topLeft: const Radius.circular(10),
+        bottomLeft: const Radius.circular(10),
+      ));
+    canvas.drawPath(
+        highlightPath,
+        Paint()
+          ..color = Colors.white.withOpacity(0.1)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2));
   }
 
   @override
-  bool shouldRepaint(WaterGlassPainter oldDelegate) =>
-      oldDelegate.fillPercentage != fillPercentage ||
-      oldDelegate.animationValue != animationValue ||
-      oldDelegate.glowValue != glowValue ||
-      oldDelegate.waveValue != waveValue;
+  bool shouldRepaint(covariant PremiumWaterPainter oldDelegate) => true;
 }

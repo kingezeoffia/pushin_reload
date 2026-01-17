@@ -25,12 +25,12 @@ class _SophisticatedCardStyle {
 class WorkoutData {
   final String type;
   final int duration;
-  final IconData icon;
+  final String iconAsset;
 
   const WorkoutData({
     required this.type,
     required this.duration,
-    required this.icon,
+    required this.iconAsset,
   });
 }
 
@@ -53,7 +53,7 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
   late PushinAppController _controller;
 
   // Screen time data
-  double _totalScreenTimeMinutes = 210.0; // Default 3.5 hours
+  double _totalScreenTimeMinutes = 319.0; // Default 5.3167 hours (5h 19min)
   List<AppUsageInfo> _mostUsedApps = [];
   bool _screenTimeLoading = true;
   bool _screenTimeIsMockData = false;
@@ -193,14 +193,15 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
         await _screenTimeService.startScreenTimeMonitoring();
         print('✅ StatsWidgetsGrid: Started screen time monitoring');
       } catch (e) {
-        print('⚠️ StatsWidgetsGrid: Could not start monitoring (may need permission): $e');
+        print(
+            '⚠️ StatsWidgetsGrid: Could not start monitoring (may need permission): $e');
       }
 
       // Load screen time
       final screenTimeResponse = await _screenTimeService.getTodayScreenTime();
 
       // Load most used apps
-      final appsResponse = await _screenTimeService.getMostUsedApps(limit: 3);
+      final appsResponse = await _screenTimeService.getMostUsedApps(limit: 10);
 
       if (mounted) {
         setState(() {
@@ -227,23 +228,6 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
         });
       }
     }
-  }
-
-  IconData _getIconForApp(String appName) {
-    final lowerName = appName.toLowerCase();
-    if (lowerName.contains('instagram')) return Icons.camera_alt;
-    if (lowerName.contains('youtube')) return Icons.play_circle_filled;
-    if (lowerName.contains('tiktok')) return Icons.music_note;
-    if (lowerName.contains('twitter') || lowerName.contains('x')) return Icons.tag;
-    if (lowerName.contains('facebook')) return Icons.facebook;
-    if (lowerName.contains('snapchat')) return Icons.camera;
-    if (lowerName.contains('whatsapp') || lowerName.contains('message')) return Icons.message;
-    if (lowerName.contains('reddit')) return Icons.forum;
-    if (lowerName.contains('netflix')) return Icons.tv;
-    if (lowerName.contains('spotify')) return Icons.music_note;
-    if (lowerName.contains('game')) return Icons.videogame_asset;
-    if (lowerName.contains('safari') || lowerName.contains('chrome')) return Icons.public;
-    return Icons.phone_android;
   }
 
   @override
@@ -276,13 +260,17 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
                         ),
                       )
                     : MostUsedAppsWidget(
-                        apps: _mostUsedApps
-                            .map((app) => AppUsageData(
-                                  name: app.name,
-                                  usageTime: app.usageHours,
-                                  icon: _getIconForApp(app.name),
-                                ))
-                            .toList(),
+                        apps: (_mostUsedApps.toList()
+                              ..sort((a, b) =>
+                                  b.usageHours.compareTo(a.usageHours)))
+                            .map((app) {
+                          return AppUsageData(
+                            name: app.name,
+                            usageTime:
+                                double.parse(app.usageHours.toStringAsFixed(1)),
+                            icon: Icons.apps, // Placeholder - not used anymore
+                          );
+                        }).toList(),
                         delay: 0,
                         compact: isSmallScreen,
                       ),
@@ -370,19 +358,19 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
                                 WorkoutData(
                                     type: 'No workouts yet',
                                     duration: 0,
-                                    icon: Icons.fitness_center),
+                                    iconAsset: 'assets/icons/pushup_icon.png'),
                               ]
                             : _recentWorkouts
                                 .map((workout) => WorkoutData(
                                       type: workout.displayName,
                                       duration: (workout.earnedTimeSeconds / 60)
                                           .round(),
-                                      icon: workout.icon,
+                                      iconAsset: workout.iconAsset,
                                     ))
                                 .toList(),
                         delay: 300,
                         compact: isSmallScreen,
-                        showIcons: false, // Hide icons as requested
+                        showIcons: true, // Show workout icons
                       ),
               ),
             ],
@@ -433,25 +421,29 @@ class _MostUsedAppsWidgetState extends State<MostUsedAppsWidget>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
+  late Animation<double> _progressAnimation;
 
-  static const _accentColor = Color(0xFF7C8CFF);
+  // Using your design system tokens
+  static const Color accentColor = Color(0xFF3B82F6); // Bright Blue
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+      CurvedAnimation(
+          parent: _controller,
+          curve: const Interval(0.0, 0.6, curve: Curves.easeOut)),
     );
 
-    _slideAnimation =
-        Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    _progressAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+          parent: _controller,
+          curve: const Interval(0.2, 1.0, curve: Curves.fastOutSlowIn)),
     );
 
     Future.delayed(Duration(milliseconds: widget.delay), () {
@@ -465,140 +457,367 @@ class _MostUsedAppsWidgetState extends State<MostUsedAppsWidget>
     super.dispose();
   }
 
+  Widget _buildAppIcon(String appName) {
+    // Try to load actual app icon image
+    String? assetPath = _getAppIconAssetPath(appName);
+
+    if (assetPath != null) {
+      return Container(
+        width: 20,
+        height: 20,
+        child: Image.asset(
+          assetPath,
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) {
+            // Fallback to Material Design icon if image fails to load
+            return Container(
+              width: 20,
+              height: 20,
+              child: Icon(
+                _getIconForApp(appName),
+                color: accentColor,
+                size: 16,
+              ),
+            );
+          },
+        ),
+      );
+    } else {
+      // No specific icon available, use Material Design
+      return Container(
+        width: 20,
+        height: 20,
+        child: Icon(
+          _getIconForApp(appName),
+          color: accentColor,
+          size: 16,
+        ),
+      );
+    }
+  }
+
+  String? _getAppIconAssetPath(String appName) {
+    final lowerName = appName.toLowerCase();
+    print('DEBUG: _getAppIconAssetPath called for: "$appName" -> "$lowerName"');
+    if (lowerName.contains('instagram')) {
+      print('DEBUG: Returning instagram.png');
+      return 'assets/app_icons/instagram.png';
+    }
+    if (lowerName.contains('youtube')) {
+      print('DEBUG: Returning youtube.png');
+      return 'assets/app_icons/youtube.png';
+    }
+    if (lowerName.contains('tiktok')) {
+      print('DEBUG: Returning tiktok.png');
+      return 'assets/app_icons/tiktok.png';
+    }
+    if (lowerName.contains('twitter') || lowerName.contains('x')) {
+      print('DEBUG: Returning twitter.png');
+      return 'assets/app_icons/twitter.png';
+    }
+    if (lowerName.contains('facebook')) {
+      print('DEBUG: Returning facebook.png');
+      return 'assets/app_icons/facebook.png';
+    }
+    if (lowerName.contains('snapchat')) {
+      print('DEBUG: Returning snapchat.png');
+      return 'assets/app_icons/snapchat.png';
+    }
+    if (lowerName.contains('whatsapp') || lowerName.contains('message')) {
+      print('DEBUG: Returning whatsapp.png');
+      return 'assets/app_icons/whatsapp.png';
+    }
+    if (lowerName.contains('reddit')) {
+      print('DEBUG: Returning reddit.png');
+      return 'assets/app_icons/reddit.png';
+    }
+    if (lowerName.contains('netflix')) {
+      print('DEBUG: Returning netflix.png');
+      return 'assets/app_icons/netflix.png';
+    }
+    if (lowerName.contains('spotify')) {
+      print('DEBUG: Returning spotify.png');
+      return 'assets/app_icons/spotify.png';
+    }
+    if (lowerName.contains('chrome')) return 'assets/app_icons/chrome.png';
+    if (lowerName.contains('safari')) return 'assets/app_icons/safari.png';
+    if (lowerName.contains('messenger'))
+      return 'assets/app_icons/messenger.png';
+    if (lowerName.contains('discord')) return 'assets/app_icons/discord.png';
+    if (lowerName.contains('telegram')) return 'assets/app_icons/telegram.png';
+    if (lowerName.contains('signal')) return 'assets/app_icons/signal.png';
+    if (lowerName.contains('github')) return 'assets/app_icons/github.png';
+    if (lowerName.contains('linkedin')) return 'assets/app_icons/linkedin.png';
+    if (lowerName.contains('medium')) return 'assets/app_icons/medium.png';
+    if (lowerName.contains('pinterest'))
+      return 'assets/app_icons/pinterest.png';
+    if (lowerName.contains('threads')) return 'assets/app_icons/threads.png';
+    if (lowerName.contains('tumblr')) return 'assets/app_icons/tumblr.png';
+    if (lowerName.contains('twitch')) return 'assets/app_icons/twitch.png';
+    if (lowerName.contains('vk')) return 'assets/app_icons/vk.png';
+    if (lowerName.contains('dribbble')) return 'assets/app_icons/dribbble.png';
+    if (lowerName.contains('figma')) return 'assets/app_icons/figma.png';
+    if (lowerName.contains('bluesky')) return 'assets/app_icons/bluesky.png';
+    if (lowerName.contains('game')) return 'assets/app_icons/game.png';
+    print('DEBUG: No match found for "$lowerName", returning null');
+    return null;
+  }
+
+  IconData _getIconForApp(String appName) {
+    final lowerName = appName.toLowerCase();
+    print('DEBUG: _getIconForApp called for: "$appName" -> "$lowerName"');
+    if (lowerName.contains('instagram')) {
+      print('DEBUG: Returning camera_alt for instagram');
+      return Icons.camera_alt;
+    }
+    if (lowerName.contains('youtube')) {
+      print('DEBUG: Returning play_circle_filled for youtube');
+      return Icons.play_circle_filled;
+    }
+    if (lowerName.contains('tiktok')) {
+      print('DEBUG: Returning music_note for tiktok');
+      return Icons.music_note;
+    }
+    if (lowerName.contains('twitter') || lowerName.contains('x')) {
+      print('DEBUG: Returning tag for twitter/x');
+      return Icons.tag;
+    }
+    if (lowerName.contains('facebook')) {
+      print('DEBUG: Returning facebook for facebook');
+      return Icons.facebook;
+    }
+    if (lowerName.contains('snapchat')) {
+      print('DEBUG: Returning camera for snapchat');
+      return Icons.camera;
+    }
+    if (lowerName.contains('whatsapp') || lowerName.contains('message')) {
+      print('DEBUG: Returning message for whatsapp/message');
+      return Icons.message;
+    }
+    if (lowerName.contains('reddit')) {
+      print('DEBUG: Returning forum for reddit');
+      return Icons.forum;
+    }
+    if (lowerName.contains('netflix')) {
+      print('DEBUG: Returning tv for netflix');
+      return Icons.tv;
+    }
+    if (lowerName.contains('spotify')) return Icons.music_note;
+    if (lowerName.contains('game')) return Icons.videogame_asset;
+    if (lowerName.contains('safari') || lowerName.contains('chrome'))
+      return Icons.public;
+    if (lowerName.contains('messenger')) return Icons.message;
+    if (lowerName.contains('discord')) return Icons.chat;
+    if (lowerName.contains('telegram')) return Icons.send;
+    if (lowerName.contains('signal')) return Icons.security;
+    if (lowerName.contains('github')) return Icons.code;
+    if (lowerName.contains('linkedin')) return Icons.business;
+    if (lowerName.contains('medium')) return Icons.article;
+    if (lowerName.contains('pinterest')) return Icons.image;
+    if (lowerName.contains('threads')) return Icons.forum;
+    if (lowerName.contains('tumblr')) return Icons.web;
+    if (lowerName.contains('twitch')) return Icons.tv;
+    if (lowerName.contains('vk')) return Icons.group;
+    if (lowerName.contains('dribbble')) return Icons.palette;
+    if (lowerName.contains('figma')) return Icons.design_services;
+    if (lowerName.contains('bluesky')) return Icons.cloud;
+    return Icons.phone_android;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SlideTransition(
-      position: _slideAnimation,
-      child: FadeTransition(
-        opacity: _fadeAnimation,
-        child: Container(
-          height: widget.compact ? 165 : 185,
-          padding: EdgeInsets.all(widget.compact ? 14 : 18),
-          decoration: _SophisticatedCardStyle.cleanCard(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header with clean icon
-              Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: _accentColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                    child: Icon(
-                      Icons.access_time_filled,
-                      color: _accentColor,
-                      size: 16,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  const Text(
-                    'Most Used Apps',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              // Apps list
-              Expanded(
-                child: ListView.builder(
+    // Calculate max usage to scale progress bars relatively
+    final maxUsage = widget.apps.isNotEmpty
+        ? widget.apps.map((e) => e.usageTime).reduce((a, b) => a > b ? a : b)
+        : 1.0;
+
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Container(
+        height: widget.compact ? 165 : 185,
+        padding: EdgeInsets.all(widget.compact ? 14 : 16),
+        decoration: _SophisticatedCardStyle.cleanCard(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ShaderMask(
+                shaderCallback: (Rect bounds) {
+                  return LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.white,
+                      Colors.white,
+                      Colors.transparent,
+                    ],
+                    stops: const [0.0, 0.05, 0.99, 1.0],
+                  ).createShader(bounds);
+                },
+                blendMode: BlendMode.dstIn,
+                child: ListView.separated(
                   padding: EdgeInsets.zero,
-                  physics: const NeverScrollableScrollPhysics(),
+                  physics: const AlwaysScrollableScrollPhysics(),
                   itemCount: widget.apps.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 8),
                   itemBuilder: (context, index) {
                     final app = widget.apps[index];
-                    final isFirst = index == 0;
-
-                    return Padding(
-                      padding: EdgeInsets.only(
-                          bottom: index == widget.apps.length - 1 ? 0 : 12),
-                      child: Row(
-                        children: [
-                          // Rank badge
-                          Container(
-                            width: 22,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              gradient: isFirst
-                                  ? LinearGradient(colors: [
-                                      _accentColor,
-                                      const Color(0xFF60A5FA)
-                                    ])
-                                  : null,
-                              color: isFirst
-                                  ? null
-                                  : Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(7),
-                            ),
-                            child: Center(
-                              child: Text(
-                                '${index + 1}',
-                                style: TextStyle(
-                                  color: isFirst
-                                      ? Colors.white
-                                      : Colors.white.withOpacity(0.5),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          // App icon
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: _accentColor.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child:
-                                Icon(app.icon, color: _accentColor, size: 16),
-                          ),
-                          const SizedBox(width: 10),
-                          // Info
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  app.name,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  '${app.usageTime}h today',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.4),
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
+                    return _buildAppRow(app, index, maxUsage);
                   },
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: accentColor.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(
+            Icons.bar_chart_rounded,
+            color: accentColor,
+            size: 16,
+          ),
+        ),
+        const SizedBox(width: 10),
+        const Text(
+          'Most Used Apps',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.3,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAppRow(AppUsageData app, int index, double maxUsage) {
+    final bool isTop = index == 0;
+    final double relativeProgress = app.usageTime / maxUsage;
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            // Numbered ranking - fixed width container for perfect alignment
+            Container(
+              width: 18, // Fixed width to accommodate "3." comfortably
+              alignment: Alignment.centerRight, // Right-align the number
+              child: Text(
+                '${index + 1}.',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.6),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // App icon between number and name
+            _buildAppIcon(app.name),
+            const SizedBox(width: 10),
+            // Name and Progress Bar
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        app.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      RichText(
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '${app.usageTime}h',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            TextSpan(
+                              text: ' today',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.4),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  // Animated Progress Bar
+                  AnimatedBuilder(
+                    animation: _progressAnimation,
+                    builder: (context, child) {
+                      return Stack(
+                        children: [
+                          Container(
+                            height: 6,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.05),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                          FractionallySizedBox(
+                            widthFactor:
+                                relativeProgress * _progressAnimation.value,
+                            child: Container(
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: accentColor,
+                                borderRadius: BorderRadius.circular(2),
+                                boxShadow: isTop
+                                    ? [
+                                        BoxShadow(
+                                          color: accentColor.withOpacity(0.2),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 1),
+                                        )
+                                      ]
+                                    : null,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -1056,7 +1275,12 @@ class _WorkoutsWidgetState extends State<WorkoutsWidget>
         opacity: _fadeAnimation,
         child: Container(
           height: widget.compact ? 165 : 185,
-          padding: EdgeInsets.all(widget.compact ? 14 : 18),
+          padding: EdgeInsets.fromLTRB(
+            widget.compact ? 14.0 : 16.0,
+            widget.compact ? 12.0 : 14.0,
+            widget.compact ? 14.0 : 16.0,
+            widget.compact ? 14.0 : 16.0,
+          ),
           decoration: _SophisticatedCardStyle.cleanCard(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1092,7 +1316,8 @@ class _WorkoutsWidgetState extends State<WorkoutsWidget>
               const SizedBox(height: 14),
               // Workouts list
               Expanded(
-                child: widget.workouts.length == 1 && widget.workouts[0].type == 'No workouts yet'
+                child: widget.workouts.length == 1 &&
+                        widget.workouts[0].type == 'No workouts yet'
                     ? Center(
                         child: Text(
                           'No workouts yet',
@@ -1103,97 +1328,96 @@ class _WorkoutsWidgetState extends State<WorkoutsWidget>
                           ),
                         ),
                       )
-                    : ListView.builder(
-                        padding: EdgeInsets.zero,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: widget.workouts.length,
-                        itemBuilder: (context, index) {
-                          final workout = widget.workouts[index];
-                          final isFirst = index == 0;
-
-                          return Padding(
-                            padding: EdgeInsets.only(
-                                bottom: index == widget.workouts.length - 1 ? 0 : 12),
-                            child: Row(
-                              children: [
-                                // Rank badge
-                                Container(
-                                  width: 22,
-                                  height: 22,
-                                  decoration: BoxDecoration(
-                                    gradient: isFirst
-                                        ? const LinearGradient(colors: [
-                                            Color(0xFF4ADE80),
-                                            Color(0xFF22C55E)
-                                          ])
-                                        : null,
-                                    color: isFirst
-                                        ? null
-                                        : Colors.white.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(7),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      '${index + 1}',
-                                      style: TextStyle(
-                                        color: isFirst
-                                            ? Colors.white
-                                            : Colors.white.withOpacity(0.5),
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                // Workout icon - only show if showIcons is true
-                                if (widget.showIcons) ...[
-                                  Container(
-                                    width: 32,
-                                    height: 32,
-                                    decoration: BoxDecoration(
-                                      color: _accentColor.withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Icon(workout.icon,
-                                        color: _accentColor, size: 16),
-                                  ),
-                                  const SizedBox(width: 10),
-                                ],
-                                // Info
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        workout.type,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      Text(
-                                        '${workout.duration} min',
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.4),
-                                          fontSize: 11,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
+                    : ShaderMask(
+                        shaderCallback: (Rect bounds) {
+                          return LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.white,
+                              Colors.white,
+                              Colors.transparent,
+                            ],
+                            stops: const [0.0, 0.05, 0.95, 1.0],
+                          ).createShader(bounds);
                         },
-                      )),
+                        blendMode: BlendMode.dstIn,
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          itemCount: widget.workouts.length,
+                          itemBuilder: (context, index) {
+                            final workout = widget.workouts[index];
+
+                            return Padding(
+                              padding: EdgeInsets.only(
+                                  bottom: index == widget.workouts.length - 1
+                                      ? 0
+                                      : 12),
+                              child: Row(
+                                children: [
+                                  // Numbered ranking - fixed width container for perfect alignment
+                                  Container(
+                                    width:
+                                        18, // Fixed width to accommodate numbers comfortably
+                                    alignment: Alignment
+                                        .centerRight, // Right-align the number
+                                    child: Text(
+                                      '${widget.workouts.length - index}.',
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.6),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Workout icon
+                                  Image.asset(
+                                    workout.iconAsset,
+                                    color: _accentColor,
+                                    width: 20,
+                                    height: 20,
+                                    fit: BoxFit.contain,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // Info
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          workout.type,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        Text(
+                                          '${workout.duration} min',
+                                          style: TextStyle(
+                                            color:
+                                                Colors.white.withOpacity(0.4),
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        )),
+              ),
             ],
+          ),
         ),
       ),
-  ),
-);
+    );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
+import '../../widgets/pill_navigation_bar.dart';
 import 'HowItWorksEmergencyUnlockScreen.dart';
 
 /// Custom route that disables swipe back gesture on iOS
@@ -135,31 +136,25 @@ class HowItWorksWorkoutSuccessScreen extends StatelessWidget {
               ),
             ),
 
-            // Continue Button - properly positioned in Stack
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: MediaQuery.of(context).padding.bottom + 8,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _ContinueButton(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      _NoSwipeBackRoute(
-                        builder: (context) => HowItWorksEmergencyUnlockScreen(
-                          fitnessLevel: fitnessLevel,
-                          goals: goals,
-                          otherGoal: otherGoal,
-                          workoutHistory: workoutHistory,
-                          blockedApps: blockedApps,
-                          selectedWorkout: workoutType,
-                          unlockDuration: 15, // Default 15 minutes
-                        ),
+            // Continue Button - positioned at screen edge like other major onboarding buttons
+            BottomActionContainer(
+              child: _ContinueButton(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    _NoSwipeBackRoute(
+                      builder: (context) => HowItWorksEmergencyUnlockScreen(
+                        fitnessLevel: fitnessLevel,
+                        goals: goals,
+                        otherGoal: otherGoal,
+                        workoutHistory: workoutHistory,
+                        blockedApps: blockedApps,
+                        selectedWorkout: workoutType,
+                        unlockDuration: 15, // Default 15 minutes
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
               ),
             ),
           ],

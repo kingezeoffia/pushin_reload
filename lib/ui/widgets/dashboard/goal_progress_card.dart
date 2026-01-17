@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../theme/dashboard_design_tokens.dart';
 import '../../screens/paywall/PaywallScreen.dart';
 
@@ -42,7 +43,10 @@ class _CustomWorkoutCardState extends State<CustomWorkoutCard>
     return FadeTransition(
       opacity: _fadeAnimation,
       child: GestureDetector(
-        onTap: () => _navigateToPaywall(context),
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          _navigateToPaywall(context);
+        },
         child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(

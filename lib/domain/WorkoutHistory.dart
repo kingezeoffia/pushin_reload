@@ -70,12 +70,34 @@ class WorkoutHistory extends HiveObject {
         return 'Jumping Jacks';
       case 'burpees':
         return 'Burpees';
+      case 'glute-bridge':
+        return 'Glute Bridge';
       default:
         return workoutType;
     }
   }
 
-  /// Get icon for workout type
+  /// Get icon asset path for workout type
+  String get iconAsset {
+    switch (workoutType.toLowerCase()) {
+      case 'push-ups':
+        return 'assets/icons/pushup_icon.png';
+      case 'squats':
+        return 'assets/icons/squats_icon.png';
+      case 'plank':
+        return 'assets/icons/plank_icon.png';
+      case 'jumping-jacks':
+        return 'assets/icons/jumping_jacks_icon.png';
+      case 'burpees':
+        return 'assets/icons/glutebridge_icon.png'; // Using glute bridge as burpee icon
+      case 'glute-bridge':
+        return 'assets/icons/glutebridge_icon.png';
+      default:
+        return 'assets/icons/pushup_icon.png'; // Default to pushup icon
+    }
+  }
+
+  /// Get icon for workout type (deprecated - use iconAsset instead)
   IconData get icon {
     switch (workoutType.toLowerCase()) {
       case 'push-ups':
@@ -88,6 +110,8 @@ class WorkoutHistory extends HiveObject {
         return Icons.directions_run;
       case 'burpees':
         return Icons.sports_gymnastics;
+      case 'glute-bridge':
+        return Icons.sports_gymnastics; // Same as burpees since both are glute exercises
       default:
         return Icons.sports_gymnastics;
     }

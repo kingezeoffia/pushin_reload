@@ -205,6 +205,9 @@ class _GreetingCardState extends State<GreetingCard>
     final longestStreak = controller.getBestStreak();
     final totalWorkouts = controller.getTotalWorkoutsCompleted();
 
+    // Debug logging
+    print('🟢 GreetingCard Stats: currentStreak=$currentStreak, longestStreak=$longestStreak, totalWorkouts=$totalWorkouts');
+
     return AnimatedBuilder(
       animation: _statsAnimation,
       builder: (context, child) {

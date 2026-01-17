@@ -108,90 +108,159 @@ class _RecentWorkoutsState extends State<RecentWorkouts> {
         SizedBox(height: PushinTheme.spacingMd),
 
         // List of recent workouts
-        ..._recentWorkouts.map((workout) => Padding(
-              padding: EdgeInsets.only(bottom: PushinTheme.spacingSm),
-              child: _buildWorkoutHistoryItem(
-                date: workout.relativeTimeDisplay,
-                workout: workout.displayName,
-                reps: workout.repsCompleted,
-                reward: workout.earnedTimeDisplay,
-                mode: workout.workoutModeDisplay,
-                modeColor: _getModeColor(workout.workoutMode),
-              ),
+        ..._recentWorkouts.map((workout) => _buildWorkoutHistoryItem(
+              workout: workout,
             )),
       ],
     );
   }
 
   Widget _buildWorkoutHistoryItem({
-    required String date,
-    required String workout,
-    required int reps,
-    required String reward,
-    required String mode,
-    required Color modeColor,
+    required WorkoutHistory workout,
   }) {
+    final modeColor = _getModeColor(workout.workoutMode);
+
     return Container(
-      padding: EdgeInsets.all(PushinTheme.spacingMd),
+      margin: EdgeInsets.only(bottom: PushinTheme.spacingMd),
       decoration: BoxDecoration(
-        color: PushinTheme.surfaceDark,
-        borderRadius: BorderRadius.circular(PushinTheme.radiusMd),
-        boxShadow: PushinTheme.cardShadow,
+        // Subtle gradient for a "glass" feel
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            PushinTheme.surfaceDark,
+            PushinTheme.surfaceDark.withValues(alpha: 0.7),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20), // More modern, rounded corners
+        // High-end hairline border
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.08),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Row(
-        children: [
-          // Workout details
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: EdgeInsets.all(PushinTheme.spacingMd),
+        child: Row(
+          children: [
+            // 1. ICON SECTION WITH AMBIENT GLOW
+            _buildWorkoutIcon(workout.icon, modeColor),
+
+            SizedBox(width: PushinTheme.spacingMd),
+
+            // 2. PRIMARY INFO SECTION
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    workout.displayName,
+                    style: PushinTheme.body1.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  _buildModeBadge(workout.workoutModeDisplay, modeColor),
+                ],
+              ),
+            ),
+
+            // 3. STATS SECTION (Right Aligned)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                Text(
+                  workout.relativeTimeDisplay,
+                  style: PushinTheme.caption.copyWith(
+                    color: PushinTheme.textTertiary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      workout,
-                      style: PushinTheme.body1
-                          .copyWith(fontWeight: FontWeight.w500),
+                      '${workout.repsCompleted}',
+                      style: PushinTheme.headline3.copyWith(
+                        fontSize: 22,
+                        color: Colors.white,
+                      ),
                     ),
-                    SizedBox(width: PushinTheme.spacingSm),
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: PushinTheme.spacingXs,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: modeColor.withOpacity(0.2),
-                        borderRadius:
-                            BorderRadius.circular(PushinTheme.radiusSm),
-                      ),
-                      child: Text(
-                        mode,
-                        style: PushinTheme.caption.copyWith(
-                          color: modeColor,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'reps',
+                      style: PushinTheme.caption.copyWith(
+                        color: PushinTheme.textSecondary,
                       ),
                     ),
                   ],
                 ),
-                SizedBox(height: PushinTheme.spacingXs),
                 Text(
-                  '$reps reps • $reward unlocked',
+                  workout.earnedTimeDisplay,
                   style: PushinTheme.caption.copyWith(
-                    color: PushinTheme.textSecondary,
+                    color: PushinTheme.secondaryBlue,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
             ),
-          ),
+          ],
+        ),
+      ),
+    );
+  }
 
-          // Date
-          Text(
-            date,
-            style: PushinTheme.caption.copyWith(
-              color: PushinTheme.textTertiary,
-            ),
+  // Helper: Modern Workout Icon with Glow Effect
+  Widget _buildWorkoutIcon(IconData icon, Color modeColor) {
+    return Container(
+      padding: EdgeInsets.all(PushinTheme.spacingSm),
+      decoration: BoxDecoration(
+        color: modeColor.withValues(alpha: 0.12),
+        shape: BoxShape.circle,
+        // The "Neon Glow" effect
+        boxShadow: [
+          BoxShadow(
+            color: modeColor.withValues(alpha: 0.25),
+            blurRadius: 15,
+            spreadRadius: 1,
           ),
         ],
+      ),
+      child: Icon(
+        icon,
+        color: modeColor,
+        size: 24,
+      ),
+    );
+  }
+
+  // Helper: Modern Pill Badge
+  Widget _buildModeBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
+      ),
+      child: Text(
+        label.toUpperCase(),
+        style: PushinTheme.caption.copyWith(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }

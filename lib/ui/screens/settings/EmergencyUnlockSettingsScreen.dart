@@ -76,7 +76,8 @@ class EmergencyUnlockSettingsScreen extends StatelessWidget {
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                           ).createShader(
-                            Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                            Rect.fromLTWH(
+                                0, 0, bounds.width, bounds.height * 1.3),
                           ),
                           blendMode: BlendMode.srcIn,
                           child: const Text(
@@ -110,8 +111,7 @@ class EmergencyUnlockSettingsScreen extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 32),
                     child: _UsageCard(
-                      unlocksRemaining:
-                          controller.emergencyUnlocksRemaining,
+                      unlocksRemaining: controller.emergencyUnlocksRemaining,
                       maxUnlocks: controller.maxEmergencyUnlocksPerDay,
                     ),
                   ),
@@ -290,10 +290,10 @@ class _SettingToggle extends StatelessWidget {
             height: 48,
             decoration: BoxDecoration(
               color: const Color(0xFFFF6060).withOpacity(0.15),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.06),
-          width: 1,
-        ),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.06),
+                width: 1,
+              ),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
@@ -370,10 +370,10 @@ class _DurationSetting extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.08),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.06),
-          width: 1,
-        ),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.06),
+            width: 1,
+          ),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
@@ -386,10 +386,10 @@ class _DurationSetting extends StatelessWidget {
                   height: 48,
                   decoration: BoxDecoration(
                     color: const Color(0xFFFF6060).withOpacity(0.15),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.06),
-          width: 1,
-        ),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.06),
+                      width: 1,
+                    ),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(
@@ -486,7 +486,8 @@ class _SaveChangesButton extends StatelessWidget {
 
   const _SaveChangesButton({
     required this.onTap,
-  });  @override
+  });
+  @override
   Widget build(BuildContext context) {
     return PressAnimationButton(
       onTap: onTap,

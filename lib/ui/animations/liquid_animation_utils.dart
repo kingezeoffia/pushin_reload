@@ -373,9 +373,6 @@ class ModeHaptics {
         break;
       case 'tuff':
         HapticFeedback.heavyImpact();
-        Future.delayed(const Duration(milliseconds: 50), () {
-          HapticFeedback.mediumImpact();
-        });
         break;
     }
   }

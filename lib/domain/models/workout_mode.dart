@@ -41,8 +41,8 @@ enum WorkoutMode {
   IconData get icon {
     switch (this) {
       case WorkoutMode.cozy: return Icons.self_improvement;
-      case WorkoutMode.normal: return Icons.fitness_center;
-      case WorkoutMode.tuff: return Icons.local_fire_department;
+      case WorkoutMode.normal: return Icons.accessibility;
+      case WorkoutMode.tuff: return Icons.sports_gymnastics;
     }
   }
 

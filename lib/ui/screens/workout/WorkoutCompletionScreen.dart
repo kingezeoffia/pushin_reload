@@ -142,12 +142,17 @@ class _WorkoutCompletionScreenState extends State<WorkoutCompletionScreen>
                                   ),
                                 ),
                                 ShaderMask(
-                                  shaderCallback: (bounds) => const LinearGradient(
-                                    colors: [Color(0xFF10B981), Color(0xFF34D399)],
+                                  shaderCallback: (bounds) =>
+                                      const LinearGradient(
+                                    colors: [
+                                      Color(0xFF10B981),
+                                      Color(0xFF34D399)
+                                    ],
                                     begin: Alignment.centerLeft,
                                     end: Alignment.centerRight,
                                   ).createShader(
-                                    Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                                    Rect.fromLTWH(0, 0, bounds.width,
+                                        bounds.height * 1.3),
                                   ),
                                   blendMode: BlendMode.srcIn,
                                   child: const Text(
@@ -187,7 +192,8 @@ class _WorkoutCompletionScreenState extends State<WorkoutCompletionScreen>
                             opacity: _fadeAnimation.value,
                             child: Container(
                               width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 40, horizontal: 24),
                               decoration: BoxDecoration(
                                 color: Colors.white.withOpacity(0.10),
                                 borderRadius: BorderRadius.circular(24),
@@ -220,8 +226,12 @@ class _WorkoutCompletionScreenState extends State<WorkoutCompletionScreen>
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       ShaderMask(
-                                        shaderCallback: (bounds) => const LinearGradient(
-                                          colors: [Color(0xFF10B981), Color(0xFF34D399)],
+                                        shaderCallback: (bounds) =>
+                                            const LinearGradient(
+                                          colors: [
+                                            Color(0xFF10B981),
+                                            Color(0xFF34D399)
+                                          ],
                                         ).createShader(bounds),
                                         blendMode: BlendMode.srcIn,
                                         child: Text(
@@ -235,13 +245,15 @@ class _WorkoutCompletionScreenState extends State<WorkoutCompletionScreen>
                                         ),
                                       ),
                                       Padding(
-                                        padding: const EdgeInsets.only(bottom: 14, left: 8),
+                                        padding: const EdgeInsets.only(
+                                            bottom: 14, left: 8),
                                         child: Text(
                                           'min',
                                           style: TextStyle(
                                             fontSize: 28,
                                             fontWeight: FontWeight.w700,
-                                            color: Colors.white.withOpacity(0.7),
+                                            color:
+                                                Colors.white.withOpacity(0.7),
                                           ),
                                         ),
                                       ),
@@ -282,7 +294,8 @@ class _WorkoutCompletionScreenState extends State<WorkoutCompletionScreen>
                                   Container(
                                     padding: const EdgeInsets.all(8),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF10B981).withOpacity(0.2),
+                                      color: const Color(0xFF10B981)
+                                          .withOpacity(0.2),
                                       shape: BoxShape.circle,
                                     ),
                                     child: const Icon(
@@ -320,7 +333,8 @@ class _WorkoutCompletionScreenState extends State<WorkoutCompletionScreen>
                             child: PressAnimationButton(
                               onTap: () {
                                 HapticFeedback.mediumImpact();
-                                Navigator.popUntil(context, (route) => route.isFirst);
+                                Navigator.popUntil(
+                                    context, (route) => route.isFirst);
                               },
                               child: Container(
                                 width: double.infinity,

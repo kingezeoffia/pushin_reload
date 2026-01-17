@@ -60,13 +60,15 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
   // NEW: Workout initialization state
   bool _isFullBodyDetected = false;
   bool _isReadyToStart = false;
-  bool _userPressedStart = false; // User intent - pressed START button
-  bool _isPositioning = false; // In positioning state after START pressed
+  bool _isPositioning = false; // In positioning state (starts immediately)
   int _countdownValue = 3;
   bool _isCountingDown = false;
   Timer? _countdownTimer;
   Timer? _stabilityTimer; // Timer to track stable pose before auto-countdown
   DateTime? _readyStateStartTime; // When pose became ready
+
+  // Prevent duplicate workout completion calls
+  bool _workoutCompleted = false;
   static const Duration _stabilityDuration =
       Duration(milliseconds: 1500); // 1.5 seconds stable
 
@@ -84,6 +86,7 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     // Reset rep count to ensure clean start
     _currentReps = 0;
     _elapsedSeconds = 0;
+    _workoutCompleted = false;
 
     _initializeCameraService();
 
@@ -262,8 +265,14 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
         setState(() {
           _isInitialized = true;
           _isInitializing = false;
+          // Automatically enter positioning state
+          _isPositioning = true;
         });
         _fadeController.forward();
+
+        // Notify pose detection service to enter positioning state immediately
+        _cameraService.poseDetectionService?.enterPositioningState();
+
         debugPrint('Camera initialized successfully');
       } else {
         // Camera initialization failed
@@ -334,6 +343,14 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
   }
 
   void _completeWorkout() async {
+    // Prevent duplicate completion calls
+    if (_workoutCompleted) {
+      debugPrint('⚠️ _completeWorkout called but workout already completed');
+      return;
+    }
+
+    _workoutCompleted = true;
+
     await _cameraService.stopWorkout();
     final controller = context.read<PushinAppController>();
     await controller.completeWorkout(_currentReps);
@@ -460,20 +477,6 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     );
   }
 
-  /// User pressed START - enter positioning state (always allowed)
-  void _onStartButtonPressed() {
-    if (_userPressedStart || _isCountingDown) return;
-
-    setState(() {
-      _userPressedStart = true;
-      _isPositioning = true;
-    });
-
-    // Notify pose detection service to enter positioning state
-    _cameraService.poseDetectionService?.enterPositioningState();
-
-    HapticFeedback.mediumImpact();
-  }
 
   /// Auto-trigger countdown when pose is stable (called automatically)
   void _triggerAutoCountdown() {
@@ -567,7 +570,7 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
             ),
           ),
 
-          // Positioning instructions overlay
+          // Positioning instructions overlay (show immediately when entering workout)
           if (_isPositioning && !_isCountingDown) _buildPositioningOverlay(),
 
           // Countdown overlay (3-2-1)
@@ -584,168 +587,119 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
 
   /// Build positioning instructions overlay
   Widget _buildPositioningOverlay() {
+    final isReady = _isReadyToStart;
+    final frameColor =
+        isReady ? const Color(0xFF10B981) : Colors.white.withOpacity(0.4);
+
     return Container(
-      color: Colors.black.withOpacity(0.75),
+      color: Colors.black.withOpacity(0.3),
       child: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Icon with status color
-                Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _isReadyToStart
-                        ? const Color(0xFF10B981).withOpacity(0.3)
-                        : _isFullBodyDetected
-                            ? const Color(0xFFF59E0B).withOpacity(0.3)
-                            : Colors.white.withOpacity(0.2),
-                    border: Border.all(
-                      color: _isReadyToStart
-                          ? const Color(0xFF10B981)
-                          : _isFullBodyDetected
-                              ? const Color(0xFFF59E0B)
-                              : Colors.white.withOpacity(0.5),
-                      width: 3,
-                    ),
-                  ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            children: [
+              const Spacer(),
+
+              // Simple frame outline with person icon
+              Container(
+                width: 200,
+                height: 300,
+                decoration: BoxDecoration(
+                  border: Border.all(color: frameColor, width: 3),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Center(
                   child: Icon(
-                    _isReadyToStart
-                        ? Icons.check_circle
-                        : _isFullBodyDetected
-                            ? Icons.person
-                            : Icons.person_outline,
-                    color: _isReadyToStart
-                        ? const Color(0xFF10B981)
-                        : _isFullBodyDetected
-                            ? const Color(0xFFF59E0B)
-                            : Colors.white,
-                    size: 50,
+                    isReady
+                        ? Icons.check_circle_rounded
+                        : Icons.person_outline_rounded,
+                    size: 100,
+                    color: frameColor,
                   ),
                 ),
-                const SizedBox(height: 32),
-                // Main instruction
-                Text(
-                  _isReadyToStart
-                      ? 'Perfect!'
-                      : 'Place your phone and step back',
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                // Detailed feedback
-                Text(
-                  _feedbackMessage,
+              ),
+
+              const SizedBox(height: 40),
+
+              // Status or instructions
+              if (isReady)
+                const Text(
+                  'Perfect! Starting soon...',
                   style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF10B981),
                   ),
                   textAlign: TextAlign.center,
+                )
+              else
+                Column(
+                  children: [
+                    const Text(
+                      'Position Yourself',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    _buildStep('1', 'Place phone 2-3 feet away'),
+                    const SizedBox(height: 14),
+                    _buildStep('2', 'Step back until full body is visible'),
+                    const SizedBox(height: 14),
+                    _buildStep('3', 'Ensure arms and legs are in frame'),
+                  ],
                 ),
-                // TEMPORARY DEBUG UI - Remove after testing
-                if (_cameraService?.poseDetectionService != null &&
-                    _cameraService!.workoutType == 'jumping-jacks')
-                  Column(
-                    children: [
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              '🔍 JUMPING JACKS DEBUG',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.yellow,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Conf: ${_getJumpingJackConfidence()}/2',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.cyan,
-                              ),
-                            ),
-                            Text(
-                              'Raw: ${_getCurrentRawPhase()}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.orange,
-                              ),
-                            ),
-                            Text(
-                              'Confirmed: ${_currentPhase}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.green,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                const SizedBox(height: 32),
-                // Auto-start indicator when ready
-                if (_isReadyToStart)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: const Color(0xFF10B981),
-                        width: 2,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.autorenew,
-                          color: Color(0xFF10B981),
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Starting automatically...',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF10B981),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
+
+              const Spacer(),
+            ],
           ),
         ),
       ),
     );
   }
 
+  Widget _buildStep(String number, String text) {
+    return Row(
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+          ),
+          child: Center(
+            child: Text(
+              number,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: Colors.white.withOpacity(0.9),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   /// Build countdown overlay with large number
   Widget _buildCountdownOverlay() {
     return Container(
-      color: Colors.black.withOpacity(0.85),
+      color: Colors.black.withOpacity(0.4),
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1106,86 +1060,42 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
                   ),
                 ),
               )
-            : !_userPressedStart && !_isCountingDown
-                // START WORKOUT button - ALWAYS ENABLED (before user presses start)
+            : (_cameraService.poseDetectionService?.workoutState ==
+                                WorkoutState.active ||
+                            _cameraService.poseDetectionService?.workoutState ==
+                                WorkoutState.paused) &&
+                        (_showManualButton && (_isInitialized || _cameraFailed))
+                // Manual rep button (during active workout)
                 ? PressAnimationButton(
-                    onTap: _onStartButtonPressed, // Always enabled!
+                    onTap: _addManualRep,
                     child: Container(
                       width: double.infinity,
                       height: 60,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [_primaryColor, _secondaryColor],
-                        ),
+                        color: Colors.white.withOpacity(0.95),
                         borderRadius: BorderRadius.circular(100),
                         boxShadow: [
                           BoxShadow(
-                            color: _primaryColor.withOpacity(0.4),
+                            color: Colors.white.withOpacity(0.2),
                             blurRadius: 20,
                             offset: const Offset(0, 8),
                           ),
                         ],
                       ),
-                      child: const Center(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.play_arrow_rounded,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              'START WORKOUT',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                                letterSpacing: -0.3,
-                              ),
-                            ),
-                          ],
+                      child: Center(
+                        child: Text(
+                          _isTimeBased ? 'Hold Position' : '+ Add Rep',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF2A2A6A),
+                            letterSpacing: -0.3,
+                          ),
                         ),
                       ),
                     ),
                   )
-                : (_cameraService.poseDetectionService?.workoutState ==
-                                WorkoutState.active ||
-                            _cameraService.poseDetectionService?.workoutState ==
-                                WorkoutState.paused) &&
-                        (_showManualButton && (_isInitialized || _cameraFailed))
-                    // Manual rep button (during active workout)
-                    ? PressAnimationButton(
-                        onTap: _addManualRep,
-                        child: Container(
-                          width: double.infinity,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.95),
-                            borderRadius: BorderRadius.circular(100),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.white.withOpacity(0.2),
-                                blurRadius: 20,
-                                offset: const Offset(0, 8),
-                              ),
-                            ],
-                          ),
-                          child: Center(
-                            child: Text(
-                              _isTimeBased ? 'Hold Position' : '+ Add Rep',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF2A2A6A),
-                                letterSpacing: -0.3,
-                              ),
-                            ),
-                          ),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
+                : const SizedBox.shrink(),
       ],
     );
   }

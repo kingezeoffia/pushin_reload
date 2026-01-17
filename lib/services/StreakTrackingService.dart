@@ -33,6 +33,14 @@ class StreakTrackingService {
     int bestStreak = _streakBox.get(_bestStreakKey) ?? 0;
     int totalWorkouts = _streakBox.get(_totalWorkoutsKey) ?? 0;
 
+    print('🔥 StreakTrackingService.recordWorkoutCompletion() - BEFORE:');
+    print('   todayKey: $todayKey');
+    print('   lastWorkoutDateStr: $lastWorkoutDateStr');
+    print('   lastWorkoutDate: $lastWorkoutDate');
+    print('   currentStreak: $currentStreak');
+    print('   bestStreak: $bestStreak');
+    print('   totalWorkouts: $totalWorkouts');
+
     // Check if this is a new workout today
     bool isNewWorkoutToday = true;
     if (lastWorkoutDateStr == todayKey) {
@@ -70,21 +78,33 @@ class StreakTrackingService {
     await _streakBox.put(_bestStreakKey, bestStreak);
     await _streakBox.put(_totalWorkoutsKey, totalWorkouts);
     await _dateBox.put(_lastWorkoutDateKey, todayKey);
+
+    print('🔥 StreakTrackingService.recordWorkoutCompletion() - AFTER:');
+    print('   currentStreak: $currentStreak');
+    print('   bestStreak: $bestStreak');
+    print('   totalWorkouts: $totalWorkouts');
+    print('   lastWorkoutDate: $todayKey');
   }
 
   /// Get the current streak (consecutive days).
   int getCurrentStreak() {
-    return _streakBox.get(_currentStreakKey) ?? 0;
+    final value = _streakBox.get(_currentStreakKey) ?? 0;
+    print('🔥 StreakTrackingService.getCurrentStreak() -> $value');
+    return value;
   }
 
   /// Get the best streak ever achieved.
   int getBestStreak() {
-    return _streakBox.get(_bestStreakKey) ?? 0;
+    final value = _streakBox.get(_bestStreakKey) ?? 0;
+    print('🔥 StreakTrackingService.getBestStreak() -> $value');
+    return value;
   }
 
   /// Get the total number of workouts completed.
   int getTotalWorkouts() {
-    return _streakBox.get(_totalWorkoutsKey) ?? 0;
+    final value = _streakBox.get(_totalWorkoutsKey) ?? 0;
+    print('🔥 StreakTrackingService.getTotalWorkouts() -> $value');
+    return value;
   }
 
   /// Check if today's workout is completed.

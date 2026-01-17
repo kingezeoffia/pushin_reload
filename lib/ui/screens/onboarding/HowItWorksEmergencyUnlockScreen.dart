@@ -53,113 +53,115 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
           children: [
             SafeArea(
               child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Consistent spacing with other screens
-              SizedBox(height: screenHeight * 0.06),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Consistent spacing with other screens
+                  SizedBox(height: screenHeight * 0.06),
 
-              // Heading - consistent positioning
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Emergency unlock icon
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF6060).withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: const Icon(
-                        Icons.warning_rounded,
-                        size: 40,
-                        color: Color(0xFFFF9090),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [Color(0xFFFF6060), Color(0xFFFF9090)],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ).createShader(
-                        Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
-                      ),
-                      blendMode: BlendMode.srcIn,
-                      child: const Text(
-                        'Emergency',
-                        style: TextStyle(
-                          fontSize: 44,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          height: 1.1,
-                          letterSpacing: -0.5,
+                  // Heading - consistent positioning
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Emergency unlock icon
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF6060).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: const Icon(
+                            Icons.warning_rounded,
+                            size: 40,
+                            color: Color(0xFFFF9090),
+                          ),
                         ),
-                      ),
-                    ),
-                    ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [Color(0xFFFF6060), Color(0xFFFF9090)],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ).createShader(
-                        Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
-                      ),
-                      blendMode: BlendMode.srcIn,
-                      child: const Text(
-                        'Unlock',
-                        style: TextStyle(
-                          fontSize: 44,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          height: 1.1,
-                          letterSpacing: -0.5,
+                        const SizedBox(height: 20),
+                        ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [Color(0xFFFF6060), Color(0xFFFF9090)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ).createShader(
+                            Rect.fromLTWH(
+                                0, 0, bounds.width, bounds.height * 1.3),
+                          ),
+                          blendMode: BlendMode.srcIn,
+                          child: const Text(
+                            'Emergency',
+                            style: TextStyle(
+                              fontSize: 44,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              height: 1.1,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
                         ),
-                      ),
+                        ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [Color(0xFFFF6060), Color(0xFFFF9090)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ).createShader(
+                            Rect.fromLTWH(
+                                0, 0, bounds.width, bounds.height * 1.3),
+                          ),
+                          blendMode: BlendMode.srcIn,
+                          child: const Text(
+                            'Unlock',
+                            style: TextStyle(
+                              fontSize: 44,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              height: 1.1,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "For those rare moments when you need access",
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: Colors.white.withOpacity(0.6),
+                            letterSpacing: -0.2,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "For those rare moments when you need access",
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Colors.white.withOpacity(0.6),
-                        letterSpacing: -0.2,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
 
-              SizedBox(height: screenHeight * 0.04),
+                  SizedBox(height: screenHeight * 0.04),
 
-              // Rules List
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  children: [
-                    _RuleItem(
-                      icon: Icons.timer,
-                      title: 'Temporary Access',
-                      description: 'Customizable duration',
+                  // Rules List
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
+                      children: [
+                        _RuleItem(
+                          icon: Icons.timer,
+                          title: 'Temporary Access',
+                          description: 'Customizable duration',
+                        ),
+                        const SizedBox(height: 16),
+                        _RuleItem(
+                          icon: Icons.today,
+                          title: 'Three times per day',
+                          description: 'Emergency unlock 3x a day',
+                        ),
+                        const SizedBox(height: 16),
+                        _RuleItem(
+                          icon: Icons.lock_clock,
+                          title: 'Auto-disable',
+                          description: 'Disabled until tomorrow',
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-                    _RuleItem(
-                      icon: Icons.today,
-                      title: 'Three times per day',
-                      description: 'Emergency unlock 3x a day',
-                    ),
-                    const SizedBox(height: 16),
-                    _RuleItem(
-                      icon: Icons.lock_clock,
-                      title: 'Auto-disable',
-                      description: 'Disabled until tomorrow',
-                    ),
-                  ],
-                ),
-              ),
+                  ),
 
                   // Spacer to push content up (button will be positioned at bottom)
                   const Spacer(),
@@ -169,24 +171,29 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
 
             // Complete Setup Button - properly positioned in Stack
             Positioned(
-                left: 0,
-                right: 0,
-                bottom: MediaQuery.of(context).padding.bottom + 8,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: _ContinueButton(
-                    onTap: () async {
+              left: 0,
+              right: 0,
+              bottom: MediaQuery.of(context)
+                  .padding
+                  .bottom, // Right at screen edge like navigation pill
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _ContinueButton(
+                  onTap: () async {
                     try {
-                      debugPrint('🎯 Complete Setup button pressed - using canonical completeOnboardingFlow()');
+                      debugPrint(
+                          '🎯 Complete Setup button pressed - using canonical completeOnboardingFlow()');
 
                       // BMAD v6: ONLY call completeOnboardingFlow() - handles ALL state transitions
                       await authProvider.completeOnboardingFlow();
 
-                      debugPrint('✅ Emergency Unlock setup completed successfully');
+                      debugPrint(
+                          '✅ Emergency Unlock setup completed successfully');
 
                       // Clear navigation stack and let router take over (BMAD v6: state-driven navigation)
                       if (context.mounted) {
-                        Navigator.of(context).popUntil((route) => route.isFirst);
+                        Navigator.of(context)
+                            .popUntil((route) => route.isFirst);
                       }
                     } catch (e) {
                       debugPrint('❌ Error completing setup: $e');

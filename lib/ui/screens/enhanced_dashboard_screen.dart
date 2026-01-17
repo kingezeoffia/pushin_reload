@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../state/pushin_app_controller.dart';
 import '../../state/auth_state_provider.dart';
@@ -84,6 +85,7 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen> with 
   }
 
   void _navigateToEditName() {
+    HapticFeedback.mediumImpact();
     Navigator.push(
       context,
       PageRouteBuilder(
@@ -195,7 +197,10 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen> with 
                                 const SizedBox(width: 12),
                                 // Pro badge
                                 GestureDetector(
-                                  onTap: () => _navigateToPaywall(context),
+                                  onTap: () {
+                                    HapticFeedback.mediumImpact();
+                                    _navigateToPaywall(context);
+                                  },
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 16, vertical: 8),

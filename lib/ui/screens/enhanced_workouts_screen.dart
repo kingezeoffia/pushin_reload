@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/dashboard_design_tokens.dart';
@@ -194,7 +195,10 @@ class _EnhancedWorkoutsScreenState extends State<EnhancedWorkoutsScreen>
                               const SizedBox(width: 12),
                               // Pro badge
                               GestureDetector(
-                                onTap: () => _navigateToPaywall(context),
+                                onTap: () {
+                                  HapticFeedback.mediumImpact();
+                                  _navigateToPaywall(context);
+                                },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 16, vertical: 8),

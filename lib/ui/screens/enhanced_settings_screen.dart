@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -16,6 +17,83 @@ import 'settings/EmergencyUnlockSettingsScreen.dart';
 import 'settings/EditNameScreen.dart';
 import 'settings/EditEmailScreen.dart';
 import 'settings/ChangePasswordScreen.dart';
+
+/// Premium Logout Button - A sleek pill-shaped logout button with interactive feedback
+class PremiumLogoutButton extends StatefulWidget {
+  final VoidCallback? onPressed;
+
+  const PremiumLogoutButton({
+    Key? key,
+    this.onPressed,
+  }) : super(key: key);
+
+  @override
+  State<PremiumLogoutButton> createState() => _PremiumLogoutButtonState();
+}
+
+class _PremiumLogoutButtonState extends State<PremiumLogoutButton> {
+  bool _isPressed = false;
+
+  final Color dangerRed = EnhancedSettingsDesignTokens.dangerRed;
+  final Color cardColor = EnhancedSettingsDesignTokens.cardDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) => setState(() => _isPressed = false),
+      onTapCancel: () => setState(() => _isPressed = false),
+      onTap: widget.onPressed,
+      child: AnimatedScale(
+        scale: _isPressed ? 0.96 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        child: Container(
+          height: 44, // Shorter "pill" height
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24), // Pill shape
+            color: dangerRed.withOpacity(0.1), // Subtle red tint
+            border: Border.all(
+              color: dangerRed.withOpacity(0.3),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: dangerRed.withOpacity(0.1),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildReflectiveIcon(Icons.logout_rounded),
+              const SizedBox(width: 10),
+              Text(
+                "Logout",
+                style: TextStyle(
+                  color: dangerRed.withOpacity(0.9),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReflectiveIcon(IconData icon) {
+    return Icon(
+      icon,
+      size: 18,
+      color: dangerRed.withOpacity(0.9),
+    );
+  }
+}
 
 /// Enhanced Settings Screen - The highlight of the PUSHIN app
 /// Features premium animations, glassmorphism, and iOS-like design
@@ -191,32 +269,41 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                         icon: Icons.person_outline,
                         title: 'Edit Name',
                         subtitle: 'Change your display name',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => const EditNameScreen()),
-                        ),
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => const EditNameScreen()),
+                          );
+                        },
                       ),
                       EnhancedSettingsTile(
                         icon: Icons.email_outlined,
                         title: 'Edit E-Mail',
                         subtitle: 'Change your email address',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => const EditEmailScreen()),
-                        ),
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => const EditEmailScreen()),
+                          );
+                        },
                       ),
                       EnhancedSettingsTile(
                         icon: Icons.lock_outline,
                         title: 'Change Password',
                         subtitle: 'Update your password',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) =>
-                                  const ChangePasswordScreen()),
-                        ),
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) =>
+                                    const ChangePasswordScreen()),
+                          );
+                        },
                         showDivider: false,
                       ),
                     ],
@@ -506,22 +593,9 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
     return Padding(
       padding: const EdgeInsets.symmetric(
           horizontal: EnhancedSettingsDesignTokens.spacingLarge),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
+      child: Center(
+        child: PremiumLogoutButton(
           onPressed: () => _handleLogout(),
-          icon: const Icon(Icons.logout),
-          label: const Text('Logout'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: EnhancedSettingsDesignTokens.dangerRed,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(
-                EnhancedSettingsDesignTokens.borderRadiusMedium,
-              ),
-            ),
-          ),
         ),
       ),
     );
@@ -545,6 +619,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
   }
 
   Future<void> _launchURL(String url) async {
+    HapticFeedback.lightImpact();
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
@@ -558,6 +633,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
   }
 
   void _handleUpgrade() {
+    HapticFeedback.heavyImpact();
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
@@ -619,6 +695,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
   }
 
   void _showFocusSessionsDialog() async {
+    HapticFeedback.lightImpact();
     try {
       final appController = context.read<PushinAppController>();
       final focusModeService = appController.focusModeService;
@@ -1099,7 +1176,9 @@ class _BlockedAppsTileState extends State<_BlockedAppsTile> {
     return EnhancedSettingsTile(
       icon: Icons.screen_lock_portrait,
       title: 'Distracting Apps',
-      subtitle: count > 0 ? '$count apps blocked' : 'Choose distracting apps to block',
+      subtitle: count > 0
+          ? '$count apps blocked'
+          : 'Choose distracting apps to block',
       onTap: widget.onTap,
       iconColor: const Color(0xFFEF4444), // dangerRed color
     );

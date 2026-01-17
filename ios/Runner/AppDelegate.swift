@@ -1,6 +1,92 @@
-import Flutter
 import UIKit
+import Flutter
 import UserNotifications
+
+// MARK: - Native Liquid Glass Platform View
+class NativeLiquidGlassViewFactory: NSObject, FlutterPlatformViewFactory {
+    private var messenger: FlutterBinaryMessenger
+
+    init(messenger: FlutterBinaryMessenger) {
+        self.messenger = messenger
+        super.init()
+    }
+
+    func create(
+        withFrame frame: CGRect,
+        viewIdentifier viewId: Int64,
+        arguments args: Any?
+    ) -> FlutterPlatformView {
+        return NativeLiquidGlassView(
+            frame: frame,
+            viewId: viewId,
+            args: args,
+            messenger: messenger
+        )
+    }
+
+    func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol {
+        return FlutterStandardMessageCodec.sharedInstance()
+    }
+}
+
+class NativeLiquidGlassView: NSObject, FlutterPlatformView {
+    private var _view: UIView
+    private var _blurView: UIVisualEffectView
+    private var _borderLayer: CALayer
+
+    init(
+        frame: CGRect,
+        viewId: Int64,
+        args: Any?,
+        messenger: FlutterBinaryMessenger
+    ) {
+        _view = UIView(frame: frame)
+
+        // APPLE LIQUID GLASS - MINIMAL BLUR, MAXIMUM BRIGHTNESS
+        // Apple's liquid glass uses very subtle blur, almost no blur at all
+        let blurEffect = UIBlurEffect(style: .systemUltraThinMaterial)
+
+        _blurView = UIVisualEffectView(effect: blurEffect)
+        _blurView.frame = frame
+        _blurView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+
+        // Configure corner radius for pill shape
+        let borderRadius = (args as? [String: Any])?["borderRadius"] as? Double ?? 32.0
+        _blurView.layer.cornerRadius = CGFloat(borderRadius)
+        _blurView.clipsToBounds = true
+
+        // MINIMAL BORDER - Apple's liquid glass has almost no visible border
+        _borderLayer = CALayer()
+        _borderLayer.frame = _blurView.bounds
+        _borderLayer.borderColor = UIColor(red: 0.36, green: 0.25, blue: 0.75, alpha: 0.25).cgColor // PURPLE
+        _borderLayer.borderWidth = 0.8 // THICKER outline
+        _borderLayer.cornerRadius = CGFloat(borderRadius)
+        _blurView.layer.addSublayer(_borderLayer)
+
+        // No highlights - completely flat, modern look
+
+        _view.addSubview(_blurView)
+
+        super.init()
+
+        // Listen for frame changes to update border
+        _view.addObserver(self, forKeyPath: "frame", options: .new, context: nil)
+    }
+
+    deinit {
+        _view.removeObserver(self, forKeyPath: "frame")
+    }
+
+    func view() -> UIView {
+        return _view
+    }
+
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
+        if keyPath == "frame" {
+            _borderLayer.frame = _blurView.bounds
+        }
+    }
+}
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -20,7 +106,10 @@ import UserNotifications
     // Initialize iOS Settings platform channel
     setupIOSSettingsChannel()
 
-    print("📱 PUSHIN - Screen Time and iOS Settings integration active")
+    // Initialize Native Liquid Glass method channel
+    setupNativeLiquidGlass()
+
+    print("📱 PUSHIN - Screen Time, iOS Settings, and Native Liquid Glass integration active")
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
@@ -123,6 +212,31 @@ import UserNotifications
     } else {
       print("❌ Failed to access app group UserDefaults")
     }
+  }
+
+  private func setupNativeLiquidGlass() {
+    guard let controller = window?.rootViewController as? FlutterViewController else {
+      return
+    }
+
+    // Set up method channel for native liquid glass
+    let channel = FlutterMethodChannel(name: "com.pushin.native_liquid_glass", binaryMessenger: controller.binaryMessenger)
+
+    channel.setMethodCallHandler { (call, result) in
+      switch call.method {
+      case "isSupported":
+        // iOS supports native liquid glass
+        result(true)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
+    // Register platform view factory
+    let factory = NativeLiquidGlassViewFactory(messenger: controller.binaryMessenger)
+    controller.registrar(forPlugin: "com.pushin.native_liquid_glass")?.register(factory, withId: "native_liquid_glass")
+
+    print("✨ Native Liquid Glass platform view and method channel registered")
   }
 
   // MARK: - UNUserNotificationCenterDelegate

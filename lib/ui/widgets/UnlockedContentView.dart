@@ -188,4 +188,3 @@ class UnlockedContentView extends StatelessWidget {
     );
   }
 }
-
