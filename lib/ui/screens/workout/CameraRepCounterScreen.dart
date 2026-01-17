@@ -575,6 +575,30 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
           // Positioning instructions overlay (show immediately when entering workout)
           if (_isPositioning && !_isCountingDown) _buildPositioningOverlay(),
 
+          // Back button for positioning mode (top left)
+          if (_isPositioning && !_isCountingDown)
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.4),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.arrow_back_ios_new,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
           // Countdown overlay (3-2-1)
           if (_isCountingDown) _buildCountdownOverlay(),
 
