@@ -63,6 +63,12 @@ dependencies:
   # Apple Health Integration
   health: ^11.0.0
 
+  # Google Fonts for modern typography
+  google_fonts: ^6.1.0
+
+  # Device sensors for stability detection
+  sensors_plus: ^4.0.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

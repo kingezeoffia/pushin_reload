@@ -1407,27 +1407,33 @@ class PushinAppController extends ChangeNotifier {
   /// Check for pending emergency unlocks initiated from shield extension
   Future<void> _checkForPendingEmergencyUnlock() async {
     if (!kIsWeb && Platform.isIOS && _focusModeService != null) {
-      debugPrint('🔍 Checking for pending shield-initiated emergency unlock...');
+      debugPrint(
+          '🔍 Checking for pending shield-initiated emergency unlock...');
 
       try {
         final status = await _focusModeService!.getEmergencyUnlockStatus();
         if (status.isActive) {
-          debugPrint('🚨 Found active emergency unlock from shield - starting timer management');
+          debugPrint(
+              '🚨 Found active emergency unlock from shield - starting timer management');
 
           if (status.timeRemaining > 0) {
             // Start the emergency unlock Live Activity and schedule re-blocking
-            await _focusModeService!.startEmergencyUnlockTimer(status.timeRemaining);
+            await _focusModeService!
+                .startEmergencyUnlockTimer(status.timeRemaining);
 
             // Schedule re-blocking after remaining time
             Future.delayed(Duration(seconds: status.timeRemaining), () {
-              debugPrint('⏰ Shield-initiated emergency unlock expired, re-blocking apps');
+              debugPrint(
+                  '⏰ Shield-initiated emergency unlock expired, re-blocking apps');
               _restoreIOSBlocking();
             });
 
-            debugPrint('✅ Shield emergency unlock timer started - ${status.timeRemaining}s remaining');
+            debugPrint(
+                '✅ Shield emergency unlock timer started - ${status.timeRemaining}s remaining');
           } else {
             // Already expired, re-block immediately
-            debugPrint('⏰ Shield emergency unlock already expired, re-blocking apps');
+            debugPrint(
+                '⏰ Shield emergency unlock already expired, re-blocking apps');
             _restoreIOSBlocking();
           }
         } else {

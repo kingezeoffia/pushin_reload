@@ -1,12 +1,15 @@
+import 'dart:ui'; // Required for ImageFilter
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 import '../../../state/pushin_app_controller.dart';
 import '../../../services/CameraWorkoutService.dart';
 import '../../../services/PoseDetectionService.dart';
+import '../../../services/PhoneStabilityService.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/pill_navigation_bar.dart';
 import 'WorkoutCompletionScreen.dart';
@@ -42,6 +45,7 @@ class CameraRepCounterScreen extends StatefulWidget {
 class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     with TickerProviderStateMixin {
   late CameraWorkoutService _cameraService;
+  late PhoneStabilityService _stabilityService;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
   late AnimationController _fadeController;
@@ -67,6 +71,14 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
   Timer? _stabilityTimer; // Timer to track stable pose before auto-countdown
   DateTime? _readyStateStartTime; // When pose became ready
 
+  // Step completion state
+  bool _step1Completed = false; // Phone positioned (stable)
+  bool _step2Completed = false; // Full body visible
+  bool _step3Completed = false; // Arms and legs in frame
+
+  // Phone stability state for visual feedback
+  StabilityState _currentStabilityState = StabilityState(isStable: false, isFlat: false, isDetecting: false);
+
   // Prevent duplicate workout completion calls
   bool _workoutCompleted = false;
   static const Duration _stabilityDuration =
@@ -82,11 +94,17 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     super.initState();
     _setupModeColors();
     _setupAnimations();
+    _setupStabilityService();
 
     // Reset rep count to ensure clean start
     _currentReps = 0;
     _elapsedSeconds = 0;
     _workoutCompleted = false;
+
+    // Reset step completion states
+    _step1Completed = false;
+    _step2Completed = false;
+    _step3Completed = false;
 
     _initializeCameraService();
 
@@ -143,6 +161,33 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     );
   }
 
+  void _setupStabilityService() {
+    _stabilityService = PhoneStabilityService();
+
+    // Listen for stability state changes
+    _stabilityService.onStabilityStateChanged.listen((state) {
+      if (mounted) {
+        setState(() {
+          _currentStabilityState = state;
+
+          if (_isPositioning) {
+            // Step 1 is completed when phone is stable and flat
+            final step1ShouldBeCompleted = state.isStable;
+
+            if (step1ShouldBeCompleted && !_step1Completed) {
+              _step1Completed = true;
+              debugPrint('Step 1 completed: Phone positioned and stable (stability detection)');
+            } else if (!step1ShouldBeCompleted && _step1Completed) {
+              // Reset step 1 if phone becomes unstable
+              _step1Completed = false;
+              debugPrint('Step 1 reset: Phone moved (stability detection)');
+            }
+          }
+        });
+      }
+    });
+  }
+
   /// Check if this is a time-based workout (like plank)
   bool get _isTimeBased => widget.workoutType.toLowerCase() == 'plank';
 
@@ -189,6 +234,15 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
           _currentPhase = result.phase;
           _isFullBodyDetected = result.isFullBodyDetected;
           _isReadyToStart = result.isReadyToStart;
+
+          // Update step completion states
+          if (_isPositioning) {
+            // Step 1: Phone positioned - now handled by PhoneStabilityService
+            // (was: complete when full body is scanned)
+
+            _step2Completed = _isFullBodyDetected; // Full body is visible
+            _step3Completed = _isReadyToStart; // Arms and legs in frame
+          }
         });
 
         // Auto-countdown logic when in positioning state
@@ -226,6 +280,34 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
             WorkoutState.paused) {
           if (_isFullBodyDetected && _isReadyToStart) {
             _cameraService.poseDetectionService?.resumeWorkout();
+          }
+        }
+
+        // Countdown interruption logic - if user moves away during countdown, cancel it and go back to positioning
+        if (_isCountingDown && !_isFullBodyDetected) {
+          debugPrint(
+              'User moved away during countdown - canceling countdown and returning to positioning');
+          // Cancel timer safely to prevent race conditions
+          final timer = _countdownTimer;
+          _countdownTimer = null;
+          timer?.cancel();
+
+          // Reset pose detection service state first
+          _cameraService.poseDetectionService?.cancelCountdown();
+
+          if (mounted) {
+            setState(() {
+              _isCountingDown = false;
+              _isPositioning = true;
+              _countdownValue = 3;
+              _readyStateStartTime = null; // Reset stability tracking
+              // Reset step completion states to ensure clean restart
+              _step1Completed = false;
+              _step2Completed = false;
+              _step3Completed = false;
+            });
+            debugPrint(
+                '✅ Countdown interrupted successfully - back to positioning mode');
           }
         }
       }
@@ -269,6 +351,11 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
           _isPositioning = true;
         });
         _fadeController.forward();
+
+        // Start phone stability detection for step 1
+        _stabilityService.startStabilityDetection();
+
+        // Step 1 will be completed when phone stability is detected
 
         // Notify pose detection service to enter positioning state immediately
         _cameraService.poseDetectionService?.enterPositioningState();
@@ -477,7 +564,6 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     );
   }
 
-
   /// Auto-trigger countdown when pose is stable (called automatically)
   void _triggerAutoCountdown() {
     if (_isCountingDown) return;
@@ -488,6 +574,9 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
       _countdownValue = 3;
     });
 
+    // Stop stability detection when starting countdown
+    _stabilityService.stopStabilityDetection();
+
     // Notify pose detection service that countdown started
     _cameraService.poseDetectionService?.startCountdown();
 
@@ -495,17 +584,26 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
 
     // Countdown timer
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      // Safety check - if timer was canceled, don't execute
+      if (_countdownTimer != timer) return;
+
       if (_countdownValue > 1) {
-        setState(() {
-          _countdownValue--;
-        });
+        if (mounted) {
+          setState(() {
+            _countdownValue--;
+          });
+        }
         HapticFeedback.lightImpact();
       } else {
         // Countdown complete!
         timer.cancel();
-        setState(() {
-          _isCountingDown = false;
-        });
+        _countdownTimer = null;
+
+        if (mounted) {
+          setState(() {
+            _isCountingDown = false;
+          });
+        }
 
         // Activate workout in pose detection service
         _cameraService.poseDetectionService?.activateWorkout();
@@ -520,6 +618,7 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     _countdownTimer?.cancel();
     _stabilityTimer?.cancel();
     _cameraService.dispose();
+    _stabilityService.dispose();
     _pulseController.dispose();
     _fadeController.dispose();
     super.dispose();
@@ -611,79 +710,38 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     );
   }
 
-  /// Build positioning instructions overlay
+  /// Build positioning instructions overlay with Google-designed glassmorphism UI
   Widget _buildPositioningOverlay() {
     final isReady = _isReadyToStart;
 
-    return Container(
-      color: Colors.black.withOpacity(0.3),
+    // Premium color palette
+    const accentColor = Color(0xFF10B981); // Emerald Green
+    const glassColor = Color(0x99000000); // Dark semi-transparent black
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+      color: Colors.black.withOpacity(0.1), // Very subtle scrim
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: Column(
             children: [
-              const Spacer(),
+              const SizedBox(height: 20),
 
-              // Simple frame outline with person icon
-              Container(
-                width: 200,
-                height: 300,
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: isReady
-                        ? const Color(0xFF10B981)
-                        : Colors.white.withOpacity(0.4),
-                    width: 3,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Center(
-                  child: Icon(
-                    isReady
-                        ? Icons.check_circle_rounded
-                        : Icons.person_outline_rounded,
-                    size: 100,
-                    color: isReady
-                        ? const Color(0xFF10B981)
-                        : Colors.white.withOpacity(0.4),
-                  ),
-                ),
+              // CAMERA VIEWFINDER FRAME
+              Expanded(
+                flex: 7, // Takes up ~70% of vertical space visually
+                child: _buildScannerFrame(isReady, accentColor),
               ),
 
-              const SizedBox(height: 40),
+              const SizedBox(height: 20),
 
-              // Status or instructions
-              if (isReady)
-                const Text(
-                  'Perfect! Starting soon...',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF10B981),
-                  ),
-                  textAlign: TextAlign.center,
-                )
-              else
-                Column(
-                  children: [
-                    const Text(
-                      'Position Yourself',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-                    _buildStep('1', 'Place phone 2-3 feet away'),
-                    const SizedBox(height: 14),
-                    _buildStep('2', 'Step back until full body is visible'),
-                    const SizedBox(height: 14),
-                    _buildStep('3', 'Ensure arms and legs are in frame'),
-                  ],
-                ),
-
-              const Spacer(),
+              // INSTRUCTION HUD / STATUS CARD
+              Expanded(
+                flex: 3,
+                child: _buildInstructionHUD(isReady, accentColor, glassColor),
+              ),
             ],
           ),
         ),
@@ -691,113 +749,355 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     );
   }
 
-  Widget _buildStep(String number, String text) {
-    return Row(
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+  // --- WIDGET: The Camera Scanner Frame ---
+  Widget _buildScannerFrame(bool isReady, Color accentColor) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeOutCubic,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        // Subtle background to highlight the active area
+        color: isReady ? accentColor.withOpacity(0.1) : Colors.transparent,
+        border: Border.all(
+          color: isReady ? accentColor : Colors.white.withOpacity(0.3),
+          width: isReady ? 4 : 2,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        // Add a glow effect when ready
+        boxShadow: isReady
+            ? [
+                BoxShadow(
+                  color: accentColor.withOpacity(0.4),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                )
+              ]
+            : [],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Corner accents (Visual flair for 'Scanner' look)
+          if (!isReady) ...[
+            Positioned(top: 20, left: 20, child: _buildCorner(0)),
+            Positioned(top: 20, right: 20, child: _buildCorner(1)),
+            Positioned(bottom: 20, left: 20, child: _buildCorner(2)),
+            Positioned(bottom: 20, right: 20, child: _buildCorner(3)),
+          ],
+
+          // Center Icon / Animation
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 400),
+            transitionBuilder: (child, anim) =>
+                ScaleTransition(scale: anim, child: child),
+            child: isReady
+                ? Container(
+                    key: const ValueKey('Success'),
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: accentColor.withOpacity(0.3),
+                          blurRadius: 30,
+                          spreadRadius: 5,
+                        )
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.check_rounded,
+                      size: 64,
+                      color: accentColor,
+                    ),
+                  )
+                : Opacity(
+                    key: const ValueKey('Guidance'),
+                    opacity: 0.8,
+                    child: ColorFiltered(
+                      colorFilter: ColorFilter.mode(
+                        Colors.white.withOpacity(0.3),
+                        BlendMode.srcIn,
+                      ),
+                      child: Image.asset(
+                        'assets/icons/body_cutout.png',
+                        width: MediaQuery.of(context).size.width * 0.35,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
           ),
-          child: Center(
-            child: Text(
-              number,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCorner(int index) {
+    return Container(
+      width: 16,
+      height: 16,
+      decoration: BoxDecoration(
+        border: Border(
+          top: (index < 2)
+              ? const BorderSide(color: Colors.white, width: 3)
+              : BorderSide.none,
+          bottom: (index >= 2)
+              ? const BorderSide(color: Colors.white, width: 3)
+              : BorderSide.none,
+          left: (index % 2 == 0)
+              ? const BorderSide(color: Colors.white, width: 3)
+              : BorderSide.none,
+          right: (index % 2 != 0)
+              ? const BorderSide(color: Colors.white, width: 3)
+              : BorderSide.none,
+        ),
+      ),
+    );
+  }
+
+  // --- WIDGET: The Bottom Instruction Glass Card ---
+  Widget _buildInstructionHUD(
+      bool isReady, Color accentColor, Color glassColor) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: glassColor,
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 400),
+            child: isReady
+                ? _buildReadyMessage(accentColor)
+                : _buildStepsList(accentColor),
           ),
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: Colors.white.withOpacity(0.9),
-            ),
+      ),
+    );
+  }
+
+  Widget _buildReadyMessage(Color accentColor) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      key: const ValueKey('ReadyMessage'),
+      children: [
+        Text(
+          "Perfect!",
+          style: GoogleFonts.poppins(
+            fontSize: 28,
+            fontWeight: FontWeight.w700,
+            color: accentColor,
+            height: 1.2,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          "Hold steady, starting workout...",
+          textAlign: TextAlign.center,
+          style: GoogleFonts.poppins(
+            fontSize: 16,
+            color: Colors.white.withOpacity(0.9),
           ),
         ),
       ],
     );
   }
 
+  Widget _buildStepsList(Color accentColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min, // Hug content
+      key: const ValueKey('StepsList'),
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Position Yourself',
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'AI Camera',
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white70,
+                  letterSpacing: 1.0,
+                ),
+              ),
+            )
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Steps
+        _buildStepRow(
+          icon: Icons.smartphone_rounded,
+          text: 'Place phone 2-3 feet away',
+          isCompleted: _step1Completed,
+          accentColor: accentColor,
+          showStabilityProgress: _isPositioning && !_step1Completed,
+        ),
+        const SizedBox(height: 16),
+        _buildStepRow(
+          icon: Icons.accessibility_new_rounded,
+          text: 'Step back until full body is visible',
+          isCompleted: _step2Completed,
+          accentColor: accentColor,
+        ),
+        const SizedBox(height: 16),
+        _buildStepRow(
+          icon: Icons.fit_screen_rounded,
+          text: 'Ensure arms and legs are in frame',
+          isCompleted: _step3Completed,
+          accentColor: accentColor,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepRow({
+    required IconData icon,
+    required String text,
+    required bool isCompleted,
+    required Color accentColor,
+    bool showStabilityProgress = false,
+  }) {
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 300),
+      opacity:
+          isCompleted ? 1.0 : 0.7, // Dim unfinished steps slightly for focus
+      child: Row(
+        children: [
+          // Icon Container
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: isCompleted ? accentColor : Colors.white.withOpacity(0.1),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color:
+                    isCompleted ? accentColor : Colors.white.withOpacity(0.3),
+              ),
+            ),
+            child: showStabilityProgress && _currentStabilityState.isDetecting && !isCompleted
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                    ),
+                  )
+                : Icon(
+                    isCompleted ? Icons.check : icon,
+                    size: 18,
+                    color: isCompleted ? Colors.white : Colors.white,
+                  ),
+          ),
+          const SizedBox(width: 16),
+
+          // Text
+          Expanded(
+            child: AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 300),
+              style: GoogleFonts.poppins(
+                fontSize: 15,
+                fontWeight: isCompleted ? FontWeight.w600 : FontWeight.w400,
+                color:
+                    isCompleted ? Colors.white : Colors.white.withOpacity(0.8),
+                decoration: isCompleted ? TextDecoration.none : null,
+              ),
+              child: Text(text),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Build countdown overlay with large number
   Widget _buildCountdownOverlay() {
     return Container(
+      key: ValueKey(
+          'countdown_$_countdownValue'), // Force rebuild on value change
       color: Colors.black.withOpacity(0.4),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            children: [
-              const Spacer(),
-              // Large countdown number
-              TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0.8, end: 1.2),
-                duration: const Duration(milliseconds: 500),
-                curve: Curves.elasticOut,
-                builder: (context, scale, child) {
-                  return Transform.scale(
-                    scale: scale,
-                    child: Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: [_primaryColor, _secondaryColor],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _primaryColor.withOpacity(0.5),
-                            blurRadius: 40,
-                            spreadRadius: 10,
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Text(
-                          '$_countdownValue',
-                          style: const TextStyle(
-                            fontSize: 64,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white,
-                            height: 1.0,
-                          ),
-                        ),
-                      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Large countdown number with safe animation
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              transitionBuilder: (child, animation) =>
+                  ScaleTransition(scale: animation, child: child),
+              child: Container(
+                key: ValueKey(_countdownValue), // Force animation restart
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [_primaryColor, _secondaryColor],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _primaryColor.withOpacity(0.5),
+                      blurRadius: 40,
+                      spreadRadius: 10,
                     ),
-                  );
-                },
-              ),
-              const SizedBox(height: 32),
-              // Get Ready text
-              Text(
-                'Get Ready!',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white.withOpacity(0.9),
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    '$_countdownValue',
+                    style: const TextStyle(
+                      fontSize: 64,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      height: 1.0,
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Workout starts in $_countdownValue...',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white.withOpacity(0.6),
-                ),
+            ),
+            const SizedBox(height: 32),
+            // Get Ready text
+            Text(
+              'Get Ready!',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                color: Colors.white.withOpacity(0.9),
               ),
-              const Spacer(),
-            ],
-          ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Workout starts in $_countdownValue...',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withOpacity(0.6),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1016,6 +1316,7 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
       children: [
         // Feedback message or positioning instructions
         !isComplete &&
+                !_isCountingDown && // Don't show during countdown
                 (_isPositioning ||
                     _cameraService.poseDetectionService?.workoutState ==
                         WorkoutState.active ||
@@ -1096,10 +1397,10 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
                 ),
               )
             : (_cameraService.poseDetectionService?.workoutState ==
-                                WorkoutState.active ||
-                            _cameraService.poseDetectionService?.workoutState ==
-                                WorkoutState.paused) &&
-                        (_showManualButton && (_isInitialized || _cameraFailed))
+                            WorkoutState.active ||
+                        _cameraService.poseDetectionService?.workoutState ==
+                            WorkoutState.paused) &&
+                    (_showManualButton && (_isInitialized || _cameraFailed))
                 // Manual rep button (during active workout)
                 ? PressAnimationButton(
                     onTap: _addManualRep,

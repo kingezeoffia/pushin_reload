@@ -52,15 +52,12 @@ class _PremiumLogoutButtonState extends State<PremiumLogoutButton> {
           padding: const EdgeInsets.symmetric(horizontal: 20),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24), // Pill shape
-            color: dangerRed.withOpacity(0.1), // Subtle red tint
-            border: Border.all(
-              color: dangerRed.withOpacity(0.3),
-              width: 1.5,
-            ),
+            color: dangerRed, // Solid red background
+            border: Border.all(color: Colors.transparent, width: 0), // Explicitly remove any borders
             boxShadow: [
               BoxShadow(
-                color: dangerRed.withOpacity(0.1),
-                blurRadius: 12,
+                color: dangerRed.withOpacity(0.3),
+                blurRadius: 8,
                 offset: const Offset(0, 4),
               ),
             ],
@@ -73,7 +70,7 @@ class _PremiumLogoutButtonState extends State<PremiumLogoutButton> {
               Text(
                 "Logout",
                 style: TextStyle(
-                  color: dangerRed.withOpacity(0.9),
+                  color: Colors.white,
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
                   letterSpacing: 0.5,
@@ -90,7 +87,7 @@ class _PremiumLogoutButtonState extends State<PremiumLogoutButton> {
     return Icon(
       icon,
       size: 18,
-      color: dangerRed.withOpacity(0.9),
+      color: Colors.white,
     );
   }
 }
@@ -378,17 +375,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                 child: _buildLogoutButton(),
               ),
 
-              const SliverToBoxAdapter(child: SizedBox(height: 60)),
-
-              // App Version
-              SliverToBoxAdapter(
-                child: Center(
-                  child: Text(
-                    'PUSHIN v1.0.0',
-                    style: EnhancedSettingsDesignTokens.tileSubtitle,
-                  ),
-                ),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
               const SliverToBoxAdapter(
                   child: SizedBox(
@@ -429,23 +416,6 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(
                   EnhancedSettingsDesignTokens.borderRadiusLarge),
-              border: Border.all(
-                color: const Color(0xFF4A5FFF),
-                width: 3,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFD4FF00).withOpacity(0.4),
-                  blurRadius: 24,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 8),
-                ),
-                BoxShadow(
-                  color: const Color(0xFFD4FF00).withOpacity(0.2),
-                  blurRadius: 40,
-                  offset: const Offset(0, 4),
-                ),
-              ],
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(

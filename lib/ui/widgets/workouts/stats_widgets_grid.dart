@@ -111,7 +111,7 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
   Future<void> _loadWorkoutHistory() async {
     try {
       await _workoutHistoryService.initialize();
-      final workouts = await _workoutHistoryService.getRecentWorkouts(limit: 3);
+      final workouts = await _workoutHistoryService.getTodaysWorkouts();
       if (mounted) {
         setState(() {
           _recentWorkouts = workouts;
@@ -424,7 +424,7 @@ class _MostUsedAppsWidgetState extends State<MostUsedAppsWidget>
   late Animation<double> _progressAnimation;
 
   // Using your design system tokens
-  static const Color accentColor = Color(0xFF3B82F6); // Bright Blue
+  static const Color accentColor = Color(0xFF4ADE80); // Bright Green
 
   @override
   void initState() {
@@ -654,7 +654,7 @@ class _MostUsedAppsWidgetState extends State<MostUsedAppsWidget>
                       Colors.white,
                       Colors.transparent,
                     ],
-                    stops: const [0.0, 0.05, 0.99, 1.0],
+                    stops: const [0.0, 0.05, 1.0, 1.0],
                   ).createShader(bounds);
                 },
                 blendMode: BlendMode.dstIn,

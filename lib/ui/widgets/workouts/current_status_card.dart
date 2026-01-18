@@ -239,7 +239,8 @@ class _CurrentStatusCardState extends State<CurrentStatusCard>
                         ),
                       ),
                       // Full-width shimmer overlay - when unlocked or emergency unlock active
-                      if ((state == PushinState.unlocked && !isEmergencyUnlockActive) ||
+                      if ((state == PushinState.unlocked &&
+                              !isEmergencyUnlockActive) ||
                           isEmergencyUnlockActive)
                         Positioned.fill(
                           child: IgnorePointer(

@@ -214,6 +214,13 @@ class PoseDetectionService {
     _workoutState = WorkoutState.countdown;
   }
 
+  /// Cancel countdown (when user moves away during countdown)
+  void cancelCountdown() {
+    if (_workoutState == WorkoutState.countdown) {
+      _workoutState = WorkoutState.positioning;
+    }
+  }
+
   /// Activate workout (after countdown) - enable rep counting
   void activateWorkout() {
     _workoutState = WorkoutState.active;

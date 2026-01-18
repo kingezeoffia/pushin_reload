@@ -68,13 +68,13 @@ class _AppBlockOverlayState extends State<AppBlockOverlay>
   @override
   void initState() {
     super.initState();
-    
+
     // Pulsing animation for lock icon
     _pulseController = AnimationController(
       duration: const Duration(seconds: 2),
       vsync: this,
     )..repeat(reverse: true);
-    
+
     _pulseAnimation = Tween<double>(begin: 0.9, end: 1.1).animate(
       CurvedAnimation(
         parent: _pulseController,
@@ -190,11 +190,25 @@ class _AppBlockOverlayState extends State<AppBlockOverlay>
                         ),
                       ],
                     ),
-                    child: Icon(
-                      _icon,
-                      size: 48,
-                      color: Colors.white,
-                    ),
+                    child: widget.reason == BlockReason.preWorkout
+                        ? Image.asset(
+                            'assets/icons/body_cutout.png',
+                            fit: BoxFit.contain,
+                            width: 60,
+                            height: 60,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(
+                                _icon,
+                                size: 48,
+                                color: Colors.white,
+                              );
+                            },
+                          )
+                        : Icon(
+                            _icon,
+                            size: 48,
+                            color: Colors.white,
+                          ),
                   ),
                 ),
 
@@ -470,12 +484,3 @@ enum BlockReason {
   /// Pre-workout encouragement (user in locked state)
   preWorkout,
 }
-
-
-
-
-
-
-
-
-

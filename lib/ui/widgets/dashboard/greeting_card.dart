@@ -224,7 +224,7 @@ class _GreetingCardState extends State<GreetingCard>
           Expanded(
             child: _StatItem(
               value: currentStreak,
-              label: 'Day Streak',
+              label: 'Current Streak',
               accentColor: const Color(0xFF7C8CFF),
             ),
           ),
@@ -232,7 +232,7 @@ class _GreetingCardState extends State<GreetingCard>
           Expanded(
             child: _StatItem(
               value: longestStreak,
-              label: 'Record',
+              label: 'Best Streak',
               accentColor: const Color(0xFFFFB347),
             ),
           ),
@@ -240,7 +240,7 @@ class _GreetingCardState extends State<GreetingCard>
           Expanded(
             child: _StatItem(
               value: totalWorkouts,
-              label: 'Workouts',
+              label: 'Total Workouts',
               accentColor: const Color(0xFF4ADE80),
             ),
           ),
@@ -252,8 +252,8 @@ class _GreetingCardState extends State<GreetingCard>
   Widget _buildVerticalDivider() {
     return Container(
       width: 1,
-      height: 36,
-      margin: const EdgeInsets.symmetric(horizontal: 4),
+      height: 48,
+      margin: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -296,15 +296,17 @@ class _StatItem extends StatelessWidget {
             letterSpacing: -0.5,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         // Label - subtle
         Text(
           label,
+          textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: FontWeight.w500,
             color: Colors.white.withOpacity(0.45),
-            letterSpacing: 0.3,
+            letterSpacing: 0.2,
+            height: 1.2,
           ),
         ),
       ],

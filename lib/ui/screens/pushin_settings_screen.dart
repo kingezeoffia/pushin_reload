@@ -313,15 +313,6 @@ class _PushinSettingsScreenState extends State<PushinSettingsScreen>
                     child: Column(
                       children: [
                         const SizedBox(height: 24),
-                        Text(
-                          'PUSHIN v1.0.0',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.4),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
                         _buildLogoutButton(),
                       ],
                     ),

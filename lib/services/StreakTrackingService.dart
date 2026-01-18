@@ -41,7 +41,7 @@ class StreakTrackingService {
     print('   bestStreak: $bestStreak');
     print('   totalWorkouts: $totalWorkouts');
 
-    // Check if this is a new workout today
+    // Check if this is a new workout today (for streak logic)
     bool isNewWorkoutToday = true;
     if (lastWorkoutDateStr == todayKey) {
       isNewWorkoutToday = false;
@@ -68,10 +68,8 @@ class StreakTrackingService {
       bestStreak = currentStreak;
     }
 
-    // Increment total workouts only if this is a new workout today
-    if (isNewWorkoutToday) {
-      totalWorkouts += 1;
-    }
+    // Increment total workouts for every workout completed
+    totalWorkouts += 1;
 
     // Save updated values
     await _streakBox.put(_currentStreakKey, currentStreak);

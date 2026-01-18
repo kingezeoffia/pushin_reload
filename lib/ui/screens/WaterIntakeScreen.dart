@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui';
 import '../theme/workouts_design_tokens.dart';
+import '../widgets/GOStepsBackground.dart';
 
 class WaterAmountFormatter {
   static String format(double amount) {
@@ -135,8 +136,14 @@ class _WaterIntakeScreenState extends State<WaterIntakeScreen>
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('water_log_today', jsonEncode(_todayLog));
 
-    // Update the animation to reflect the new fill level without transition
-    setState(() {});
+    // Animate water fill smoothly but quickly without bounce
+    final newFill = (_currentAmount / _targetAmount).clamp(0.0, 1.0);
+    _fillAnimation = Tween<double>(begin: oldFill, end: newFill).animate(
+        CurvedAnimation(parent: _mainController, curve: Curves.linear));
+
+    // Quick smooth animation
+    _mainController.duration = const Duration(milliseconds: 200);
+    _mainController.forward(from: 0);
   }
 
   @override
@@ -171,14 +178,7 @@ class _WaterIntakeScreenState extends State<WaterIntakeScreen>
           )
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-          ),
-        ),
+      body: GOStepsBackground(
         child: Stack(
           alignment: Alignment.center,
           children: [

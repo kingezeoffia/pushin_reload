@@ -168,7 +168,7 @@ class CameraWorkoutService extends ChangeNotifier {
           'Initializing camera controller with ${preferredCamera == CameraLensDirection.front ? "front" : "back"} camera...');
       _cameraController = CameraController(
         selectedCamera,
-        ResolutionPreset.medium, // Balance quality and performance
+        ResolutionPreset.veryHigh, // High quality for modern devices like iPhone 15 Pro Max
         enableAudio: false,
         imageFormatGroup: Platform.isAndroid
             ? ImageFormatGroup.nv21

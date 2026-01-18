@@ -325,7 +325,7 @@ class _WorkoutCompletionScreenState extends State<WorkoutCompletionScreen>
 
                       // Continue button - onboarding style
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+                        padding: const EdgeInsets.fromLTRB(32, 16, 32, 0),
                         child: Transform.translate(
                           offset: Offset(0, _slideAnimation.value * 1.8),
                           child: Opacity(

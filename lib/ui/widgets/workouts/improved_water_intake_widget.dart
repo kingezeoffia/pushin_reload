@@ -52,6 +52,7 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
   late Animation<double> _scaleAnimation;
   late Animation<Offset> _slideAnimation;
   late Animation<double> _fadeAnimation;
+  List<Bubble> _bubbles = [];
 
   @override
   void initState() {
@@ -105,6 +106,8 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
 
     // Start entrance animation immediately
     _entranceController.forward();
+
+    _generateBubbles();
 
     Future.delayed(Duration(milliseconds: widget.delay), () {
       if (mounted) _fillController.forward();
@@ -167,8 +170,9 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
   void _showWaterTracker() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => WaterIntakeScreen(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            WaterIntakeScreen(
           currentAmount: _currentAmount,
           targetAmount: _targetAmount,
           onAmountChanged: (amount) {
@@ -199,6 +203,10 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
             _loadData();
           },
         ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return child; // No transition
+        },
+        transitionDuration: Duration.zero,
       ),
     );
   }
@@ -211,6 +219,30 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
     _scaleController.dispose();
     _entranceController.dispose();
     super.dispose();
+  }
+
+  void _generateBubbles() {
+    _bubbles = List.generate(15, (_) => _createBubble());
+  }
+
+  Bubble _createBubble() {
+    return Bubble(
+      x: math.Random().nextDouble(),
+      y: 1.1,
+      radius: math.Random().nextDouble() * 3 + 1,
+      speed: math.Random().nextDouble() * 0.002 + 0.001,
+      opacity: math.Random().nextDouble() * 0.4,
+    );
+  }
+
+  void _updateBubbles() {
+    for (var b in _bubbles) {
+      b.y -= b.speed;
+      if (b.y < -0.1) {
+        b.y = 1.1;
+        b.x = math.Random().nextDouble();
+      }
+    }
   }
 
   @override
@@ -338,13 +370,13 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
       animation:
           Listenable.merge([_fillController, _glowController, _waveController]),
       builder: (context, child) {
+        _updateBubbles();
         return CustomPaint(
-          painter: WaterGlassPainter(
-            fillPercentage: percentage,
-            animationValue: _fillController.value,
-            glowValue: _glowController.value,
-            waveValue: _waveController.value,
-            waterColor: WorkoutsDesignTokens.waterCyan,
+          painter: PremiumWaterPainter(
+            fillProgress: percentage / 100.0,
+            wavePhase: _waveController.value,
+            bubbles: _bubbles,
+            accentColor: WorkoutsDesignTokens.waterCyan,
           ),
           size: Size.infinite,
           child: Container(),
@@ -393,144 +425,173 @@ class _ImprovedWaterIntakeWidgetState extends State<ImprovedWaterIntakeWidget>
   }
 }
 
-class WaterGlassPainter extends CustomPainter {
-  final double fillPercentage;
-  final double animationValue;
-  final double glowValue;
-  final double waveValue;
-  final Color waterColor;
+class Bubble {
+  double x, y, radius, speed, opacity;
+  Bubble(
+      {required this.x,
+      required this.y,
+      required this.radius,
+      required this.speed,
+      required this.opacity});
+}
 
-  WaterGlassPainter({
-    required this.fillPercentage,
-    required this.animationValue,
-    required this.glowValue,
-    required this.waveValue,
-    required this.waterColor,
+class PremiumWaterPainter extends CustomPainter {
+  final double fillProgress;
+  final double wavePhase;
+  final List<Bubble> bubbles;
+  final Color accentColor;
+
+  PremiumWaterPainter({
+    required this.fillProgress,
+    required this.wavePhase,
+    required this.bubbles,
+    required this.accentColor,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..color = Colors.white.withOpacity(0.3);
+    final double w = size.width;
+    final double h = size.height;
+    final double centerX = w / 2;
 
-    // Glass outline
-    final glassPath = Path();
-    final glassWidth = size.width * 0.6;
-    final glassHeight = size.height * 0.8;
-    final centerX = size.width / 2;
-    final startY = size.height * 0.1;
+    // --- Bottle Dimensions ---
+    final double neckWidth = w * 0.35;
+    final double neckHeight = h * 0.12;
+    final double shoulderWidth = w * 0.85;
+    final double bodyWidth = w * 0.82; // Slight taper
+    final double capHeight = 12.0;
 
-    glassPath.moveTo(centerX - glassWidth / 2, startY);
-    glassPath.lineTo(centerX - glassWidth / 2 + 10, startY + glassHeight);
-    glassPath.lineTo(centerX + glassWidth / 2 - 10, startY + glassHeight);
-    glassPath.lineTo(centerX + glassWidth / 2, startY);
+    // --- Define the Bottle Silhouette Path ---
+    final Path bottlePath = Path();
 
-    canvas.drawPath(glassPath, paint);
+    // Start at top left of the neck (just below the cap)
+    bottlePath.moveTo(centerX - neckWidth / 2, capHeight + 5);
 
-    // Water fill
-    final currentFill = fillPercentage * animationValue / 100;
-    if (currentFill > 0) {
+    // Neck down to shoulder
+    bottlePath.lineTo(centerX - neckWidth / 2, neckHeight);
+
+    // Left Shoulder (Curved)
+    bottlePath.quadraticBezierTo(
+      centerX - neckWidth / 2, neckHeight + 30, // Control point
+      centerX - shoulderWidth / 2, neckHeight + 60, // End point
+    );
+
+    // Left Body down to base
+    bottlePath.lineTo(centerX - bodyWidth / 2, h - 30);
+
+    // Rounded Base Left
+    bottlePath.quadraticBezierTo(centerX - bodyWidth / 2, h, centerX, h);
+
+    // Rounded Base Right
+    bottlePath.quadraticBezierTo(
+        centerX + bodyWidth / 2, h, centerX + bodyWidth / 2, h - 30);
+
+    // Right Body up to shoulder
+    bottlePath.lineTo(centerX + shoulderWidth / 2, neckHeight + 60);
+
+    // Right Shoulder (Curved)
+    bottlePath.quadraticBezierTo(centerX + neckWidth / 2, neckHeight + 30,
+        centerX + neckWidth / 2, neckHeight);
+
+    // Neck up to top
+    bottlePath.lineTo(centerX + neckWidth / 2, capHeight + 5);
+    bottlePath.close();
+
+    // 1. Draw Bottle Back (Translucent Surface)
+    final backPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+        colors: [
+          Colors.white.withOpacity(0.05),
+          Colors.white.withOpacity(0.01),
+          Colors.white.withOpacity(0.05),
+        ],
+      ).createShader(Offset.zero & size);
+    canvas.drawPath(bottlePath, backPaint);
+
+    // 2. Draw Cap (The "Hardware" look)
+    final capPaint = Paint()..color = Colors.white.withOpacity(0.15);
+    final capRect = Rect.fromCenter(
+      center: Offset(centerX, capHeight / 2),
+      width: neckWidth + 10,
+      height: capHeight,
+    );
+    canvas.drawRRect(
+        RRect.fromRectAndRadius(capRect, const Radius.circular(4)), capPaint);
+
+    // 3. Water Fill with Waves
+    if (fillProgress > 0) {
+      canvas.save();
+      canvas.clipPath(bottlePath); // Clips water precisely to bottle shape
+
+      final waterPath = Path();
+      // Calculate height based on full bottle height including neck
+      final currentWaterTop = h - (h * fillProgress);
+
+      waterPath.moveTo(-20, h + 20); // Move below base
+
+      // Dynamic Wave across the width
+      for (double x = 0; x <= w; x++) {
+        double wave1 = math.sin((x / 40) + (wavePhase * 2 * math.pi)) * 6;
+        double wave2 = math.cos((x / 70) - (wavePhase * 2 * math.pi)) * 3;
+        waterPath.lineTo(x, currentWaterTop + wave1 + wave2);
+      }
+
+      waterPath.lineTo(w + 20, h + 20);
+      waterPath.close();
+
       final waterPaint = Paint()
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            waterColor.withOpacity(0.6),
-            waterColor,
+            accentColor.withOpacity(0.4), // See-through top
+            accentColor.withOpacity(0.75), // Deeper bottom
           ],
-        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-
-      final waterHeight = glassHeight * currentFill;
-      final waterPath = Path();
-
-      final bottomY = startY + glassHeight;
-      final topY = bottomY - waterHeight;
-
-      // Calculate water edge positions that follow the glass shape
-      // Glass gets narrower towards bottom by 10px on each side (20px total)
-      final glassTopWidth = glassWidth;
-      final glassBottomWidth = glassWidth - 20;
-
-      // Calculate the width of the glass at the current water level
-      final waterLevelRatio = waterHeight / glassHeight; // 0.0 to 1.0
-      final waterWidthAtLevel = glassBottomWidth +
-          (glassTopWidth - glassBottomWidth) * waterLevelRatio;
-
-      // Water edges at current level
-      final waterLeftX = centerX - waterWidthAtLevel / 2;
-      final waterRightX = centerX + waterWidthAtLevel / 2;
-
-      // Bottom reference points (always at glass bottom width)
-      final waterBottomWidth = glassBottomWidth;
-      final waterBottomLeftX = centerX - waterBottomWidth / 2;
-      final waterBottomRightX = centerX + waterBottomWidth / 2;
-
-      // Start from bottom left
-      waterPath.moveTo(waterBottomLeftX, bottomY);
-
-      // Draw left edge following glass slant to water level
-      waterPath.lineTo(waterLeftX, topY);
-
-      // Add wave effect across the water surface at current level
-      final waveAmplitude = 3.0;
-      final waveFrequency = 2.0;
-      final wavePoints = <Offset>[];
-
-      for (double i = 0; i <= waterWidthAtLevel; i += 2) {
-        final x = waterLeftX + i;
-        final wave = math.sin(
-                (i / waterWidthAtLevel) * math.pi * waveFrequency +
-                    waveValue * math.pi * 2) *
-            waveAmplitude;
-        wavePoints.add(Offset(x, topY + wave));
-      }
-
-      // Add all wave points
-      for (final point in wavePoints) {
-        waterPath.lineTo(point.dx, point.dy);
-      }
-
-      // Draw right edge following glass slant back to bottom
-      waterPath.lineTo(waterRightX, topY);
-      waterPath.lineTo(waterBottomRightX, bottomY);
-
-      // Close the path
-      waterPath.close();
+        ).createShader(
+            Offset(0, currentWaterTop) & Size(w, h - currentWaterTop));
 
       canvas.drawPath(waterPath, waterPaint);
 
-      // Glow effect
-      if (currentFill > 0.5) {
-        final glowPaint = Paint()
-          ..color = waterColor.withOpacity(0.2 * glowValue)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15);
-        canvas.drawPath(waterPath, glowPaint);
+      // 4. Bubbles (Constrained by bottle clip)
+      for (var b in bubbles) {
+        double bubbleY = h - (b.y * h);
+        if (bubbleY > currentWaterTop) {
+          canvas.drawCircle(
+            Offset(centerX - (bodyWidth / 2) + (b.x * bodyWidth), bubbleY),
+            b.radius,
+            Paint()..color = Colors.white.withOpacity(b.opacity),
+          );
+        }
       }
-
-      // Reflection/highlight
-      final highlightPaint = Paint()
-        ..color = Colors.white.withOpacity(0.3)
-        ..style = PaintingStyle.fill;
-
-      final highlightPath = Path();
-      highlightPath.addOval(Rect.fromLTWH(
-        centerX - glassWidth / 4,
-        topY + 10,
-        glassWidth / 6,
-        waterHeight / 3,
-      ));
-      canvas.drawPath(highlightPath, highlightPaint);
+      canvas.restore();
     }
+
+    // 5. Bottle Outline & 3D Reflections
+    final outlinePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = Colors.white.withOpacity(0.15);
+    canvas.drawPath(bottlePath, outlinePaint);
+
+    // Vertical "Specular" Highlight for Cylindrical Look
+    final highlightPath = Path()
+      ..addRRect(RRect.fromRectAndCorners(
+        Rect.fromLTWH(
+            centerX - (neckWidth / 2) + 5, capHeight + 20, 4, h * 0.7),
+        topLeft: const Radius.circular(10),
+        bottomLeft: const Radius.circular(10),
+      ));
+    canvas.drawPath(
+        highlightPath,
+        Paint()
+          ..color = Colors.white.withOpacity(0.1)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2));
   }
 
   @override
-  bool shouldRepaint(WaterGlassPainter oldDelegate) =>
-      oldDelegate.fillPercentage != fillPercentage ||
-      oldDelegate.animationValue != animationValue ||
-      oldDelegate.glowValue != glowValue ||
-      oldDelegate.waveValue != waveValue;
+  bool shouldRepaint(covariant PremiumWaterPainter oldDelegate) => true;
 }
 
 class WaterTrackerModal extends StatefulWidget {
