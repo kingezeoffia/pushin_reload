@@ -69,12 +69,18 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
   bool _isCountingDown = false;
   Timer? _countdownTimer;
   Timer? _stabilityTimer; // Timer to track stable pose before auto-countdown
+  Timer? _step2Timer; // Timer for step 2 countdown
+  Timer? _step3Timer; // Timer for step 3 countdown
   DateTime? _readyStateStartTime; // When pose became ready
 
   // Step completion state
   bool _step1Completed = false; // Phone positioned (stable)
   bool _step2Completed = false; // Full body visible
   bool _step3Completed = false; // Arms and legs in frame
+
+  // Step countdown state for visual feedback
+  bool _step2CountingDown = false;
+  bool _step3CountingDown = false;
 
   // Phone stability state for visual feedback
   StabilityState _currentStabilityState = StabilityState(isStable: false, isDetecting: false);
@@ -105,6 +111,10 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     _step1Completed = false;
     _step2Completed = false;
     _step3Completed = false;
+
+    // Reset step countdown states
+    _step2CountingDown = false;
+    _step3CountingDown = false;
 
     _initializeCameraService();
 
@@ -188,6 +198,52 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     });
   }
 
+  void _startStep2Countdown() {
+    _step2CountingDown = true;
+    _step2Timer?.cancel();
+
+    _step2Timer = Timer(const Duration(seconds: 2), () {
+      if (mounted && _isPositioning && _step2CountingDown) {
+        setState(() {
+          _step2Completed = true;
+          _step2CountingDown = false;
+        });
+        debugPrint('Step 2 completed: Full body visible (after countdown)');
+      }
+    });
+
+    debugPrint('Started Step 2 countdown');
+  }
+
+  void _resetStep2Countdown() {
+    _step2CountingDown = false;
+    _step2Timer?.cancel();
+    debugPrint('Step 2 countdown reset');
+  }
+
+  void _startStep3Countdown() {
+    _step3CountingDown = true;
+    _step3Timer?.cancel();
+
+    _step3Timer = Timer(const Duration(seconds: 2), () {
+      if (mounted && _isPositioning && _step3CountingDown) {
+        setState(() {
+          _step3Completed = true;
+          _step3CountingDown = false;
+        });
+        debugPrint('Step 3 completed: Arms and legs in frame (after countdown)');
+      }
+    });
+
+    debugPrint('Started Step 3 countdown');
+  }
+
+  void _resetStep3Countdown() {
+    _step3CountingDown = false;
+    _step3Timer?.cancel();
+    debugPrint('Step 3 countdown reset');
+  }
+
   /// Check if this is a time-based workout (like plank)
   bool get _isTimeBased => widget.workoutType.toLowerCase() == 'plank';
 
@@ -240,8 +296,21 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
             // Step 1: Phone positioned - now handled by PhoneStabilityService
             // (was: complete when full body is scanned)
 
-            _step2Completed = _isFullBodyDetected; // Full body is visible
-            _step3Completed = _isReadyToStart; // Arms and legs in frame
+            // Step 2: Full body visible - start countdown when detected
+            if (_isFullBodyDetected && !_step2Completed && !_step2CountingDown) {
+              _startStep2Countdown();
+            } else if (!_isFullBodyDetected && _step2CountingDown) {
+              // Reset if body leaves frame during countdown
+              _resetStep2Countdown();
+            }
+
+            // Step 3: Arms and legs in frame - start countdown when ready
+            if (_isReadyToStart && !_step3Completed && !_step3CountingDown) {
+              _startStep3Countdown();
+            } else if (!_isReadyToStart && _step3CountingDown) {
+              // Reset if pose becomes invalid during countdown
+              _resetStep3Countdown();
+            }
           }
         });
 
@@ -305,6 +374,12 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
               _step1Completed = false;
               _step2Completed = false;
               _step3Completed = false;
+
+              // Reset step countdown states
+              _step2CountingDown = false;
+              _step3CountingDown = false;
+              _step2Timer?.cancel();
+              _step3Timer?.cancel();
             });
             debugPrint(
                 '✅ Countdown interrupted successfully - back to positioning mode');
@@ -617,6 +692,8 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
   void dispose() {
     _countdownTimer?.cancel();
     _stabilityTimer?.cancel();
+    _step2Timer?.cancel();
+    _step3Timer?.cancel();
     _cameraService.dispose();
     _stabilityService.dispose();
     _pulseController.dispose();
@@ -959,6 +1036,7 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
           text: 'Step back until full body is visible',
           isCompleted: _step2Completed,
           accentColor: accentColor,
+          showStep2Progress: _isPositioning && !_step2Completed,
         ),
         const SizedBox(height: 16),
         _buildStepRow(
@@ -966,6 +1044,7 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
           text: 'Ensure arms and legs are in frame',
           isCompleted: _step3Completed,
           accentColor: accentColor,
+          showStep3Progress: _isPositioning && !_step3Completed,
         ),
       ],
     );
@@ -977,6 +1056,8 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     required bool isCompleted,
     required Color accentColor,
     bool showStabilityProgress = false,
+    bool showStep2Progress = false,
+    bool showStep3Progress = false,
   }) {
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 300),
@@ -997,7 +1078,9 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
                     isCompleted ? accentColor : Colors.white.withOpacity(0.3),
               ),
             ),
-            child: showStabilityProgress && _currentStabilityState.isDetecting && !isCompleted
+            child: (showStabilityProgress && _currentStabilityState.isDetecting && !isCompleted) ||
+                     (showStep2Progress && _step2CountingDown && !isCompleted) ||
+                     (showStep3Progress && _step3CountingDown && !isCompleted)
                 ? SizedBox(
                     width: 18,
                     height: 18,
