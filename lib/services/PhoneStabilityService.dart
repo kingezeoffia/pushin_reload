@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 /// Service for detecting phone stability using accelerometer and gyroscope sensors
@@ -7,15 +8,16 @@ import 'package:sensors_plus/sensors_plus.dart';
 class PhoneStabilityService {
   static const Duration _stabilityCheckDuration = Duration(seconds: 2);
   static const double _stabilityThreshold = 0.15; // m/s² tolerance for movement
-  static const double _flatOrientationThreshold = 0.4; // radians tolerance for flat orientation
+  static const double _orientationThreshold = 0.2; // threshold for reasonable workout orientation
 
   StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
   StreamSubscription<UserAccelerometerEvent>? _userAccelSubscription;
   Timer? _stabilityTimer;
 
   bool _isStable = false;
-  bool _isFlat = false;
+  bool _isProperlyOriented = false;
   bool _isDetectingStability = false;
+  DateTime? _stabilityStartTime;
 
   final StreamController<StabilityState> _stabilityController = StreamController<StabilityState>.broadcast();
   Stream<StabilityState> get onStabilityStateChanged => _stabilityController.stream;
@@ -23,7 +25,7 @@ class PhoneStabilityService {
   /// Current stability state
   StabilityState get currentState => StabilityState(
     isStable: _isStable,
-    isFlat: _isFlat,
+    isFlat: _isProperlyOriented, // For backwards compatibility, represents proper workout orientation
     isDetecting: _isDetectingStability,
   );
 
@@ -33,8 +35,7 @@ class PhoneStabilityService {
 
     _isDetectingStability = true;
     _isStable = false;
-    _isFlat = false;
-    _stabilityStartTime = null;
+    _isProperlyOriented = false;
 
     // Listen to accelerometer for absolute movement detection
     _accelerometerSubscription = accelerometerEventStream().listen(
@@ -56,7 +57,7 @@ class PhoneStabilityService {
   void stopStabilityDetection() {
     _isDetectingStability = false;
     _isStable = false;
-    _isFlat = false;
+    _isProperlyOriented = false;
     _stabilityStartTime = null;
 
     _accelerometerSubscription?.cancel();
@@ -92,15 +93,16 @@ class PhoneStabilityService {
   void _onUserAccelerometerEvent(UserAccelerometerEvent event) {
     if (!_isDetectingStability) return;
 
-    // Check if phone is lying flat (Z-axis acceleration close to 0)
-    // When phone is flat on surface, Z-axis should be close to 0 (against gravity)
-    final isCurrentlyFlat = event.z.abs() < _flatOrientationThreshold;
+    // For workout positioning, we need the phone to be in a reasonable orientation
+    // The phone should be placed at an angle where the camera can see the user
+    // Z-axis user acceleration should be between -2.0 (almost flat) and 0.2 (slightly tilted up)
+    final isReasonableOrientation = event.z > -2.0 && event.z < _orientationThreshold;
 
-    final wasFlat = _isFlat;
-    _isFlat = isCurrentlyFlat;
+    final wasReasonable = _isProperlyOriented;
+    _isProperlyOriented = isReasonableOrientation;
 
-    // If orientation changed from flat to not flat, reset stability
-    if (wasFlat && !isCurrentlyFlat && _isStable) {
+    // If orientation becomes unreasonable (phone upside down or too tilted), reset stability
+    if (wasReasonable && !isReasonableOrientation && _isStable) {
       _resetStability();
     }
 
@@ -112,16 +114,17 @@ class PhoneStabilityService {
     _stabilityTimer?.cancel();
 
     _stabilityTimer = Timer(_stabilityCheckDuration, () {
-      if (_isFlat && _isDetectingStability) {
+      if (_isProperlyOriented && _isDetectingStability) {
         _isStable = true;
         _notifyStateChange();
-        debugPrint('PhoneStabilityService: Phone detected as stable and flat!');
+        debugPrint('PhoneStabilityService: Phone detected as stable and properly oriented for workout!');
       }
     });
   }
 
   void _resetStability() {
     _isStable = false;
+    _stabilityStartTime = null;
     _stabilityTimer?.cancel();
     _notifyStateChange();
     debugPrint('PhoneStabilityService: Stability reset due to movement');
