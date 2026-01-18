@@ -77,7 +77,7 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
   bool _step3Completed = false; // Arms and legs in frame
 
   // Phone stability state for visual feedback
-  StabilityState _currentStabilityState = StabilityState(isStable: false, isFlat: false, isDetecting: false);
+  StabilityState _currentStabilityState = StabilityState(isStable: false, isDetecting: false);
 
   // Prevent duplicate workout completion calls
   bool _workoutCompleted = false;
