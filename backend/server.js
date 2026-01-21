@@ -14,13 +14,47 @@ const cors = require('cors');
 
 const app = express();
 
-// PostgreSQL connection - Use SSL for Railway, disable for localhost
-const isLocalDatabase = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('localhost');
+// PostgreSQL connection - Handle SSL for different environments
+let databaseUrl = process.env.DATABASE_URL || '';
+
+// Remove sslmode from URL to prevent conflicts - we'll set it programmatically
+const originalUrl = databaseUrl;
+databaseUrl = databaseUrl.replace(/[?&]sslmode=[^&]+/, '');
+
+// Debug: Log connection info (without password)
+const safeUrl = databaseUrl.replace(/:[^:@]+@/, ':****@');
+console.log('🔗 Database URL pattern:', safeUrl);
+console.log('🔗 Original had sslmode:', originalUrl.includes('sslmode'));
+console.log('🔗 RAILWAY_ENVIRONMENT:', process.env.RAILWAY_ENVIRONMENT);
+
+// Determine SSL configuration
+const isRailway = !!process.env.RAILWAY_ENVIRONMENT;
+const isRailwayInternal = databaseUrl.includes('.railway.internal');
+const isLocalDatabase = databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1');
+
+// Railway proxy connections need SSL with relaxed certificate checking
+let sslConfig;
+if (isLocalDatabase || isRailwayInternal) {
+  sslConfig = false;
+  console.log('🔒 SSL: Disabled (local or Railway internal)');
+} else if (isRailway || databaseUrl.includes('proxy.rlwy.net')) {
+  // Railway proxy - use SSL but don't verify certificate
+  sslConfig = { rejectUnauthorized: false };
+  console.log('🔒 SSL: Enabled with rejectUnauthorized=false (Railway proxy)');
+} else {
+  sslConfig = { rejectUnauthorized: false };
+  console.log('🔒 SSL: Enabled with rejectUnauthorized=false (default)');
+}
+
+// Allow manual override via environment variable
+if (process.env.DATABASE_SSL === 'false' || process.env.PGSSLMODE === 'disable') {
+  sslConfig = false;
+  console.log('🔒 SSL: Manually disabled via environment variable');
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: isLocalDatabase ? false : {
-    rejectUnauthorized: false
-  }
+  connectionString: databaseUrl,
+  ssl: sslConfig
 });
 
 // Test database connection on startup
