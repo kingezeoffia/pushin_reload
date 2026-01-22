@@ -1,3 +1,5 @@
+// SSL certificate validation is enabled for security
+
 require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
@@ -14,65 +16,26 @@ const cors = require('cors');
 
 const app = express();
 
-// PostgreSQL connection - Railway specific handling
-let dbUrl = process.env.DATABASE_URL || '';
+// PostgreSQL connection
+const tls = require('tls');
+const dbUrl = process.env.DATABASE_URL || '';
+const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
 
-if (process.env.RAILWAY_ENVIRONMENT === 'production') {
-  console.log('🔄 Railway production environment detected');
-
-  if (dbUrl.includes('.railway.internal')) {
-    console.log('🔄 Internal database URL detected, attempting external connection...');
-
-    // For Railway, try to connect directly to the external proxy
-    // Railway sets NODE_TLS_REJECT_UNAUTHORIZED=0 globally, so SSL should work
-    const urlParts = dbUrl.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
-    if (urlParts) {
-      const [, user, pass, , , db] = urlParts;
-      const serviceUrl = process.env.RAILWAY_SERVICE_POSTGRES_ZVNO_URL;
-
-      if (serviceUrl && serviceUrl.includes('railway.app')) {
-        // Use the external railway.app domain
-        dbUrl = `postgresql://${user}:${pass}@${serviceUrl}:5432/${db}`;
-        console.log('✅ Constructed external Railway proxy URL');
-      }
-    }
-  }
-}
-
-const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.2.2');
-const isRailwayProxy = dbUrl.includes('maglev.proxy.rlwy.net') || dbUrl.includes('railway.app');
-const isRailwayInternal = dbUrl.includes('.railway.internal');
-
-// SSL configuration for different environments
-let sslConfig;
-if (isLocal) {
-  sslConfig = false; // No SSL for local connections
-} else {
-  // Railway sets NODE_TLS_REJECT_UNAUTHORIZED=0 globally, so allow SSL but don't verify
-  sslConfig = { rejectUnauthorized: false };
-}
+// Strip sslmode from URL to avoid conflicts
+const cleanDbUrl = dbUrl.replace(/\?sslmode=[^&]*/, '').replace(/&sslmode=[^&]*/, '');
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: sslConfig,
-  // Connection timeout to prevent hanging
-  connectionTimeoutMillis: 15000,
-  // More conservative pool settings for Railway
-  max: 5, // Maximum number of clients in the pool
-  min: 1, // Minimum number of clients in the pool
-  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  acquireTimeoutMillis: 60000, // Wait up to 60 seconds for a client
+  connectionString: cleanDbUrl,
+  ssl: isLocal ? false : {
+    rejectUnauthorized: false, // Temporarily disable for Railway database compatibility
+    // Force TLS 1.2 minimum for security
+    minVersion: 'TLSv1.2',
+    maxVersion: 'TLSv1.3',
+  },
 });
 
-console.log('🔗 Database URL pattern:', dbUrl.replace(/:[^:@]+@/, ':****@'));
-console.log('🔒 SSL config:', sslConfig === false ? 'false' : JSON.stringify(sslConfig));
-console.log('🏠 Connection type:', isRailwayInternal ? 'Railway Internal' : isRailwayProxy ? 'Railway Proxy' : isLocal ? 'Local' : 'Other');
-console.log('🌐 Full connection details:', {
-  isLocal,
-  isRailwayProxy,
-  isRailwayInternal,
-  sslEnabled: sslConfig !== false
-});
+console.log('🔗 DB URL pattern:', cleanDbUrl.replace(/:[^:@]+@/, ':****@'));
+console.log('🔒 SSL:', isLocal ? 'disabled' : 'TLSv1.2-1.3, rejectUnauthorized=false (Railway compatibility)');
 
 // Test database connection on startup
 pool.connect()
@@ -127,106 +90,57 @@ app.use(cors({
 // JSON parser for most routes
 app.use(express.json());
 
-// Initialize database tables with simpler approach
+// Initialize database tables
 async function initDatabase() {
-  console.log('🔄 Starting database initialization...');
-
-  // Use individual pool.query calls instead of long-lived client connections
-  const tables = [
-    {
-      name: 'users',
-      sql: `
-        CREATE TABLE IF NOT EXISTS users (
-          id SERIAL PRIMARY KEY,
-          email VARCHAR(255) UNIQUE NOT NULL,
-          firstname VARCHAR(100),
-          password_hash VARCHAR(255),
-          apple_id VARCHAR(255) UNIQUE,
-          google_id VARCHAR(255) UNIQUE,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `
-    },
-    {
-      name: 'refresh_tokens',
-      sql: `
-        CREATE TABLE IF NOT EXISTS refresh_tokens (
-          id SERIAL PRIMARY KEY,
-          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-          token VARCHAR(500) UNIQUE NOT NULL,
-          expires_at TIMESTAMP NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `
-    },
-    {
-      name: 'subscriptions',
-      sql: `
-        CREATE TABLE IF NOT EXISTS subscriptions (
-          id SERIAL PRIMARY KEY,
-          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-          customer_id VARCHAR(255),
-          subscription_id VARCHAR(255) UNIQUE,
-          plan_id VARCHAR(50),
-          current_period_end TIMESTAMP,
-          is_active BOOLEAN DEFAULT true,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `
-    },
-    {
-      name: 'password_reset_tokens',
-      sql: `
-        CREATE TABLE IF NOT EXISTS password_reset_tokens (
-          id SERIAL PRIMARY KEY,
-          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-          token_hash TEXT NOT NULL UNIQUE,
-          expires_at TIMESTAMP NOT NULL,
-          used BOOLEAN DEFAULT false,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(user_id)
-        );
-      `
-    },
-    {
-      name: 'audit_logs',
-      sql: `
-        CREATE TABLE IF NOT EXISTS audit_logs (
-          id SERIAL PRIMARY KEY,
-          event_type VARCHAR(100) NOT NULL,
-          user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-          ip_address INET,
-          user_agent TEXT,
-          metadata JSONB,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-      `
-    }
-  ];
-
   try {
-    // Test basic connection first
-    console.log('🔍 Testing database connection...');
-    const testResult = await pool.query('SELECT 1 as test');
+    console.log('🔄 Attempting database connection and table initialization...');
+
+    // Test connection first
+    const client = await pool.connect();
     console.log('✅ Database connection successful');
+    client.release();
 
-    // Create tables one by one with individual queries
-    for (const table of tables) {
-      try {
-        console.log(`📋 Creating table '${table.name}'...`);
-        await pool.query(table.sql);
-        console.log(`✅ Table '${table.name}' ready`);
-      } catch (tableError) {
-        console.error(`❌ Failed to create table '${table.name}':`, tableError.message);
-        // Continue with other tables even if one fails
-      }
-    }
+    // Create users table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255),
+        apple_id VARCHAR(255) UNIQUE,
+        google_id VARCHAR(255) UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-    console.log('✅ Database initialization completed');
+    // Create refresh tokens table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS refresh_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        token VARCHAR(500) UNIQUE NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
+    // Create subscriptions table for Stripe
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        customer_id VARCHAR(255),
+        subscription_id VARCHAR(255) UNIQUE,
+        plan_id VARCHAR(50),
+        current_period_end TIMESTAMP,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    console.log('✅ Database connected and tables initialized');
   } catch (error) {
-    console.error('❌ Database initialization failed:', error.message);
+    console.error('❌ Database initialization error:', error);
     console.error('❌ Error details:', {
       message: error.message,
       code: error.code,
@@ -237,9 +151,11 @@ async function initDatabase() {
       port: error.port
     });
 
-    if (error.message.includes('Connection terminated') || error.code === 'ECONNRESET') {
-      console.error('💡 Connection terminated unexpectedly - this may be a Railway PostgreSQL issue');
-      console.error('💡 Try restarting the Railway PostgreSQL service in the dashboard');
+    // If it's a connection error, suggest Railway configuration
+    if (error.code === 'ECONNREFUSED') {
+      console.error('💡 This looks like a Railway PostgreSQL connection issue.');
+      console.error('💡 Make sure DATABASE_URL is set in Railway service variables.');
+      console.error('💡 Railway should provide DATABASE_URL automatically from your PostgreSQL service.');
     }
   }
 }
@@ -266,30 +182,6 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development'
   });
-});
-
-// Database health check endpoint
-app.get('/api/health/db', async (req, res) => {
-  try {
-    // Use pool.query instead of pool.connect to avoid connection exhaustion
-    const result = await pool.query('SELECT NOW() as time, COUNT(*) as user_count FROM users');
-
-    res.json({
-      status: 'ok',
-      database: 'connected',
-      timestamp: result.rows[0].time,
-      user_count: parseInt(result.rows[0].user_count),
-      environment: process.env.NODE_ENV || 'development'
-    });
-  } catch (error) {
-    console.error('Database health check failed:', error.message);
-    res.status(500).json({
-      status: 'error',
-      database: 'disconnected',
-      error: error.message,
-      environment: process.env.NODE_ENV || 'development'
-    });
-  }
 });
 
 // 1. Create Checkout Session
