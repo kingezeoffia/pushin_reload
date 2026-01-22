@@ -46,11 +46,11 @@ if (isLocal) {
 } else if (isRailwayInternal) {
   sslConfig = false; // Railway internal connections don't need SSL
 } else {
-  // Railway external proxy - try without SSL first to test connectivity
-  console.log('🔒 Testing Railway external connection without SSL first...');
-  sslConfig = false; // Try without SSL initially
-
-  // If that fails, we can try with SSL later
+  // Railway external proxy requires SSL
+  sslConfig = {
+    rejectUnauthorized: false,
+    // Railway uses self-signed certificates
+  };
 }
 
 const pool = new Pool({
@@ -66,8 +66,14 @@ const pool = new Pool({
 });
 
 console.log('🔗 Database URL pattern:', dbUrl.replace(/:[^:@]+@/, ':****@'));
-console.log('🔒 SSL config:', JSON.stringify(sslConfig));
+console.log('🔒 SSL config:', sslConfig === false ? 'false' : JSON.stringify(sslConfig));
 console.log('🏠 Connection type:', isRailwayInternal ? 'Railway Internal' : isRailwayProxy ? 'Railway Proxy' : isLocal ? 'Local' : 'Other');
+console.log('🌐 Full connection details:', {
+  isLocal,
+  isRailwayProxy,
+  isRailwayInternal,
+  sslEnabled: sslConfig !== false
+});
 
 // Test database connection on startup
 pool.connect()
