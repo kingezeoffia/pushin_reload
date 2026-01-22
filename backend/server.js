@@ -97,28 +97,35 @@ app.use(express.json());
 
 // Initialize database tables
 async function initDatabase() {
+  let client;
   try {
     console.log('🔄 Attempting database connection and table initialization...');
 
-    // Test connection first
-    const client = await pool.connect();
+    // Test connection first with timeout
+    client = await pool.connect();
     console.log('✅ Database connection successful');
-    client.release();
+
+    // Set a statement timeout to prevent hanging
+    await client.query('SET statement_timeout = 30000'); // 30 seconds
 
     // Create users table
-    await pool.query(`
+    console.log('📋 Creating users table...');
+    await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
+        firstname VARCHAR(100),
         password_hash VARCHAR(255),
         apple_id VARCHAR(255) UNIQUE,
         google_id VARCHAR(255) UNIQUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    console.log('✅ Users table ready');
 
     // Create refresh tokens table
-    await pool.query(`
+    console.log('📋 Creating refresh_tokens table...');
+    await client.query(`
       CREATE TABLE IF NOT EXISTS refresh_tokens (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -127,9 +134,11 @@ async function initDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    console.log('✅ Refresh tokens table ready');
 
     // Create subscriptions table for Stripe
-    await pool.query(`
+    console.log('📋 Creating subscriptions table...');
+    await client.query(`
       CREATE TABLE IF NOT EXISTS subscriptions (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -142,10 +151,41 @@ async function initDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    console.log('✅ Subscriptions table ready');
 
-    console.log('✅ Database connected and tables initialized');
+    // Create password reset tokens table
+    console.log('📋 Creating password_reset_tokens table...');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        token_hash TEXT NOT NULL UNIQUE,
+        expires_at TIMESTAMP NOT NULL,
+        used BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id)
+      );
+    `);
+    console.log('✅ Password reset tokens table ready');
+
+    // Create audit logs table
+    console.log('📋 Creating audit_logs table...');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id SERIAL PRIMARY KEY,
+        event_type VARCHAR(100) NOT NULL,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        ip_address INET,
+        user_agent TEXT,
+        metadata JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('✅ Audit logs table ready');
+
+    console.log('✅ Database connected and all tables initialized successfully');
   } catch (error) {
-    console.error('❌ Database initialization error:', error);
+    console.error('❌ Database initialization error:', error.message);
     console.error('❌ Error details:', {
       message: error.message,
       code: error.code,
@@ -153,14 +193,20 @@ async function initDatabase() {
       syscall: error.syscall,
       hostname: error.hostname,
       host: error.host,
-      port: error.port
+      port: error.port,
+      stack: error.stack
     });
 
     // If it's a connection error, suggest Railway configuration
-    if (error.code === 'ECONNREFUSED') {
+    if (error.code === 'ECONNREFUSED' || error.message.includes('Connection terminated')) {
       console.error('💡 This looks like a Railway PostgreSQL connection issue.');
       console.error('💡 Make sure DATABASE_URL is set in Railway service variables.');
       console.error('💡 Railway should provide DATABASE_URL automatically from your PostgreSQL service.');
+      console.error('💡 Try checking Railway dashboard → PostgreSQL service → Connect tab');
+    }
+  } finally {
+    if (client) {
+      client.release();
     }
   }
 }
@@ -187,6 +233,31 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development'
   });
+});
+
+// Database health check endpoint
+app.get('/api/health/db', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    const result = await client.query('SELECT NOW() as time, COUNT(*) as user_count FROM users');
+    client.release();
+
+    res.json({
+      status: 'ok',
+      database: 'connected',
+      timestamp: result.rows[0].time,
+      user_count: parseInt(result.rows[0].user_count),
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    console.error('Database health check failed:', error.message);
+    res.status(500).json({
+      status: 'error',
+      database: 'disconnected',
+      error: error.message,
+      environment: process.env.NODE_ENV || 'development'
+    });
+  }
 });
 
 // 1. Create Checkout Session
