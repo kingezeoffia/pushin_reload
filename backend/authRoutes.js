@@ -80,6 +80,8 @@ router.post('/register', async (req, res) => {
 
     const { email, password, name } = req.body;
 
+    console.log('🔍 Starting registration process...');
+
     if (!email || !password) {
       return res.status(400).json({
         success: false,
@@ -102,7 +104,9 @@ router.post('/register', async (req, res) => {
     // Get pool from app locals (set in main server.js)
     const pool = req.app.locals.pool;
 
+    console.log('🔍 About to call registerUser...');
     const result = await auth.registerUser(pool, email, password, name);
+    console.log('✅ registerUser completed successfully');
 
     console.log('✅ User registered successfully:', result.user.id);
 
@@ -122,18 +126,11 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    console.error('📝 Registration error details:', {
-      message: error.message,
-      code: error.code,
-      table: error.table,
-      constraint: error.constraint
-    });
-
     res.status(500).json({
       success: false,
       error: 'Registration failed',
       code: 'REGISTRATION_ERROR',
-      details: error.message // Temporary for debugging
+      details: error.message // Temporary: for debugging
     });
   }
 });
