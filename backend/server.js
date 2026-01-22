@@ -244,9 +244,8 @@ app.get('/api/health', (req, res) => {
 // Database health check endpoint
 app.get('/api/health/db', async (req, res) => {
   try {
-    const client = await pool.connect();
-    const result = await client.query('SELECT NOW() as time, COUNT(*) as user_count FROM users');
-    client.release();
+    // Use pool.query instead of pool.connect to avoid connection exhaustion
+    const result = await pool.query('SELECT NOW() as time, COUNT(*) as user_count FROM users');
 
     res.json({
       status: 'ok',
