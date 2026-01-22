@@ -35,7 +35,12 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: sslConfig,
   // Connection timeout to prevent hanging
-  connectionTimeoutMillis: 10000,
+  connectionTimeoutMillis: 15000,
+  // More conservative pool settings for Railway
+  max: 5, // Maximum number of clients in the pool
+  min: 1, // Minimum number of clients in the pool
+  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+  acquireTimeoutMillis: 60000, // Wait up to 60 seconds for a client
 });
 
 console.log('🔗 Database URL pattern:', dbUrl.replace(/:[^:@]+@/, ':****@'));
@@ -95,118 +100,133 @@ app.use(cors({
 // JSON parser for most routes
 app.use(express.json());
 
-// Initialize database tables
-async function initDatabase() {
-  let client;
-  try {
-    console.log('🔄 Attempting database connection and table initialization...');
+// Initialize database tables with retry logic
+async function initDatabase(maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    let client;
+    try {
+      console.log(`🔄 Attempting database connection and table initialization (attempt ${attempt}/${maxRetries})...`);
 
-    // Test connection first with timeout
-    client = await pool.connect();
-    console.log('✅ Database connection successful');
+      // Test connection first with timeout
+      console.log('🔍 Testing database connection...');
+      client = await pool.connect();
+      console.log('✅ Database connection successful');
 
-    // Set a statement timeout to prevent hanging
-    await client.query('SET statement_timeout = 30000'); // 30 seconds
+      // Test a simple query first
+      const testResult = await client.query('SELECT 1 as test');
+      console.log('✅ Basic query test passed:', testResult.rows[0]);
 
-    // Create users table
-    console.log('📋 Creating users table...');
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        firstname VARCHAR(100),
-        password_hash VARCHAR(255),
-        apple_id VARCHAR(255) UNIQUE,
-        google_id VARCHAR(255) UNIQUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    console.log('✅ Users table ready');
+      // Set a statement timeout to prevent hanging
+      await client.query('SET statement_timeout = 30000'); // 30 seconds
 
-    // Create refresh tokens table
-    console.log('📋 Creating refresh_tokens table...');
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS refresh_tokens (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        token VARCHAR(500) UNIQUE NOT NULL,
-        expires_at TIMESTAMP NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    console.log('✅ Refresh tokens table ready');
+      // Create users table
+      console.log('📋 Creating users table...');
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          firstname VARCHAR(100),
+          password_hash VARCHAR(255),
+          apple_id VARCHAR(255) UNIQUE,
+          google_id VARCHAR(255) UNIQUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('✅ Users table ready');
 
-    // Create subscriptions table for Stripe
-    console.log('📋 Creating subscriptions table...');
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS subscriptions (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        customer_id VARCHAR(255),
-        subscription_id VARCHAR(255) UNIQUE,
-        plan_id VARCHAR(50),
-        current_period_end TIMESTAMP,
-        is_active BOOLEAN DEFAULT true,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    console.log('✅ Subscriptions table ready');
+      // Create refresh tokens table
+      console.log('📋 Creating refresh_tokens table...');
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS refresh_tokens (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          token VARCHAR(500) UNIQUE NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('✅ Refresh tokens table ready');
 
-    // Create password reset tokens table
-    console.log('📋 Creating password_reset_tokens table...');
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS password_reset_tokens (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        token_hash TEXT NOT NULL UNIQUE,
-        expires_at TIMESTAMP NOT NULL,
-        used BOOLEAN DEFAULT false,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id)
-      );
-    `);
-    console.log('✅ Password reset tokens table ready');
+      // Create subscriptions table for Stripe
+      console.log('📋 Creating subscriptions table...');
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS subscriptions (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          customer_id VARCHAR(255),
+          subscription_id VARCHAR(255) UNIQUE,
+          plan_id VARCHAR(50),
+          current_period_end TIMESTAMP,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('✅ Subscriptions table ready');
 
-    // Create audit logs table
-    console.log('📋 Creating audit_logs table...');
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS audit_logs (
-        id SERIAL PRIMARY KEY,
-        event_type VARCHAR(100) NOT NULL,
-        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-        ip_address INET,
-        user_agent TEXT,
-        metadata JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    console.log('✅ Audit logs table ready');
+      // Create password reset tokens table
+      console.log('📋 Creating password_reset_tokens table...');
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          token_hash TEXT NOT NULL UNIQUE,
+          expires_at TIMESTAMP NOT NULL,
+          used BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id)
+        );
+      `);
+      console.log('✅ Password reset tokens table ready');
 
-    console.log('✅ Database connected and all tables initialized successfully');
-  } catch (error) {
-    console.error('❌ Database initialization error:', error.message);
-    console.error('❌ Error details:', {
-      message: error.message,
-      code: error.code,
-      errno: error.errno,
-      syscall: error.syscall,
-      hostname: error.hostname,
-      host: error.host,
-      port: error.port,
-      stack: error.stack
-    });
+      // Create audit logs table
+      console.log('📋 Creating audit_logs table...');
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS audit_logs (
+          id SERIAL PRIMARY KEY,
+          event_type VARCHAR(100) NOT NULL,
+          user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          ip_address INET,
+          user_agent TEXT,
+          metadata JSONB,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      console.log('✅ Audit logs table ready');
 
-    // If it's a connection error, suggest Railway configuration
-    if (error.code === 'ECONNREFUSED' || error.message.includes('Connection terminated')) {
-      console.error('💡 This looks like a Railway PostgreSQL connection issue.');
-      console.error('💡 Make sure DATABASE_URL is set in Railway service variables.');
-      console.error('💡 Railway should provide DATABASE_URL automatically from your PostgreSQL service.');
-      console.error('💡 Try checking Railway dashboard → PostgreSQL service → Connect tab');
-    }
-  } finally {
-    if (client) {
-      client.release();
+      console.log('✅ Database connected and all tables initialized successfully');
+      return; // Success, exit the retry loop
+
+    } catch (error) {
+      console.error(`❌ Database initialization error (attempt ${attempt}/${maxRetries}):`, error.message);
+
+      if (attempt === maxRetries) {
+        console.error('❌ Error details:', {
+          message: error.message,
+          code: error.code,
+          errno: error.errno,
+          syscall: error.syscall,
+          hostname: error.hostname,
+          host: error.host,
+          port: error.port,
+          stack: error.stack
+        });
+
+        // If it's a connection error, suggest Railway configuration
+        if (error.code === 'ECONNREFUSED' || error.message.includes('Connection terminated')) {
+          console.error('💡 This looks like a Railway PostgreSQL connection issue.');
+          console.error('💡 Make sure DATABASE_URL is set in Railway service variables.');
+          console.error('💡 Railway should provide DATABASE_URL automatically from your PostgreSQL service.');
+          console.error('💡 Try checking Railway dashboard → PostgreSQL service → Connect tab');
+        }
+      } else {
+        console.log(`⏳ Retrying database initialization in 5 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+    } finally {
+      if (client) {
+        client.release();
+      }
     }
   }
 }
