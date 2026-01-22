@@ -14,6 +14,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const crypto = require('crypto');
+const https = require('https');
+const tls = require('tls');
 
 /**
  * Validate password against security policy
@@ -185,7 +187,21 @@ async function removeUserRefreshTokens(pool, userId) {
  */
 async function verifyGoogleToken(idToken) {
   try {
-    const response = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+    // Configure axios with proper SSL settings for Google OAuth
+    const httpsAgent = new https.Agent({
+      rejectUnauthorized: true, // Enable SSL certificate validation
+      // Use standard root certificates
+      ca: tls.rootCertificates,
+      // Additional timeout and retry settings
+      timeout: 10000,
+      keepAlive: false
+    });
+
+    const response = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`, {
+      httpsAgent: httpsAgent,
+      timeout: 10000 // 10 second timeout
+    });
+
     return response.data;
   } catch (error) {
     console.error('Google token verification failed:', error.message);
@@ -201,26 +217,56 @@ async function verifyGoogleToken(idToken) {
  * @returns {Promise<Object>} User data and tokens
  */
 async function registerUser(pool, email, password, firstname = null) {
-  // Check if user already exists
-  const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-  if (existingUser.rows.length > 0) {
-    throw new Error('User already exists with this email');
+  try {
+    console.log('🔍 Registration: Checking if user exists...');
+    // Check if user already exists
+    const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    if (existingUser.rows.length > 0) {
+      throw new Error('User already exists with this email');
+    }
+    console.log('✅ User existence check passed');
+
+    console.log('🔍 Registration: Hashing password...');
+    // Hash password and create user
+    const passwordHash = await hashPassword(password);
+    console.log('✅ Password hashed successfully');
+
+    console.log('🔍 Registration: Creating user...');
+    const result = await pool.query(
+      'INSERT INTO users (email, firstname, password_hash) VALUES ($1, $2, $3) RETURNING id, email, firstname, created_at',
+      [email, firstname, passwordHash]
+    );
+    console.log('✅ User created successfully');
+
+    const user = result.rows[0];
+
+    console.log('🔍 Registration: Generating tokens...');
+    // Generate tokens
+    const { accessToken, refreshToken } = generateTokens(user.id);
+    console.log('✅ Tokens generated successfully');
+
+    console.log('🔍 Registration: Storing refresh token...');
+    // Store refresh token
+    await storeRefreshToken(pool, user.id, refreshToken);
+    console.log('✅ Refresh token stored successfully');
+
+    console.log('✅ Registration completed successfully');
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        firstname: user.firstname,
+        createdAt: user.created_at
+      },
+      isNewUser: true, // Always true for registration
+      accessToken,
+      refreshToken
+    };
+  } catch (error) {
+    console.error('❌ Registration failed:', error.message);
+    console.error('❌ Error stack:', error.stack);
+    throw error;
   }
-
-  // Hash password and create user
-  const passwordHash = await hashPassword(password);
-  const result = await pool.query(
-    'INSERT INTO users (email, firstname, password_hash) VALUES ($1, $2, $3) RETURNING id, email, firstname, created_at',
-    [email, firstname, passwordHash]
-  );
-
-  const user = result.rows[0];
-
-  // Generate tokens
-  const { accessToken, refreshToken } = generateTokens(user.id);
-
-  // Store refresh token
-  await storeRefreshToken(pool, user.id, refreshToken);
 
   return {
     user: {
