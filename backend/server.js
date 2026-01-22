@@ -14,23 +14,23 @@ const cors = require('cors');
 
 const app = express();
 
-// PostgreSQL connection - Try external proxy first, fallback to internal
+// PostgreSQL connection - Use external proxy for Railway
 let dbUrl = process.env.DATABASE_URL || '';
 
-// If using Railway internal URL, try to use external proxy instead
-if (dbUrl.includes('.railway.internal')) {
-  console.log('🔄 Detected Railway internal database URL, attempting to use external proxy...');
+// For Railway production, always try to use external proxy
+if (process.env.RAILWAY_ENVIRONMENT === 'production' && dbUrl.includes('.railway.internal')) {
+  console.log('🔄 Railway production detected, switching to external proxy URL...');
 
-  // Try to construct external proxy URL from Railway service URL
-  const serviceUrl = process.env.RAILWAY_SERVICE_POSTGRES_ZVNO_URL;
-  if (serviceUrl) {
-    // Extract components from internal URL
-    const urlParts = dbUrl.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
-    if (urlParts) {
-      const [, user, pass, , , db] = urlParts;
-      // Construct external proxy URL
+  // Extract credentials from internal URL and use external proxy
+  const urlParts = dbUrl.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
+  if (urlParts) {
+    const [, user, pass, , , db] = urlParts;
+    const serviceUrl = process.env.RAILWAY_SERVICE_POSTGRES_ZVNO_URL;
+
+    if (serviceUrl) {
+      // Use Railway's external proxy format
       dbUrl = `postgresql://${user}:${pass}@${serviceUrl}:5432/${db}`;
-      console.log('✅ Using external proxy URL:', dbUrl.replace(/:[^:@]+@/, ':****@'));
+      console.log('✅ Using Railway external proxy URL');
     }
   }
 }
@@ -46,8 +46,15 @@ if (isLocal) {
 } else if (isRailwayInternal) {
   sslConfig = false; // Railway internal connections don't need SSL
 } else {
-  // External connections (including Railway proxy) need SSL but relaxed validation
-  sslConfig = { rejectUnauthorized: false };
+  // Railway external proxy needs SSL with relaxed validation
+  sslConfig = {
+    rejectUnauthorized: false,
+    // Additional SSL options for Railway
+    ca: null,
+    cert: null,
+    key: null,
+    checkServerIdentity: () => undefined
+  };
 }
 
 const pool = new Pool({
