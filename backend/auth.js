@@ -13,6 +13,84 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
+const crypto = require('crypto');
+
+/**
+ * Validate password against security policy
+ * @param {string} password - Password to validate
+ * @returns {Object} Validation result with isValid and errors array
+ */
+function validatePasswordPolicy(password) {
+  const errors = [];
+
+  // Minimum length
+  if (password.length < 8) {
+    errors.push('Password must be at least 8 characters long');
+  }
+
+  // Maximum length (prevent DoS)
+  if (password.length > 128) {
+    errors.push('Password must be no more than 128 characters long');
+  }
+
+  // Require at least one uppercase letter
+  if (!/[A-Z]/.test(password)) {
+    errors.push('Password must contain at least one uppercase letter');
+  }
+
+  // Require at least one lowercase letter
+  if (!/[a-z]/.test(password)) {
+    errors.push('Password must contain at least one lowercase letter');
+  }
+
+  // Require at least one number
+  if (!/\d/.test(password)) {
+    errors.push('Password must contain at least one number');
+  }
+
+  // Require at least one special character
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    errors.push('Password must contain at least one special character');
+  }
+
+  // Check for common weak passwords (basic check)
+  const commonPasswords = ['password', '12345678', 'qwerty', 'abc123', 'password123'];
+  if (commonPasswords.includes(password.toLowerCase())) {
+    errors.push('Password is too common and easily guessable');
+  }
+
+  // Check for repeated characters (more than 3 in a row)
+  if (/(.)\1{3,}/.test(password)) {
+    errors.push('Password cannot contain more than 3 repeated characters in a row');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors: errors
+  };
+}
+
+/**
+ * Log security audit event
+ * @param {Object} pool - Database connection pool
+ * @param {string} eventType - Type of event (e.g., 'password_reset_initiated')
+ * @param {number|null} userId - User ID if applicable
+ * @param {string} ipAddress - Client IP address
+ * @param {string} userAgent - Client user agent
+ * @param {Object} metadata - Additional event data
+ */
+async function logAuditEvent(pool, eventType, userId = null, ipAddress = null, userAgent = null, metadata = {}) {
+  try {
+    await pool.query(
+      `INSERT INTO audit_logs (event_type, user_id, ip_address, user_agent, metadata, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [eventType, userId, ipAddress, userAgent, JSON.stringify(metadata)]
+    );
+  } catch (error) {
+    // Log to console as fallback, but don't fail the operation
+    console.error('Failed to write audit log:', error.message);
+  }
+}
 
 // JWT Configuration
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
@@ -461,6 +539,251 @@ async function logoutUser(pool, userId) {
   await removeUserRefreshTokens(pool, userId);
 }
 
+/**
+ * Initiate password reset by generating secure token and sending email
+ * @param {Object} pool - Database connection pool
+ * @param {string} email - User email
+ * @param {string} clientIp - Client IP address
+ * @param {string} userAgent - Client user agent
+ */
+async function initiatePasswordReset(pool, email, clientIp, userAgent) {
+  console.log(`🔑 Password reset initiated - Email: ${email}, IP: ${clientIp}`);
+
+  // Check if user exists
+  const userResult = await pool.query(
+    'SELECT id, email FROM users WHERE email = $1',
+    [email.toLowerCase()]
+  );
+
+  let userExists = true;
+  let userId = null;
+
+  if (userResult.rows.length === 0) {
+    userExists = false;
+  } else {
+    userId = userResult.rows[0].id;
+  }
+
+  // Log the attempt
+  await logAuditEvent(pool, 'password_reset_initiated', userId, clientIp, userAgent, {
+    email: email,
+    user_exists: userExists
+  });
+
+  if (!userExists) {
+    // Don't throw error - return success for security
+    console.log(`🔑 Password reset attempted for non-existent email: ${email}`);
+    return { emailSent: true };
+  }
+
+  const user = userResult.rows[0];
+
+  // Generate cryptographically secure random token (32 bytes = 64 hex chars)
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+  // Store only the hashed token in database with expiration
+  await pool.query(
+    `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, used, created_at)
+     VALUES ($1, $2, $3, false, NOW())
+     ON CONFLICT (user_id)
+     DO UPDATE SET token_hash = $2, expires_at = $3, used = false, created_at = NOW()`,
+    [user.id, tokenHash, new Date(Date.now() + 15 * 60 * 1000)]
+  );
+
+  // Log security event (don't log the actual token)
+  console.log(`✅ Password reset token created for user ${user.id} (${email})`);
+
+  try {
+    // Send reset email with the actual token (not the hash)
+    await sendPasswordResetEmail(user.email, resetToken);
+
+    await logAuditEvent(pool, 'password_reset_email_sent', user.id, clientIp, userAgent, {
+      email: email
+    });
+
+    console.log(`📧 Password reset email sent to ${email}`);
+    return { emailSent: true };
+  } catch (emailError) {
+    // Email failed - clean up the token to prevent orphaned tokens
+    await pool.query(
+      'DELETE FROM password_reset_tokens WHERE token_hash = $1',
+      [tokenHash]
+    );
+
+    await logAuditEvent(pool, 'password_reset_email_failed', user.id, clientIp, userAgent, {
+      email: email,
+      error: emailError.message
+    });
+
+    console.error(`❌ Password reset email failed for ${email}: ${emailError.message}`);
+    throw new Error('Failed to send password reset email');
+  }
+}
+
+/**
+ * Reset password using valid token
+ * @param {Object} pool - Database connection pool
+ * @param {string} token - Reset token
+ * @param {string} newPassword - New password
+ */
+async function resetPassword(pool, token, newPassword, clientIp, userAgent) {
+  console.log(`🔄 Password reset attempt - TokenHash: ${crypto.createHash('sha256').update(token).digest('hex').substring(0, 8)}..., IP: ${clientIp}`);
+
+  try {
+    // Hash the provided token to compare with stored hash
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    // Check if token hash exists and is valid (atomic check)
+    const tokenResult = await pool.query(
+      `SELECT user_id, used FROM password_reset_tokens
+       WHERE token_hash = $1 AND expires_at > NOW()`,
+      [tokenHash]
+    );
+
+    if (tokenResult.rows.length === 0) {
+      await logAuditEvent(pool, 'password_reset_token_invalid', null, clientIp, userAgent, {
+        token_hash_prefix: tokenHash.substring(0, 8),
+        reason: 'token_not_found_or_expired'
+      });
+      console.log(`❌ Password reset attempted with invalid/expired token`);
+      throw new Error('Invalid or expired token');
+    }
+
+    const tokenData = tokenResult.rows[0];
+    const userId = tokenData.user_id;
+
+    // Check if token was already used (double-check after initial query)
+    if (tokenData.used) {
+      await logAuditEvent(pool, 'password_reset_token_reused', userId, clientIp, userAgent, {
+        token_hash_prefix: tokenHash.substring(0, 8)
+      });
+      console.log(`❌ Password reset attempted with already used token`);
+      throw new Error('Token has already been used');
+    }
+
+    // Validate password policy
+    const passwordValidation = validatePasswordPolicy(newPassword);
+    if (!passwordValidation.isValid) {
+      await logAuditEvent(pool, 'password_reset_policy_violation', userId, clientIp, userAgent, {
+        token_hash_prefix: tokenHash.substring(0, 8),
+        violations: passwordValidation.errors
+      });
+      throw new Error(`Password does not meet security requirements: ${passwordValidation.errors.join(', ')}`);
+    }
+
+    // Hash new password
+    const hashedPassword = await hashPassword(newPassword);
+
+    // Update password and mark token as used in a single atomic transaction
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Double-check token is still unused (race condition protection)
+      const tokenCheck = await client.query(
+        'SELECT used FROM password_reset_tokens WHERE token_hash = $1 AND used = false',
+        [tokenHash]
+      );
+
+      if (tokenCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        await logAuditEvent(pool, 'password_reset_token_reused', userId, clientIp, userAgent, {
+          token_hash_prefix: tokenHash.substring(0, 8),
+          reason: 'concurrent_usage'
+        });
+        throw new Error('Token has already been used');
+      }
+
+      // Update password
+      await client.query(
+        'UPDATE users SET password = $1 WHERE id = $2',
+        [hashedPassword, userId]
+      );
+
+      // Mark token as used with timestamp
+      await client.query(
+        'UPDATE password_reset_tokens SET used = true WHERE token_hash = $1',
+        [tokenHash]
+      );
+
+      // CRITICAL: Invalidate ALL refresh tokens for this user
+      await client.query(
+        'DELETE FROM refresh_tokens WHERE user_id = $1',
+        [userId]
+      );
+
+      await client.query('COMMIT');
+
+      // Log successful reset
+      await logAuditEvent(pool, 'password_reset_successful', userId, clientIp, userAgent, {
+        token_hash_prefix: tokenHash.substring(0, 8)
+      });
+
+      console.log(`✅ Password reset successful for user ${userId} - all sessions invalidated`);
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.log(`❌ Password reset transaction failed for user ${userId}: ${error.message}`);
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    return { passwordReset: true };
+  } catch (error) {
+    console.log(`❌ Password reset failed: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Send password reset email (placeholder - implement with your email service)
+ * @param {string} email - User email
+ * @param {string} resetToken - Reset token
+ */
+async function sendPasswordResetEmail(email, resetToken) {
+  // TODO: Implement email sending
+  // Use services like SendGrid, Mailgun, or AWS SES
+
+  const resetUrl = `${process.env.FRONTEND_URL || 'https://yourapp.com'}/reset-password?token=${resetToken}`;
+
+  console.log(`📧 Password reset email would be sent to ${email}`);
+  console.log(`🔗 Reset URL: ${resetUrl}`);
+
+  // Example with nodemailer:
+  /*
+  const nodemailer = require('nodemailer');
+
+  const transporter = nodemailer.createTransporter({
+    // Configure your email service
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    }
+  });
+
+  await transporter.sendMail({
+    from: process.env.EMAIL_FROM || 'noreply@pushinapp.com',
+    to: email,
+    subject: 'Reset your PUSHIN password',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h1 style="color: #6060FF;">Reset your PUSHIN password</h1>
+        <p>Hello,</p>
+        <p>You requested to reset your password for your PUSHIN account.</p>
+        <p>Click the button below to reset your password:</p>
+        <a href="${resetUrl}" style="display: inline-block; background-color: #6060FF; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 16px 0;">Reset Password</a>
+        <p><strong>This link expires in 15 minutes.</strong></p>
+        <p>If you didn't request this password reset, please ignore this email.</p>
+        <p>Best regards,<br>The PUSHIN Team</p>
+      </div>
+    `
+  });
+  */
+}
+
 module.exports = {
   // Password utilities
   hashPassword,
@@ -488,7 +811,17 @@ module.exports = {
 
   // JWT configuration
   JWT_SECRET,
-  JWT_REFRESH_SECRET
+  JWT_REFRESH_SECRET,
+
+  // Password validation
+  validatePasswordPolicy,
+
+  // Audit logging
+  logAuditEvent,
+
+  // Password reset functions
+  initiatePasswordReset,
+  resetPassword
 };
 
 

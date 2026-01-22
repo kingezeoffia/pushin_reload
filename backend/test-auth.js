@@ -8,9 +8,21 @@ const { Pool } = require('pg');
 const auth = require('./auth');
 
 // Test database connection
+const dbUrl = process.env.DATABASE_URL || '';
+const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
+
+// SSL configuration for different environments
+let sslConfig;
+if (isLocal) {
+  sslConfig = false; // No SSL for local connections
+} else {
+  // Railway/external connections need SSL but relaxed validation
+  sslConfig = { rejectUnauthorized: false };
+}
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: sslConfig
 });
 
 async function testAuthModule() {

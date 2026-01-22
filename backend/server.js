@@ -14,48 +14,33 @@ const cors = require('cors');
 
 const app = express();
 
-// PostgreSQL connection - Handle SSL for different environments
-let databaseUrl = process.env.DATABASE_URL || '';
+// PostgreSQL connection - Railway proxy with proper SSL
+const dbUrl = process.env.DATABASE_URL || '';
+const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
+const isRailwayProxy = dbUrl.includes('maglev.proxy.rlwy.net');
+const isRailwayInternal = dbUrl.includes('.railway.internal');
 
-// Remove sslmode from URL to prevent conflicts - we'll set it programmatically
-const originalUrl = databaseUrl;
-databaseUrl = databaseUrl.replace(/[?&]sslmode=[^&]+/, '');
-
-// Debug: Log connection info (without password)
-const safeUrl = databaseUrl.replace(/:[^:@]+@/, ':****@');
-console.log('🔗 Database URL pattern:', safeUrl);
-console.log('🔗 Original had sslmode:', originalUrl.includes('sslmode'));
-console.log('🔗 RAILWAY_ENVIRONMENT:', process.env.RAILWAY_ENVIRONMENT);
-
-// Determine SSL configuration
-const isRailway = !!process.env.RAILWAY_ENVIRONMENT;
-const isRailwayInternal = databaseUrl.includes('.railway.internal');
-const isLocalDatabase = databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1');
-
-// Railway proxy connections need SSL with relaxed certificate checking
+// SSL configuration for different environments
 let sslConfig;
-if (isLocalDatabase || isRailwayInternal) {
-  sslConfig = false;
-  console.log('🔒 SSL: Disabled (local or Railway internal)');
-} else if (isRailway || databaseUrl.includes('proxy.rlwy.net')) {
-  // Railway proxy - use SSL but don't verify certificate
-  sslConfig = { rejectUnauthorized: false };
-  console.log('🔒 SSL: Enabled with rejectUnauthorized=false (Railway proxy)');
+if (isLocal) {
+  sslConfig = false; // No SSL for local connections
+} else if (isRailwayInternal) {
+  sslConfig = false; // Railway internal connections don't need SSL
 } else {
+  // External connections (including Railway proxy) need SSL but relaxed validation
   sslConfig = { rejectUnauthorized: false };
-  console.log('🔒 SSL: Enabled with rejectUnauthorized=false (default)');
-}
-
-// Allow manual override via environment variable
-if (process.env.DATABASE_SSL === 'false' || process.env.PGSSLMODE === 'disable') {
-  sslConfig = false;
-  console.log('🔒 SSL: Manually disabled via environment variable');
 }
 
 const pool = new Pool({
-  connectionString: databaseUrl,
-  ssl: sslConfig
+  connectionString: process.env.DATABASE_URL,
+  ssl: sslConfig,
+  // Connection timeout to prevent hanging
+  connectionTimeoutMillis: 10000,
 });
+
+console.log('🔗 Database URL pattern:', dbUrl.replace(/:[^:@]+@/, ':****@'));
+console.log('🔒 SSL config:', JSON.stringify(sslConfig));
+console.log('🏠 Connection type:', isRailwayInternal ? 'Railway Internal' : isRailwayProxy ? 'Railway Proxy' : isLocal ? 'Local' : 'Other');
 
 // Test database connection on startup
 pool.connect()

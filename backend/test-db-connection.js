@@ -1,44 +1,67 @@
 /**
- * Test Database Connection
- * Quick script to verify DATABASE_URL is working
+ * Simple database connection test for Railway
  */
 
 require('dotenv').config();
 const { Pool } = require('pg');
 
+// Get database connection string
+const dbUrl = process.env.DATABASE_URL || process.env.DATABASE_PRIVATE_URL;
+
+if (!dbUrl) {
+  console.error('❌ No DATABASE_URL found');
+  process.exit(1);
+}
+
+console.log('🔗 Testing database connection...');
+console.log('URL:', dbUrl.replace(/:[^:@]+@/, ':****@'));
+
+// Configure SSL based on connection type
+const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
+const isRailwayInternal = dbUrl.includes('.railway.internal');
+
+let sslConfig;
+if (isLocal) {
+  sslConfig = false;
+} else if (isRailwayInternal) {
+  sslConfig = false; // Railway internal doesn't need SSL
+} else {
+  sslConfig = { rejectUnauthorized: false };
+}
+
+console.log('🔒 SSL config:', sslConfig);
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  connectionString: dbUrl,
+  ssl: sslConfig,
 });
 
 async function testConnection() {
-  console.log('🧪 Testing Database Connection');
-  console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
-  
   try {
     const client = await pool.connect();
-    console.log('✅ Connected to database successfully!');
-    
-    // Test if tables exist
-    const result = await client.query(`
-      SELECT table_name 
-      FROM information_schema.tables 
+    console.log('✅ Connected to database');
+
+    // Test a simple query
+    const result = await client.query('SELECT NOW() as time, version() as version');
+    console.log('⏰ Server time:', result.rows[0].time);
+    console.log('🐘 PostgreSQL version:', result.rows[0].version.split(',')[0]);
+
+    // Check if users table exists
+    const tablesResult = await client.query(`
+      SELECT table_name
+      FROM information_schema.tables
       WHERE table_schema = 'public'
+      ORDER BY table_name
     `);
-    
-    console.log('📋 Tables found:', result.rows.map(r => r.table_name));
-    
-    // Check specifically for users table
-    const usersTable = result.rows.find(r => r.table_name === 'users');
-    if (usersTable) {
-      console.log('✅ Users table exists!');
-    } else {
-      console.log('❌ Users table not found!');
-    }
-    
+
+    console.log('📊 Tables found:');
+    tablesResult.rows.forEach(row => console.log(`   - ${row.table_name}`));
+
     client.release();
+    console.log('✅ Database test completed successfully');
   } catch (error) {
     console.error('❌ Database connection failed:', error.message);
+    console.error('Full error:', error);
   } finally {
     await pool.end();
   }

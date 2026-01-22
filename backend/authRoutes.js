@@ -4,9 +4,38 @@
  */
 
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const auth = require('./auth');
 
 const router = express.Router();
+
+// Rate limiting for password reset endpoints
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 requests per windowMs
+  message: {
+    success: false,
+    error: 'Too many password reset attempts. Please try again later.',
+    code: 'RATE_LIMIT_EXCEEDED'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Use IP + email combination for more sophisticated limiting
+  keyGenerator: (req) => `${req.ip}:${req.body.email || 'unknown'}`,
+  skip: (req) => !req.body.email // Don't rate limit malformed requests
+});
+
+const resetPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 reset attempts per windowMs
+  message: {
+    success: false,
+    error: 'Too many password reset attempts. Please try again later.',
+    code: 'RATE_LIMIT_EXCEEDED'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 /**
  * JWT Authentication Middleware
@@ -59,6 +88,17 @@ router.post('/register', async (req, res) => {
       });
     }
 
+    // Validate password policy
+    const passwordValidation = auth.validatePasswordPolicy(password);
+    if (!passwordValidation.isValid) {
+      return res.status(400).json({
+        success: false,
+        error: `Password does not meet security requirements: ${passwordValidation.errors.join(', ')}`,
+        code: 'INVALID_PASSWORD_POLICY',
+        violations: passwordValidation.errors
+      });
+    }
+
     // Get pool from app locals (set in main server.js)
     const pool = req.app.locals.pool;
 
@@ -82,10 +122,18 @@ router.post('/register', async (req, res) => {
       });
     }
 
+    console.error('📝 Registration error details:', {
+      message: error.message,
+      code: error.code,
+      table: error.table,
+      constraint: error.constraint
+    });
+
     res.status(500).json({
       success: false,
       error: 'Registration failed',
-      code: 'REGISTRATION_ERROR'
+      code: 'REGISTRATION_ERROR',
+      details: error.message // Temporary for debugging
     });
   }
 });
@@ -336,13 +384,25 @@ router.put('/me', authenticateToken, async (req, res) => {
     }
 
     if (password !== undefined) {
-      if (!password || password.length < 6) {
+      if (!password) {
         return res.status(400).json({
           success: false,
-          error: 'Password must be at least 6 characters',
-          code: 'INVALID_PASSWORD'
+          error: 'Password is required',
+          code: 'MISSING_PASSWORD'
         });
       }
+
+      // Validate password policy
+      const passwordValidation = auth.validatePasswordPolicy(password);
+      if (!passwordValidation.isValid) {
+        return res.status(400).json({
+          success: false,
+          error: `Password does not meet security requirements: ${passwordValidation.errors.join(', ')}`,
+          code: 'INVALID_PASSWORD_POLICY',
+          violations: passwordValidation.errors
+        });
+      }
+
       updates.password = password;
     }
 
@@ -409,6 +469,203 @@ router.post('/logout', authenticateToken, async (req, res) => {
       success: false,
       error: 'Logout failed',
       code: 'LOGOUT_ERROR'
+    });
+  }
+});
+
+/**
+ * POST /api/auth/forgot-password
+ * Initiate password reset by sending email with reset token
+ */
+router.post('/forgot-password', forgotPasswordLimiter, async (req, res) => {
+  try {
+    console.log('🔑 Forgot password request:', { email: req.body.email });
+
+    const { email } = req.body;
+
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Valid email is required',
+        code: 'INVALID_EMAIL'
+      });
+    }
+
+    const pool = req.app.locals.pool;
+    const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
+
+    const result = await auth.initiatePasswordReset(pool, email, clientIp, userAgent);
+
+    console.log('✅ Password reset initiated for:', email);
+
+    res.json({
+      success: true,
+      message: 'Password reset email sent',
+      data: result
+    });
+  } catch (error) {
+    console.error('❌ Forgot password error:', error.message);
+
+    if (error.message.includes('User not found')) {
+      // Don't reveal if user exists for security
+      return res.json({
+        success: true,
+        message: 'If an account with that email exists, a password reset link has been sent.'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send password reset email',
+      code: 'RESET_EMAIL_ERROR'
+    });
+  }
+});
+
+/**
+ * POST /api/auth/reset-password
+ * Complete password reset using token
+ */
+router.post('/reset-password', resetPasswordLimiter, async (req, res) => {
+  try {
+    console.log('🔄 Reset password request');
+
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token and new password are required',
+        code: 'MISSING_FIELDS'
+      });
+    }
+
+    // Validate password policy
+    const passwordValidation = auth.validatePasswordPolicy(newPassword);
+    if (!passwordValidation.isValid) {
+      return res.status(400).json({
+        success: false,
+        error: `Password does not meet security requirements: ${passwordValidation.errors.join(', ')}`,
+        code: 'INVALID_PASSWORD_POLICY',
+        violations: passwordValidation.errors
+      });
+    }
+
+    const pool = req.app.locals.pool;
+    const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
+
+    const result = await auth.resetPassword(pool, token, newPassword, clientIp, userAgent);
+
+    console.log('✅ Password reset successful');
+
+    res.json({
+      success: true,
+      message: 'Password reset successfully',
+      data: result
+    });
+  } catch (error) {
+    console.error('❌ Reset password error:', error.message);
+
+    let statusCode = 500;
+    let errorCode = 'RESET_ERROR';
+
+    if (error.message.includes('Invalid or expired token')) {
+      statusCode = 400;
+      errorCode = 'INVALID_TOKEN';
+    } else if (error.message.includes('Token already used')) {
+      statusCode = 400;
+      errorCode = 'TOKEN_USED';
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      error: error.message,
+      code: errorCode
+    });
+  }
+});
+
+/**
+ * POST /api/auth/validate-reset-token
+ * Validate a password reset token without consuming it
+ */
+router.post('/validate-reset-token', resetPasswordLimiter, async (req, res) => {
+  try {
+    console.log('🔍 Token validation request');
+
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token is required',
+        code: 'MISSING_TOKEN'
+      });
+    }
+
+    // Basic format validation (64 hex characters)
+    if (!/^[a-f0-9]{64}$/i.test(token)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid token format',
+        code: 'INVALID_TOKEN_FORMAT'
+      });
+    }
+
+    const pool = req.app.locals.pool;
+    const tokenHash = require('crypto').createHash('sha256').update(token).digest('hex');
+
+    // Check if token exists and is valid
+    const tokenResult = await pool.query(
+      `SELECT user_id, expires_at, used FROM password_reset_tokens
+       WHERE token_hash = $1`,
+      [tokenHash]
+    );
+
+    if (tokenResult.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token not found',
+        code: 'TOKEN_NOT_FOUND'
+      });
+    }
+
+    const tokenData = tokenResult.rows[0];
+
+    if (tokenData.used) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token has already been used',
+        code: 'TOKEN_USED'
+      });
+    }
+
+    if (new Date() > tokenData.expires_at) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token has expired',
+        code: 'TOKEN_EXPIRED'
+      });
+    }
+
+    // Token is valid
+    res.json({
+      success: true,
+      message: 'Token is valid',
+      data: {
+        expiresAt: tokenData.expires_at,
+        userId: tokenData.user_id
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Token validation error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Token validation failed',
+      code: 'VALIDATION_ERROR'
     });
   }
 });
