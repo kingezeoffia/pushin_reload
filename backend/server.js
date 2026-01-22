@@ -14,10 +14,29 @@ const cors = require('cors');
 
 const app = express();
 
-// PostgreSQL connection - Railway proxy with proper SSL
-const dbUrl = process.env.DATABASE_URL || '';
-const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
-const isRailwayProxy = dbUrl.includes('maglev.proxy.rlwy.net');
+// PostgreSQL connection - Try external proxy first, fallback to internal
+let dbUrl = process.env.DATABASE_URL || '';
+
+// If using Railway internal URL, try to use external proxy instead
+if (dbUrl.includes('.railway.internal')) {
+  console.log('🔄 Detected Railway internal database URL, attempting to use external proxy...');
+
+  // Try to construct external proxy URL from Railway service URL
+  const serviceUrl = process.env.RAILWAY_SERVICE_POSTGRES_ZVNO_URL;
+  if (serviceUrl) {
+    // Extract components from internal URL
+    const urlParts = dbUrl.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
+    if (urlParts) {
+      const [, user, pass, , , db] = urlParts;
+      // Construct external proxy URL
+      dbUrl = `postgresql://${user}:${pass}@${serviceUrl}:5432/${db}`;
+      console.log('✅ Using external proxy URL:', dbUrl.replace(/:[^:@]+@/, ':****@'));
+    }
+  }
+}
+
+const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.2.2');
+const isRailwayProxy = dbUrl.includes('maglev.proxy.rlwy.net') || dbUrl.includes('railway.app');
 const isRailwayInternal = dbUrl.includes('.railway.internal');
 
 // SSL configuration for different environments
