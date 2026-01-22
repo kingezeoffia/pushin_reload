@@ -46,15 +46,11 @@ if (isLocal) {
 } else if (isRailwayInternal) {
   sslConfig = false; // Railway internal connections don't need SSL
 } else {
-  // Railway external proxy needs SSL with relaxed validation
-  sslConfig = {
-    rejectUnauthorized: false,
-    // Additional SSL options for Railway
-    ca: null,
-    cert: null,
-    key: null,
-    checkServerIdentity: () => undefined
-  };
+  // Railway external proxy - try without SSL first to test connectivity
+  console.log('🔒 Testing Railway external connection without SSL first...');
+  sslConfig = false; // Try without SSL initially
+
+  // If that fails, we can try with SSL later
 }
 
 const pool = new Pool({
