@@ -26,16 +26,11 @@ const cleanDbUrl = dbUrl.replace(/\?sslmode=[^&]*/, '').replace(/&sslmode=[^&]*/
 
 const pool = new Pool({
   connectionString: cleanDbUrl,
-  ssl: isLocal ? false : {
-    rejectUnauthorized: false, // Temporarily disable for Railway database compatibility
-    // Force TLS 1.2 minimum for security
-    minVersion: 'TLSv1.2',
-    maxVersion: 'TLSv1.3',
-  },
+  ssl: isLocal ? false : false, // Completely disable SSL for Railway database
 });
 
 console.log('🔗 DB URL pattern:', cleanDbUrl.replace(/:[^:@]+@/, ':****@'));
-console.log('🔒 SSL:', isLocal ? 'disabled' : 'TLSv1.2-1.3, rejectUnauthorized=false (Railway compatibility)');
+console.log('🔒 SSL:', isLocal ? 'disabled' : 'disabled (Railway database compatibility)');
 
 // Test database connection on startup
 pool.connect()

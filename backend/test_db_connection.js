@@ -11,11 +11,7 @@ async function testConnection() {
 
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: isLocal ? false : {
-      rejectUnauthorized: false, // Railway database compatibility
-      minVersion: 'TLSv1.2',
-      maxVersion: 'TLSv1.3'
-    }
+    ssl: isLocal ? false : false // Completely disable SSL for Railway
   });
 
   try {
