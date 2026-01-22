@@ -14,23 +14,27 @@ const cors = require('cors');
 
 const app = express();
 
-// PostgreSQL connection - Use external proxy for Railway
+// PostgreSQL connection - Railway specific handling
 let dbUrl = process.env.DATABASE_URL || '';
 
-// For Railway production, always try to use external proxy
-if (process.env.RAILWAY_ENVIRONMENT === 'production' && dbUrl.includes('.railway.internal')) {
-  console.log('🔄 Railway production detected, switching to external proxy URL...');
+if (process.env.RAILWAY_ENVIRONMENT === 'production') {
+  console.log('🔄 Railway production environment detected');
 
-  // Extract credentials from internal URL and use external proxy
-  const urlParts = dbUrl.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
-  if (urlParts) {
-    const [, user, pass, , , db] = urlParts;
-    const serviceUrl = process.env.RAILWAY_SERVICE_POSTGRES_ZVNO_URL;
+  if (dbUrl.includes('.railway.internal')) {
+    console.log('🔄 Internal database URL detected, attempting external connection...');
 
-    if (serviceUrl) {
-      // Use Railway's external proxy format
-      dbUrl = `postgresql://${user}:${pass}@${serviceUrl}:5432/${db}`;
-      console.log('✅ Using Railway external proxy URL');
+    // For Railway, try to connect directly to the external proxy
+    // Railway sets NODE_TLS_REJECT_UNAUTHORIZED=0 globally, so SSL should work
+    const urlParts = dbUrl.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
+    if (urlParts) {
+      const [, user, pass, , , db] = urlParts;
+      const serviceUrl = process.env.RAILWAY_SERVICE_POSTGRES_ZVNO_URL;
+
+      if (serviceUrl && serviceUrl.includes('railway.app')) {
+        // Use the external railway.app domain
+        dbUrl = `postgresql://${user}:${pass}@${serviceUrl}:5432/${db}`;
+        console.log('✅ Constructed external Railway proxy URL');
+      }
     }
   }
 }
@@ -43,14 +47,9 @@ const isRailwayInternal = dbUrl.includes('.railway.internal');
 let sslConfig;
 if (isLocal) {
   sslConfig = false; // No SSL for local connections
-} else if (isRailwayInternal) {
-  sslConfig = false; // Railway internal connections don't need SSL
 } else {
-  // Railway external proxy requires SSL
-  sslConfig = {
-    rejectUnauthorized: false,
-    // Railway uses self-signed certificates
-  };
+  // Railway sets NODE_TLS_REJECT_UNAUTHORIZED=0 globally, so allow SSL but don't verify
+  sslConfig = { rejectUnauthorized: false };
 }
 
 const pool = new Pool({
