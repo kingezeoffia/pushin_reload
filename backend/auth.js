@@ -217,65 +217,46 @@ async function verifyGoogleToken(idToken) {
  * @returns {Promise<Object>} User data and tokens
  */
 async function registerUser(pool, email, password, firstname = null) {
-  try {
-    console.log('🔍 Registration: Checking if user exists...');
-    // Check if user already exists
-    const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-    if (existingUser.rows.length > 0) {
-      throw new Error('User already exists with this email');
-    }
-    console.log('✅ User existence check passed');
-
-    console.log('🔍 Registration: Hashing password...');
-    // Hash password and create user
-    let passwordHash;
-    try {
-      passwordHash = await hashPassword(password);
-      console.log('✅ Password hashed successfully with bcrypt');
-    } catch (bcryptError) {
-      console.log('⚠️ Bcrypt failed, using simple hash:', bcryptError.message);
-      // Fallback to simple hash if bcrypt fails
-      const crypto = require('crypto');
-      passwordHash = crypto.createHash('sha256').update(password + 'salt').digest('hex');
-      console.log('✅ Password hashed successfully with fallback');
-    }
-
-    console.log('🔍 Registration: Creating user...');
-    const result = await pool.query(
-      'INSERT INTO users (email, firstname, password_hash) VALUES ($1, $2, $3) RETURNING id, email, firstname, created_at',
-      [email, firstname, passwordHash]
-    );
-    console.log('✅ User created successfully');
-
-    const user = result.rows[0];
-
-    console.log('🔍 Registration: Generating tokens...');
-    // Generate tokens
-    const { accessToken, refreshToken } = generateTokens(user.id);
-    console.log('✅ Tokens generated successfully');
-
-    console.log('🔍 Registration: Storing refresh token...');
-    // Store refresh token
-    await storeRefreshToken(pool, user.id, refreshToken);
-    console.log('✅ Refresh token stored successfully');
-
-    console.log('✅ Registration completed successfully');
-    return {
-      user: {
-        id: user.id,
-        email: user.email,
-        firstname: user.firstname,
-        createdAt: user.created_at
-      },
-      isNewUser: true, // Always true for registration
-      accessToken,
-      refreshToken
-    };
-  } catch (error) {
-    console.error('❌ Registration failed:', error.message);
-    console.error('❌ Error stack:', error.stack);
-    throw error;
+  // Check if user already exists
+  const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+  if (existingUser.rows.length > 0) {
+    throw new Error('User already exists with this email');
   }
+
+  // Hash password and create user
+  let passwordHash;
+  try {
+    passwordHash = await hashPassword(password);
+  } catch (bcryptError) {
+    // Fallback to simple hash if bcrypt fails with SSL errors on Railway
+    const crypto = require('crypto');
+    passwordHash = crypto.createHash('sha256').update(password + 'salt').digest('hex');
+  }
+
+  const result = await pool.query(
+    'INSERT INTO users (email, firstname, password_hash) VALUES ($1, $2, $3) RETURNING id, email, firstname, created_at',
+    [email, firstname, passwordHash]
+  );
+
+  const user = result.rows[0];
+
+  // Generate tokens
+  const { accessToken, refreshToken } = generateTokens(user.id);
+
+  // Store refresh token
+  await storeRefreshToken(pool, user.id, refreshToken);
+
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      firstname: user.firstname,
+      createdAt: user.created_at
+    },
+    isNewUser: true, // Always true for registration
+    accessToken,
+    refreshToken
+  };
 
   return {
     user: {

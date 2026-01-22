@@ -104,11 +104,7 @@ router.post('/register', async (req, res) => {
     // Get pool from app locals (set in main server.js)
     const pool = req.app.locals.pool;
 
-    console.log('🔍 About to call registerUser...');
     const result = await auth.registerUser(pool, email, password, name);
-    console.log('✅ registerUser completed successfully');
-
-    console.log('✅ User registered successfully:', result.user.id);
 
     res.json({
       success: true,
