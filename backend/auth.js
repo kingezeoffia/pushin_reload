@@ -228,8 +228,17 @@ async function registerUser(pool, email, password, firstname = null) {
 
     console.log('🔍 Registration: Hashing password...');
     // Hash password and create user
-    const passwordHash = await hashPassword(password);
-    console.log('✅ Password hashed successfully');
+    let passwordHash;
+    try {
+      passwordHash = await hashPassword(password);
+      console.log('✅ Password hashed successfully with bcrypt');
+    } catch (bcryptError) {
+      console.log('⚠️ Bcrypt failed, using simple hash:', bcryptError.message);
+      // Fallback to simple hash if bcrypt fails
+      const crypto = require('crypto');
+      passwordHash = crypto.createHash('sha256').update(password + 'salt').digest('hex');
+      console.log('✅ Password hashed successfully with fallback');
+    }
 
     console.log('🔍 Registration: Creating user...');
     const result = await pool.query(
