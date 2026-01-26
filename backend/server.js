@@ -1,4 +1,5 @@
-// SSL certificate validation is enabled for security
+// Must be set before any TLS connections
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 require('dotenv').config();
 const express = require('express');
@@ -26,11 +27,16 @@ const cleanDbUrl = dbUrl.replace(/\?sslmode=[^&]*/, '').replace(/&sslmode=[^&]*/
 
 const pool = new Pool({
   connectionString: cleanDbUrl,
-  ssl: isLocal ? false : false, // Completely disable SSL for Railway database
+  ssl: isLocal ? false : {
+    rejectUnauthorized: false,
+    // Force TLS 1.2 minimum
+    minVersion: 'TLSv1.2',
+    maxVersion: 'TLSv1.3',
+  },
 });
 
 console.log('🔗 DB URL pattern:', cleanDbUrl.replace(/:[^:@]+@/, ':****@'));
-console.log('🔒 SSL:', isLocal ? 'disabled' : 'disabled (Railway database compatibility)');
+console.log('🔒 SSL:', isLocal ? 'disabled' : 'TLSv1.2-1.3, rejectUnauthorized=false');
 
 // Test database connection on startup
 pool.connect()
@@ -133,6 +139,32 @@ async function initDatabase() {
       )
     `);
 
+    // Create anonymous subscriptions table for guest users
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS anonymous_subscriptions (
+        id SERIAL PRIMARY KEY,
+        anonymous_id VARCHAR(255) UNIQUE NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        customer_id VARCHAR(255),
+        subscription_id VARCHAR(255) UNIQUE,
+        plan_id VARCHAR(50),
+        current_period_end TIMESTAMP,
+        is_active BOOLEAN DEFAULT true,
+        linked_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        recovery_token VARCHAR(255),
+        recovery_expires_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create indexes for anonymous subscriptions
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_anonymous_subscriptions_email ON anonymous_subscriptions(email);
+      CREATE INDEX IF NOT EXISTS idx_anonymous_subscriptions_recovery_token ON anonymous_subscriptions(recovery_token);
+      CREATE INDEX IF NOT EXISTS idx_anonymous_subscriptions_linked_user ON anonymous_subscriptions(linked_user_id);
+    `);
+
     console.log('✅ Database connected and tables initialized');
   } catch (error) {
     console.error('❌ Database initialization error:', error);
@@ -182,16 +214,20 @@ app.get('/api/health', (req, res) => {
 // 1. Create Checkout Session
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   try {
-    const { userId, planId, billingPeriod, userEmail, successUrl, cancelUrl } = req.body;
+    console.log('📦 Raw request body:', JSON.stringify(req.body));
+    const { userId, planId, billingPeriod, userEmail, anonymousId, successUrl, cancelUrl } = req.body;
 
-    console.log('Creating checkout session:', { userId, planId, billingPeriod, userEmail });
+    console.log('Creating checkout session:', { userId, planId, billingPeriod, userEmail, anonymousId, successUrl, cancelUrl });
 
-    // Validate inputs
-    if (!userId || !planId || !userEmail) {
+    // Validate inputs - either userId or anonymousId must be provided
+    if ((!userId && !anonymousId) || !planId || !userEmail) {
+      console.log('❌ Validation failed:', { userId, anonymousId, planId, userEmail });
       return res.status(400).json({
-        error: 'Missing required fields: userId, planId, userEmail'
+        error: 'Missing required fields: either userId or anonymousId, planId, userEmail'
       });
     }
+
+    console.log('✅ Validation passed');
 
     // Default billingPeriod to 'monthly' if not provided
     const period = billingPeriod || 'monthly';
@@ -233,6 +269,8 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       });
     }
 
+    console.log('🔵 About to create Stripe session with priceId:', priceId);
+
     // Create Stripe Checkout session
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -246,7 +284,8 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       success_url: successUrl,
       cancel_url: cancelUrl,
       metadata: {
-        userId,
+        userId: userId || null,
+        anonymousId: anonymousId || null,
         planId: planId,
         billingPeriod: period,
       },
@@ -260,6 +299,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error creating checkout session:', error);
+    console.error('Error details:', error.message, error.stack);
     res.status(500).json({ error: error.message });
   }
 });
@@ -267,13 +307,13 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
 // 2. Verify Payment
 app.post('/api/stripe/verify-payment', async (req, res) => {
   try {
-    const { sessionId, userId } = req.body;
+    const { sessionId, userId, anonymousId } = req.body;
 
-    console.log('Verifying payment:', { sessionId, userId });
+    console.log('Verifying payment:', { sessionId, userId, anonymousId });
 
-    if (!sessionId || !userId) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: sessionId, userId' 
+    if (!sessionId || (!userId && !anonymousId)) {
+      return res.status(400).json({
+        error: 'Missing required fields: sessionId and either userId or anonymousId'
       });
     }
 
@@ -286,22 +326,44 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
 
     if (session.payment_status === 'paid') {
       const subscription = session.subscription;
+      const isAnonymous = !userId && anonymousId;
 
-      // Store subscription in database
-      await pool.query(
-        `INSERT INTO subscriptions (user_id, customer_id, subscription_id, plan_id, current_period_end, is_active, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (subscription_id)
-         DO UPDATE SET
-           plan_id = EXCLUDED.plan_id,
-           current_period_end = EXCLUDED.current_period_end,
-           is_active = EXCLUDED.is_active,
-           updated_at = EXCLUDED.updated_at`,
-        [userId, session.customer, subscription.id, session.metadata.planId,
-         new Date(subscription.current_period_end * 1000), true, new Date()]
-      );
+      // Store subscription in appropriate table
+      if (isAnonymous) {
+        // Generate recovery token for anonymous subscription
+        const crypto = require('crypto');
+        const recoveryToken = crypto.randomBytes(32).toString('hex');
 
-      console.log('✅ Payment verified and stored');
+        await pool.query(
+          `INSERT INTO anonymous_subscriptions (anonymous_id, email, customer_id, subscription_id, plan_id, current_period_end, is_active, recovery_token, recovery_expires_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT (subscription_id)
+           DO UPDATE SET
+             plan_id = EXCLUDED.plan_id,
+             current_period_end = EXCLUDED.current_period_end,
+             is_active = EXCLUDED.is_active,
+             updated_at = EXCLUDED.updated_at`,
+          [anonymousId, session.customer_details.email, session.customer, subscription.id, session.metadata.planId,
+           new Date(subscription.current_period_end * 1000), true, recoveryToken,
+           new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), new Date()] // 1 year expiry
+        );
+      } else {
+        // Regular authenticated subscription
+        await pool.query(
+          `INSERT INTO subscriptions (user_id, customer_id, subscription_id, plan_id, current_period_end, is_active, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (subscription_id)
+           DO UPDATE SET
+             plan_id = EXCLUDED.plan_id,
+             current_period_end = EXCLUDED.current_period_end,
+             is_active = EXCLUDED.is_active,
+             updated_at = EXCLUDED.updated_at`,
+          [userId, session.customer, subscription.id, session.metadata.planId,
+           new Date(subscription.current_period_end * 1000), true, new Date()]
+        );
+      }
+
+      console.log(`✅ Payment verified and stored ${isAnonymous ? '(anonymous)' : '(authenticated)'}`);
 
       res.json({
         isActive: true,
@@ -309,6 +371,7 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
         customerId: session.customer,
         subscriptionId: subscription.id,
         currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
+        isAnonymous: isAnonymous,
       });
     } else {
       console.log('⚠️ Payment not completed');
@@ -329,18 +392,31 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
 // 3. Check Subscription Status
 app.get('/api/stripe/subscription-status', async (req, res) => {
   try {
-    const { userId } = req.query;
-    
-    console.log('Checking subscription status for:', userId);
+    const { userId, anonymousId } = req.query;
 
-    if (!userId) {
-      return res.status(400).json({ error: 'Missing userId parameter' });
+    console.log('Checking subscription status for:', { userId, anonymousId });
+
+    if (!userId && !anonymousId) {
+      return res.status(400).json({ error: 'Missing userId or anonymousId parameter' });
     }
-    
-    const subscriptionResult = await pool.query(
-      'SELECT * FROM subscriptions WHERE user_id = $1 AND is_active = true ORDER BY updated_at DESC LIMIT 1',
-      [userId]
-    );
+
+    let subscriptionResult;
+    let isAnonymous = false;
+
+    if (userId) {
+      // Check authenticated user subscription
+      subscriptionResult = await pool.query(
+        'SELECT * FROM subscriptions WHERE user_id = $1 AND is_active = true ORDER BY updated_at DESC LIMIT 1',
+        [userId]
+      );
+    } else {
+      // Check anonymous subscription
+      subscriptionResult = await pool.query(
+        'SELECT * FROM anonymous_subscriptions WHERE anonymous_id = $1 AND is_active = true ORDER BY updated_at DESC LIMIT 1',
+        [anonymousId]
+      );
+      isAnonymous = true;
+    }
 
     if (subscriptionResult.rows.length === 0) {
       console.log('No subscription found');
@@ -350,30 +426,34 @@ app.get('/api/stripe/subscription-status', async (req, res) => {
         customerId: null,
         subscriptionId: null,
         currentPeriodEnd: null,
+        isAnonymous: isAnonymous,
       });
     }
 
-    const userData = subscriptionResult.rows[0];
+    const subscriptionData = subscriptionResult.rows[0];
 
     // Fetch latest subscription status from Stripe
-    const subscription = await stripe.subscriptions.retrieve(userData.subscription_id);
+    const subscription = await stripe.subscriptions.retrieve(subscriptionData.subscription_id);
 
     const isActive = subscription.status === 'active';
 
     // Update database with latest status
+    const tableName = isAnonymous ? 'anonymous_subscriptions' : 'subscriptions';
     await pool.query(
-      'UPDATE subscriptions SET is_active = $1, current_period_end = $2, updated_at = $3 WHERE subscription_id = $4',
-      [isActive, new Date(subscription.current_period_end * 1000), new Date(), userData.subscription_id]
+      `UPDATE ${tableName} SET is_active = $1, current_period_end = $2, updated_at = $3 WHERE subscription_id = $4`,
+      [isActive, new Date(subscription.current_period_end * 1000), new Date(), subscriptionData.subscription_id]
     );
 
     console.log('Subscription status:', subscription.status);
 
     res.json({
       isActive,
-      planId: userData.plan_id,
-      customerId: userData.customer_id,
-      subscriptionId: userData.subscription_id,
+      planId: subscriptionData.plan_id,
+      customerId: subscriptionData.customer_id,
+      subscriptionId: subscriptionData.subscription_id,
       currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
+      isAnonymous: isAnonymous,
+      recoveryToken: isAnonymous ? subscriptionData.recovery_token : null,
     });
   } catch (error) {
     console.error('❌ Error checking subscription:', error);
@@ -384,13 +464,13 @@ app.get('/api/stripe/subscription-status', async (req, res) => {
 // 4. Cancel Subscription
 app.post('/api/stripe/cancel-subscription', async (req, res) => {
   try {
-    const { userId, subscriptionId } = req.body;
+    const { userId, anonymousId, subscriptionId } = req.body;
 
-    console.log('Canceling subscription:', { userId, subscriptionId });
+    console.log('Canceling subscription:', { userId, anonymousId, subscriptionId });
 
-    if (!userId || !subscriptionId) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: userId, subscriptionId' 
+    if ((!userId && !anonymousId) || !subscriptionId) {
+      return res.status(400).json({
+        error: 'Missing required fields: either userId or anonymousId, and subscriptionId'
       });
     }
 
@@ -413,6 +493,121 @@ app.post('/api/stripe/cancel-subscription', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error canceling subscription:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 5. Link Anonymous Subscription to User Account
+app.post('/api/stripe/link-anonymous-subscription', async (req, res) => {
+  try {
+    const { anonymousId, userId, email } = req.body;
+
+    console.log('Linking anonymous subscription:', { anonymousId, userId, email });
+
+    if (!anonymousId || !userId || !email) {
+      return res.status(400).json({
+        error: 'Missing required fields: anonymousId, userId, email'
+      });
+    }
+
+    // Find the anonymous subscription
+    const anonymousResult = await pool.query(
+      'SELECT * FROM anonymous_subscriptions WHERE anonymous_id = $1 AND linked_user_id IS NULL',
+      [anonymousId]
+    );
+
+    if (anonymousResult.rows.length === 0) {
+      return res.status(404).json({
+        error: 'Anonymous subscription not found or already linked'
+      });
+    }
+
+    const anonymousSub = anonymousResult.rows[0];
+
+    // Check if user already has an active subscription
+    const existingSub = await pool.query(
+      'SELECT * FROM subscriptions WHERE user_id = $1 AND is_active = true',
+      [userId]
+    );
+
+    if (existingSub.rows.length > 0) {
+      return res.status(409).json({
+        error: 'User already has an active subscription'
+      });
+    }
+
+    // Link the anonymous subscription to the user
+    await pool.query(
+      'UPDATE anonymous_subscriptions SET linked_user_id = $1, updated_at = $2 WHERE anonymous_id = $3',
+      [userId, new Date(), anonymousId]
+    );
+
+    // Create a regular subscription record for the user
+    await pool.query(
+      `INSERT INTO subscriptions (user_id, customer_id, subscription_id, plan_id, current_period_end, is_active, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [userId, anonymousSub.customer_id, anonymousSub.subscription_id, anonymousSub.plan_id,
+       anonymousSub.current_period_end, anonymousSub.is_active, anonymousSub.created_at, new Date()]
+    );
+
+    console.log('✅ Anonymous subscription linked to user account');
+
+    res.json({
+      success: true,
+      subscriptionId: anonymousSub.subscription_id,
+      planId: anonymousSub.plan_id,
+    });
+  } catch (error) {
+    console.error('❌ Error linking anonymous subscription:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 6. Recover Anonymous Subscription by Recovery Token
+app.get('/api/stripe/recover-anonymous-subscription', async (req, res) => {
+  try {
+    const { recoveryToken } = req.query;
+
+    console.log('Recovering anonymous subscription with token:', recoveryToken?.substring(0, 8) + '...');
+
+    if (!recoveryToken) {
+      return res.status(400).json({ error: 'Missing recovery token' });
+    }
+
+    // Find anonymous subscription by recovery token
+    const subscriptionResult = await pool.query(
+      `SELECT anonymous_id, email, subscription_id, plan_id, current_period_end, is_active, recovery_expires_at
+       FROM anonymous_subscriptions
+       WHERE recovery_token = $1 AND recovery_expires_at > NOW() AND linked_user_id IS NULL`,
+      [recoveryToken]
+    );
+
+    if (subscriptionResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Invalid or expired recovery token' });
+    }
+
+    const subscription = subscriptionResult.rows[0];
+
+    // Check if subscription is still active
+    const stripeSubscription = await stripe.subscriptions.retrieve(subscription.subscription_id);
+    const isActive = stripeSubscription.status === 'active';
+
+    if (!isActive) {
+      return res.status(410).json({ error: 'Subscription is no longer active' });
+    }
+
+    console.log('✅ Anonymous subscription recovered');
+
+    res.json({
+      anonymousId: subscription.anonymous_id,
+      email: subscription.email,
+      subscriptionId: subscription.subscription_id,
+      planId: subscription.plan_id,
+      currentPeriodEnd: subscription.current_period_end.toISOString(),
+      isActive: true,
+    });
+  } catch (error) {
+    console.error('❌ Error recovering anonymous subscription:', error);
     res.status(500).json({ error: error.message });
   }
 });
