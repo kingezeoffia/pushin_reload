@@ -14,6 +14,7 @@ const stripeSecretKey = process.env.NODE_ENV === 'test'
 const stripe = require('stripe')(stripeSecretKey);
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 
@@ -612,7 +613,175 @@ app.get('/api/stripe/recover-anonymous-subscription', async (req, res) => {
   }
 });
 
-// 5. Webhook Handler (CRITICAL for production)
+// 5. Restore Subscription by Email
+// Rate limiting middleware for restore purchases (prevents email enumeration)
+const restorePurchasesLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 5, // 5 attempts per window per IP
+  message: {
+    success: false,
+    error: 'rate_limit_exceeded',
+    message: 'Too many restore attempts. Please try again in 5 minutes.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.post('/api/stripe/restore-by-email', restorePurchasesLimiter, async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Validate email
+    if (!email || !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      return res.status(400).json({
+        success: false,
+        error: 'invalid_email',
+        message: 'Please provide a valid email address.'
+      });
+    }
+
+    console.log(`🔍 Restore request for email: ${email}`);
+
+    // Search in both tables
+    const authenticatedQuery = `
+      SELECT s.*, u.email, 'authenticated' as subscription_type
+      FROM subscriptions s
+      INNER JOIN users u ON s.user_id = u.id
+      WHERE u.email = $1 AND s.is_active = true
+      ORDER BY s.updated_at DESC
+      LIMIT 1
+    `;
+
+    const anonymousQuery = `
+      SELECT *, 'anonymous' as subscription_type
+      FROM anonymous_subscriptions
+      WHERE email = $1 AND is_active = true AND linked_user_id IS NULL
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `;
+
+    const [authenticatedResult, anonymousResult] = await Promise.all([
+      pool.query(authenticatedQuery, [email.trim().toLowerCase()]),
+      pool.query(anonymousQuery, [email.trim().toLowerCase()])
+    ]);
+
+    // Collect all active subscriptions
+    let allSubscriptions = [
+      ...authenticatedResult.rows,
+      ...anonymousResult.rows
+    ];
+
+    // If no active subscriptions found, check for expired ones
+    if (allSubscriptions.length === 0) {
+      const expiredQuery = `
+        SELECT s.plan_id, s.current_period_end, 'authenticated' as subscription_type
+        FROM subscriptions s
+        INNER JOIN users u ON s.user_id = u.id
+        WHERE u.email = $1 AND s.is_active = false
+        UNION ALL
+        SELECT plan_id, current_period_end, 'anonymous' as subscription_type
+        FROM anonymous_subscriptions
+        WHERE email = $1 AND is_active = false AND linked_user_id IS NULL
+        ORDER BY current_period_end DESC
+        LIMIT 3
+      `;
+
+      const expiredResult = await pool.query(expiredQuery, [email.trim().toLowerCase()]);
+
+      return res.status(404).json({
+        success: false,
+        error: 'no_active_subscription',
+        message: 'No active subscriptions found for this email address.',
+        expiredSubscriptions: expiredResult.rows.map(row => ({
+          planId: row.plan_id,
+          expiredOn: row.current_period_end.toISOString()
+        }))
+      });
+    }
+
+    // Prioritize: authenticated over anonymous
+    let selectedSubscription = allSubscriptions.find(sub => sub.subscription_type === 'authenticated')
+                              || allSubscriptions[0];
+
+    // Verify with Stripe that subscription is still active
+    try {
+      const stripeSubscription = await stripe.subscriptions.retrieve(selectedSubscription.subscription_id);
+
+      if (stripeSubscription.status !== 'active') {
+        // Update database to reflect actual status
+        const tableName = selectedSubscription.subscription_type === 'authenticated'
+                         ? 'subscriptions'
+                         : 'anonymous_subscriptions';
+        await pool.query(
+          `UPDATE ${tableName} SET is_active = false, updated_at = NOW() WHERE subscription_id = $1`,
+          [selectedSubscription.subscription_id]
+        );
+
+        return res.status(404).json({
+          success: false,
+          error: 'subscription_inactive',
+          message: 'This subscription is no longer active.',
+          expiredOn: new Date(stripeSubscription.current_period_end * 1000).toISOString()
+        });
+      }
+
+      // Update local database with latest info from Stripe
+      const tableName = selectedSubscription.subscription_type === 'authenticated'
+                       ? 'subscriptions'
+                       : 'anonymous_subscriptions';
+      await pool.query(
+        `UPDATE ${tableName} SET current_period_end = $1, updated_at = NOW() WHERE subscription_id = $2`,
+        [new Date(stripeSubscription.current_period_end * 1000), selectedSubscription.subscription_id]
+      );
+
+      console.log(`✅ Restored ${selectedSubscription.subscription_type} subscription for ${email}`);
+
+      // Return subscription details
+      res.json({
+        success: true,
+        subscription: {
+          subscriptionId: selectedSubscription.subscription_id,
+          planId: selectedSubscription.plan_id,
+          customerId: selectedSubscription.customer_id,
+          currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000).toISOString(),
+          isActive: true,
+          subscriptionType: selectedSubscription.subscription_type,
+          userId: selectedSubscription.user_id ? selectedSubscription.user_id.toString() : null,
+          anonymousId: selectedSubscription.anonymous_id || null
+        }
+      });
+
+    } catch (stripeError) {
+      console.error('❌ Stripe verification error:', stripeError);
+
+      // If Stripe API fails, return cached data with warning
+      return res.json({
+        success: true,
+        subscription: {
+          subscriptionId: selectedSubscription.subscription_id,
+          planId: selectedSubscription.plan_id,
+          customerId: selectedSubscription.customer_id,
+          currentPeriodEnd: selectedSubscription.current_period_end.toISOString(),
+          isActive: true,
+          subscriptionType: selectedSubscription.subscription_type,
+          userId: selectedSubscription.user_id ? selectedSubscription.user_id.toString() : null,
+          anonymousId: selectedSubscription.anonymous_id || null
+        },
+        warning: 'Unable to verify with Stripe. Using cached data.'
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Error restoring subscription by email:', error);
+    res.status(500).json({
+      success: false,
+      error: 'server_error',
+      message: 'Unable to process restore request. Please try again later.'
+    });
+  }
+});
+
+// 6. Webhook Handler (CRITICAL for production)
 app.post('/api/stripe/webhook', 
   bodyParser.raw({ type: 'application/json' }), 
   async (req, res) => {

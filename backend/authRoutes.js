@@ -80,8 +80,6 @@ router.post('/register', async (req, res) => {
 
     const { email, password, name } = req.body;
 
-    console.log('🔍 Starting registration process...');
-
     if (!email || !password) {
       return res.status(400).json({
         success: false,
@@ -105,6 +103,8 @@ router.post('/register', async (req, res) => {
     const pool = req.app.locals.pool;
 
     const result = await auth.registerUser(pool, email, password, name);
+
+    console.log('✅ User registered successfully:', result.user.id);
 
     res.json({
       success: true,

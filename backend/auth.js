@@ -14,8 +14,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const crypto = require('crypto');
-const https = require('https');
-const tls = require('tls');
+const nodemailer = require('nodemailer');
 
 /**
  * Validate password against security policy
@@ -187,21 +186,7 @@ async function removeUserRefreshTokens(pool, userId) {
  */
 async function verifyGoogleToken(idToken) {
   try {
-    // Configure axios with proper SSL settings for Google OAuth
-    const httpsAgent = new https.Agent({
-      rejectUnauthorized: true, // Enable SSL certificate validation
-      // Use standard root certificates
-      ca: tls.rootCertificates,
-      // Additional timeout and retry settings
-      timeout: 10000,
-      keepAlive: false
-    });
-
-    const response = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`, {
-      httpsAgent: httpsAgent,
-      timeout: 10000 // 10 second timeout
-    });
-
+    const response = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
     return response.data;
   } catch (error) {
     console.error('Google token verification failed:', error.message);
@@ -224,15 +209,7 @@ async function registerUser(pool, email, password, firstname = null) {
   }
 
   // Hash password and create user
-  let passwordHash;
-  try {
-    passwordHash = await hashPassword(password);
-  } catch (bcryptError) {
-    // Fallback to simple hash if bcrypt fails with SSL errors on Railway
-    const crypto = require('crypto');
-    passwordHash = crypto.createHash('sha256').update(password + 'salt').digest('hex');
-  }
-
+  const passwordHash = await hashPassword(password);
   const result = await pool.query(
     'INSERT INTO users (email, firstname, password_hash) VALUES ($1, $2, $3) RETURNING id, email, firstname, created_at',
     [email, firstname, passwordHash]
@@ -245,18 +222,6 @@ async function registerUser(pool, email, password, firstname = null) {
 
   // Store refresh token
   await storeRefreshToken(pool, user.id, refreshToken);
-
-  return {
-    user: {
-      id: user.id,
-      email: user.email,
-      firstname: user.firstname,
-      createdAt: user.created_at
-    },
-    isNewUser: true, // Always true for registration
-    accessToken,
-    refreshToken
-  };
 
   return {
     user: {
@@ -733,7 +698,7 @@ async function resetPassword(pool, token, newPassword, clientIp, userAgent) {
 
       // Update password
       await client.query(
-        'UPDATE users SET password = $1 WHERE id = $2',
+        'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
         [hashedPassword, userId]
       );
 
@@ -774,50 +739,160 @@ async function resetPassword(pool, token, newPassword, clientIp, userAgent) {
 }
 
 /**
- * Send password reset email (placeholder - implement with your email service)
+ * Send password reset email using nodemailer
  * @param {string} email - User email
  * @param {string} resetToken - Reset token
  */
 async function sendPasswordResetEmail(email, resetToken) {
-  // TODO: Implement email sending
-  // Use services like SendGrid, Mailgun, or AWS SES
+  // Build reset URL
+  const resetUrl = `${process.env.FRONTEND_URL || 'pushinapp://reset-password'}?token=${resetToken}`;
 
-  const resetUrl = `${process.env.FRONTEND_URL || 'https://yourapp.com'}/reset-password?token=${resetToken}`;
-
-  console.log(`📧 Password reset email would be sent to ${email}`);
+  console.log(`📧 Sending password reset email to ${email}`);
   console.log(`🔗 Reset URL: ${resetUrl}`);
 
-  // Example with nodemailer:
-  /*
-  const nodemailer = require('nodemailer');
-
-  const transporter = nodemailer.createTransporter({
-    // Configure your email service
-    service: 'gmail',
+  // Configure email transporter
+  // Supports multiple email services via SMTP
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS
+    },
+    // For development/testing with services like Mailtrap
+    ...(process.env.NODE_ENV === 'test' && {
+      host: process.env.SMTP_HOST || 'sandbox.smtp.mailtrap.io',
+      port: parseInt(process.env.SMTP_PORT || '2525'),
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    })
   });
 
-  await transporter.sendMail({
-    from: process.env.EMAIL_FROM || 'noreply@pushinapp.com',
+  // Verify transporter configuration
+  try {
+    await transporter.verify();
+    console.log('✅ SMTP server is ready to send emails');
+  } catch (error) {
+    console.error('❌ SMTP verification failed:', error.message);
+    throw new Error(`Email service configuration error: ${error.message}`);
+  }
+
+  // Email template
+  const mailOptions = {
+    from: process.env.EMAIL_FROM || '"PUSHIN" <noreply@pushinapp.com>',
     to: email,
     subject: 'Reset your PUSHIN password',
     html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #6060FF;">Reset your PUSHIN password</h1>
-        <p>Hello,</p>
-        <p>You requested to reset your password for your PUSHIN account.</p>
-        <p>Click the button below to reset your password:</p>
-        <a href="${resetUrl}" style="display: inline-block; background-color: #6060FF; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 16px 0;">Reset Password</a>
-        <p><strong>This link expires in 15 minutes.</strong></p>
-        <p>If you didn't request this password reset, please ignore this email.</p>
-        <p>Best regards,<br>The PUSHIN Team</p>
-      </div>
-    `
-  });
-  */
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Reset Your Password</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+          <div style="max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">
+                Reset Your Password
+              </h1>
+            </div>
+
+            <!-- Body -->
+            <div style="padding: 40px 30px;">
+              <p style="margin: 0 0 16px; color: #1f2937; font-size: 16px; line-height: 1.5;">
+                Hello,
+              </p>
+
+              <p style="margin: 0 0 24px; color: #4b5563; font-size: 15px; line-height: 1.6;">
+                You requested to reset your password for your PUSHIN account. Click the button below to create a new password:
+              </p>
+
+              <!-- CTA Button -->
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${resetUrl}" style="display: inline-block; background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 100px; font-size: 16px; font-weight: 600; letter-spacing: -0.3px; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);">
+                  Reset Password
+                </a>
+              </div>
+
+              <!-- Expiration Notice -->
+              <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 24px 0; border-radius: 8px;">
+                <p style="margin: 0; color: #92400e; font-size: 14px; font-weight: 600;">
+                  ⚠️ This link expires in 15 minutes
+                </p>
+              </div>
+
+              <p style="margin: 0 0 8px; color: #6b7280; font-size: 14px; line-height: 1.5;">
+                If the button doesn't work, copy and paste this link into your browser:
+              </p>
+
+              <p style="margin: 0 0 24px; color: #8B5CF6; font-size: 13px; word-break: break-all; line-height: 1.4;">
+                ${resetUrl}
+              </p>
+
+              <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.5;">
+                If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.
+              </p>
+            </div>
+
+            <!-- Footer -->
+            <div style="background-color: #f9fafb; padding: 24px 30px; border-top: 1px solid #e5e7eb;">
+              <p style="margin: 0 0 8px; color: #1f2937; font-size: 14px; font-weight: 600;">
+                Best regards,<br>The PUSHIN Team
+              </p>
+
+              <p style="margin: 0; color: #9ca3af; font-size: 12px; line-height: 1.4;">
+                This is an automated email. Please do not reply to this message.
+              </p>
+            </div>
+          </div>
+
+          <!-- Legal Footer -->
+          <div style="max-width: 600px; margin: 0 auto; padding: 20px; text-align: center;">
+            <p style="margin: 0; color: #9ca3af; font-size: 12px; line-height: 1.5;">
+              © ${new Date().getFullYear()} PUSHIN. All rights reserved.
+            </p>
+          </div>
+        </body>
+      </html>
+    `,
+    // Plain text version for email clients that don't support HTML
+    text: `
+Reset Your PUSHIN Password
+
+Hello,
+
+You requested to reset your password for your PUSHIN account.
+
+To reset your password, click this link or copy it into your browser:
+${resetUrl}
+
+⚠️ This link expires in 15 minutes.
+
+If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.
+
+Best regards,
+The PUSHIN Team
+
+---
+This is an automated email. Please do not reply to this message.
+© ${new Date().getFullYear()} PUSHIN. All rights reserved.
+    `.trim()
+  };
+
+  // Send email
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Password reset email sent successfully:', info.messageId);
+    return info;
+  } catch (error) {
+    console.error('❌ Failed to send password reset email:', error);
+    throw new Error(`Failed to send email: ${error.message}`);
+  }
 }
 
 module.exports = {

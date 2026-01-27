@@ -11,7 +11,7 @@ async function testConnection() {
 
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: isLocal ? false : false // Completely disable SSL for Railway
+    ssl: isLocal ? false : { rejectUnauthorized: false }
   });
 
   try {
