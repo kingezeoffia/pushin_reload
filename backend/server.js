@@ -665,10 +665,14 @@ app.post('/api/stripe/restore-by-email', restorePurchasesLimiter, async (req, re
       LIMIT 1
     `;
 
+    console.log('📊 Executing database queries...');
     const [authenticatedResult, anonymousResult] = await Promise.all([
       pool.query(authenticatedQuery, [email.trim().toLowerCase()]),
       pool.query(anonymousQuery, [email.trim().toLowerCase()])
     ]);
+    console.log('✅ Database queries completed');
+    console.log(`   - Authenticated results: ${authenticatedResult.rows.length}`);
+    console.log(`   - Anonymous results: ${anonymousResult.rows.length}`);
 
     // Collect all active subscriptions
     let allSubscriptions = [
@@ -678,6 +682,7 @@ app.post('/api/stripe/restore-by-email', restorePurchasesLimiter, async (req, re
 
     // If no active subscriptions found, check for expired ones
     if (allSubscriptions.length === 0) {
+      console.log('📭 No active subscriptions found, checking for expired ones...');
       const expiredQuery = `
         SELECT s.plan_id, s.current_period_end, 'authenticated' as subscription_type
         FROM subscriptions s
@@ -692,6 +697,7 @@ app.post('/api/stripe/restore-by-email', restorePurchasesLimiter, async (req, re
       `;
 
       const expiredResult = await pool.query(expiredQuery, [email.trim().toLowerCase()]);
+      console.log(`   - Found ${expiredResult.rows.length} expired subscriptions`);
 
       return res.status(404).json({
         success: false,
@@ -708,9 +714,14 @@ app.post('/api/stripe/restore-by-email', restorePurchasesLimiter, async (req, re
     let selectedSubscription = allSubscriptions.find(sub => sub.subscription_type === 'authenticated')
                               || allSubscriptions[0];
 
+    console.log(`💳 Found subscription - verifying with Stripe...`);
+    console.log(`   - Subscription ID: ${selectedSubscription.subscription_id}`);
+    console.log(`   - Type: ${selectedSubscription.subscription_type}`);
+
     // Verify with Stripe that subscription is still active
     try {
       const stripeSubscription = await stripe.subscriptions.retrieve(selectedSubscription.subscription_id);
+      console.log('✅ Stripe verification completed');
 
       if (stripeSubscription.status !== 'active') {
         // Update database to reflect actual status
