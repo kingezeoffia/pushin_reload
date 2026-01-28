@@ -22,13 +22,15 @@ const app = express();
 const tls = require('tls');
 const dbUrl = process.env.DATABASE_URL || '';
 const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
+const isRailwayInternal = dbUrl.includes('.railway.internal');
 
 // Strip sslmode from URL to avoid conflicts
 const cleanDbUrl = dbUrl.replace(/\?sslmode=[^&]*/, '').replace(/&sslmode=[^&]*/, '');
 
 const pool = new Pool({
   connectionString: cleanDbUrl,
-  ssl: isLocal ? false : {
+  // Disable SSL for local and Railway internal connections
+  ssl: (isLocal || isRailwayInternal) ? false : {
     rejectUnauthorized: false,
     // Force TLS 1.2 minimum
     minVersion: 'TLSv1.2',
@@ -37,7 +39,7 @@ const pool = new Pool({
 });
 
 console.log('🔗 DB URL pattern:', cleanDbUrl.replace(/:[^:@]+@/, ':****@'));
-console.log('🔒 SSL:', isLocal ? 'disabled' : 'TLSv1.2-1.3, rejectUnauthorized=false');
+console.log('🔒 SSL:', (isLocal || isRailwayInternal) ? 'disabled (local or Railway internal)' : 'TLSv1.2-1.3, rejectUnauthorized=false');
 
 // Test database connection on startup
 pool.connect()
