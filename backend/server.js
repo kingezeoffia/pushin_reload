@@ -622,6 +622,36 @@ app.get('/api/stripe/recover-anonymous-subscription', async (req, res) => {
   }
 });
 
+// Test endpoint to check if subscription tables are accessible
+app.get('/api/stripe/test-tables', async (req, res) => {
+  try {
+    console.log('🧪 Testing database tables...');
+
+    // Test subscriptions table
+    const subsCount = await pool.query('SELECT COUNT(*) FROM subscriptions');
+    console.log(`   - subscriptions table: ${subsCount.rows[0].count} records`);
+
+    // Test anonymous_subscriptions table
+    const anonCount = await pool.query('SELECT COUNT(*) FROM anonymous_subscriptions');
+    console.log(`   - anonymous_subscriptions table: ${anonCount.rows[0].count} records`);
+
+    res.json({
+      success: true,
+      tables: {
+        subscriptions: parseInt(subsCount.rows[0].count),
+        anonymous_subscriptions: parseInt(anonCount.rows[0].count)
+      }
+    });
+  } catch (error) {
+    console.error('❌ Table test error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      code: error.code
+    });
+  }
+});
+
 // 5. Restore Subscription by Email
 // Rate limiting middleware for restore purchases (prevents email enumeration)
 const restorePurchasesLimiter = rateLimit({
