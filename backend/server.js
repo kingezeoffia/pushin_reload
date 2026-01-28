@@ -628,11 +628,14 @@ const restorePurchasesLimiter = rateLimit({
 });
 
 app.post('/api/stripe/restore-by-email', restorePurchasesLimiter, async (req, res) => {
+  console.log('🚀 RESTORE ENDPOINT CALLED - START');
+  console.log('   Request body:', req.body);
   try {
     const { email } = req.body;
 
     // Validate email
     if (!email || !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      console.log('❌ Invalid email:', email);
       return res.status(400).json({
         success: false,
         error: 'invalid_email',
@@ -773,10 +776,14 @@ app.post('/api/stripe/restore-by-email', restorePurchasesLimiter, async (req, re
 
   } catch (error) {
     console.error('❌ Error restoring subscription by email:', error);
+    console.error('   Error stack:', error.stack);
+    console.error('   Error message:', error.message);
+    console.error('   Error code:', error.code);
     res.status(500).json({
       success: false,
       error: 'server_error',
-      message: 'Unable to process restore request. Please try again later.'
+      message: 'Unable to process restore request. Please try again later.',
+      debug: process.env.NODE_ENV === 'test' ? error.message : undefined
     });
   }
 });
