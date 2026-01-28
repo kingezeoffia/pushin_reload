@@ -36,6 +36,13 @@ const pool = new Pool({
     minVersion: 'TLSv1.2',
     maxVersion: 'TLSv1.3',
   },
+  // Connection pool settings for Railway
+  max: 20, // Maximum number of clients in the pool
+  idleTimeoutMillis: 30000, // How long a client can be idle before being closed
+  connectionTimeoutMillis: 10000, // How long to wait when connecting
+  // Keep alive settings
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
 });
 
 console.log('🔗 DB URL pattern:', cleanDbUrl.replace(/:[^:@]+@/, ':****@'));
@@ -666,13 +673,21 @@ app.post('/api/stripe/restore-by-email', restorePurchasesLimiter, async (req, re
     `;
 
     console.log('📊 Executing database queries...');
-    const [authenticatedResult, anonymousResult] = await Promise.all([
-      pool.query(authenticatedQuery, [email.trim().toLowerCase()]),
-      pool.query(anonymousQuery, [email.trim().toLowerCase()])
-    ]);
-    console.log('✅ Database queries completed');
-    console.log(`   - Authenticated results: ${authenticatedResult.rows.length}`);
-    console.log(`   - Anonymous results: ${anonymousResult.rows.length}`);
+    let authenticatedResult, anonymousResult;
+    try {
+      [authenticatedResult, anonymousResult] = await Promise.all([
+        pool.query(authenticatedQuery, [email.trim().toLowerCase()]),
+        pool.query(anonymousQuery, [email.trim().toLowerCase()])
+      ]);
+      console.log('✅ Database queries completed');
+      console.log(`   - Authenticated results: ${authenticatedResult.rows.length}`);
+      console.log(`   - Anonymous results: ${anonymousResult.rows.length}`);
+    } catch (dbError) {
+      console.error('❌ Database query error:', dbError.message);
+      console.error('   - Error code:', dbError.code);
+      console.error('   - Error detail:', dbError.detail);
+      throw dbError; // Re-throw to be caught by outer try-catch
+    }
 
     // Collect all active subscriptions
     let allSubscriptions = [
