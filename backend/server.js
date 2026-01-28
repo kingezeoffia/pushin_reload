@@ -626,24 +626,44 @@ app.get('/api/stripe/recover-anonymous-subscription', async (req, res) => {
 app.get('/api/stripe/test-tables', async (req, res) => {
   try {
     console.log('🧪 Testing database tables...');
+    const results = {};
+
+    // Test users table first (we know this works)
+    try {
+      const usersCount = await pool.query('SELECT COUNT(*) FROM users');
+      results.users = parseInt(usersCount.rows[0].count);
+      console.log(`   ✅ users table: ${results.users} records`);
+    } catch (e) {
+      results.users = `Error: ${e.message}`;
+      console.error(`   ❌ users table error: ${e.message}`);
+    }
 
     // Test subscriptions table
-    const subsCount = await pool.query('SELECT COUNT(*) FROM subscriptions');
-    console.log(`   - subscriptions table: ${subsCount.rows[0].count} records`);
+    try {
+      const subsCount = await pool.query('SELECT COUNT(*) FROM subscriptions');
+      results.subscriptions = parseInt(subsCount.rows[0].count);
+      console.log(`   ✅ subscriptions table: ${results.subscriptions} records`);
+    } catch (e) {
+      results.subscriptions = `Error: ${e.message}`;
+      console.error(`   ❌ subscriptions table error: ${e.message}`);
+    }
 
     // Test anonymous_subscriptions table
-    const anonCount = await pool.query('SELECT COUNT(*) FROM anonymous_subscriptions');
-    console.log(`   - anonymous_subscriptions table: ${anonCount.rows[0].count} records`);
+    try {
+      const anonCount = await pool.query('SELECT COUNT(*) FROM anonymous_subscriptions');
+      results.anonymous_subscriptions = parseInt(anonCount.rows[0].count);
+      console.log(`   ✅ anonymous_subscriptions table: ${results.anonymous_subscriptions} records`);
+    } catch (e) {
+      results.anonymous_subscriptions = `Error: ${e.message}`;
+      console.error(`   ❌ anonymous_subscriptions table error: ${e.message}`);
+    }
 
     res.json({
       success: true,
-      tables: {
-        subscriptions: parseInt(subsCount.rows[0].count),
-        anonymous_subscriptions: parseInt(anonCount.rows[0].count)
-      }
+      tables: results
     });
   } catch (error) {
-    console.error('❌ Table test error:', error.message);
+    console.error('❌ Global table test error:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,
