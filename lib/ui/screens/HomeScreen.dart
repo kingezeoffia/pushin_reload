@@ -31,9 +31,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, TickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _slideAnimation;
-  late Animation<double> _fadeAnimation;
+  late AnimationController _headerController;
+  late Animation<double> _headerSlideAnimation;
+  late Animation<double> _headerFadeAnimation;
 
   @override
   void initState() {
@@ -48,39 +48,39 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
       controller.onStartWorkoutFromIntent = (blockedApp) {
         print('HomeScreen: Navigating to workout from intent');
         // Navigate to workout selection screen
-        _navigateWithSlideAnimation(context, const WorkoutSelectionScreen());
+        _navigateWithSlideAnimation(const WorkoutSelectionScreen());
       };
     });
   }
 
   void _initializeAnimations() {
-    _animationController = AnimationController(
+    _headerController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
 
-    _slideAnimation = Tween<double>(
-      begin: 30.0,
+    _headerSlideAnimation = Tween<double>(
+      begin: -50.0,
       end: 0.0,
     ).animate(CurvedAnimation(
-      parent: _animationController,
+      parent: _headerController,
       curve: Curves.easeOutCubic,
     ));
 
-    _fadeAnimation = Tween<double>(
+    _headerFadeAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
     ).animate(CurvedAnimation(
-      parent: _animationController,
+      parent: _headerController,
       curve: Curves.easeOut,
     ));
 
-    _animationController.forward();
+    _headerController.forward();
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
+    _headerController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -117,19 +117,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
             ),
 
             // Block overlay (shown when blocked app launched or daily cap hit)
-            Consumer<PushinAppController>(
-              builder: (context, controller, _) {
-                final overlayState = controller.blockOverlayState.value;
+            ValueListenableBuilder<BlockOverlayState?>(
+              valueListenable:
+                  context.watch<PushinAppController>().blockOverlayState,
+              builder: (context, overlayState, _) {
                 if (overlayState != null) {
+                  final controller = context.read<PushinAppController>();
                   final isSuccessOverlay =
                       overlayState.reason == BlockReason.workoutCompleted;
 
-                  final emergencyEnabled = isSuccessOverlay ? false : controller.emergencyUnlockEnabled;
                   return AppBlockOverlay(
-                    key: ValueKey('overlay_${overlayState.reason}_${emergencyEnabled}'),
                     reason: overlayState.reason,
                     blockedAppName: overlayState.appName,
-                    emergencyUnlockEnabled: emergencyEnabled,
+                    emergencyUnlockEnabled:
+                        isSuccessOverlay ? false : controller.emergencyUnlockEnabled,
                     emergencyUnlocksRemaining: controller.emergencyUnlocksRemaining,
                     onStartWorkout: () {
                       // For success overlay, just dismiss without navigation
@@ -137,8 +138,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
                         controller.dismissBlockOverlay();
                       } else {
                         controller.dismissBlockOverlay();
-                        _navigateWithSlideAnimation(context, const WorkoutSelectionScreen());
-                      }
+                        _navigateWithSlideAnimation(const WorkoutSelectionScreen());
                     },
                     onEmergencyUnlock: isSuccessOverlay
                         ? null
@@ -176,8 +176,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
                     onGoToSettings: isSuccessOverlay
                         ? null
                         : () {
-                            _navigateWithSlideAnimation(context, const PushinSettingsScreen());
-                          },
+                            _navigateWithSlideAnimation(const PushinSettingsScreen());
                   );
                 }
                 return const SizedBox.shrink();
@@ -195,8 +194,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
                   size: 28,
                 ),
                 onPressed: () {
-                  _navigateWithSlideAnimation(context, const PushinSettingsScreen());
-                },
+                  _navigateWithSlideAnimation(const PushinSettingsScreen());
                 style: IconButton.styleFrom(
                   backgroundColor: Colors.white.withOpacity(0.1),
                   padding: const EdgeInsets.all(12),
@@ -255,66 +253,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
         return _ExpiredStateView(controller: controller, now: now);
     }
   }
-
-  void _navigateWithSlideAnimation(BuildContext context, Widget screen) {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => screen,
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(0.0, 1.0);
-          const end = Offset.zero;
-          const curve = Curves.easeOutCubic;
-
-          var tween =
-              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-          var offsetAnimation = animation.drive(tween);
-
-          return SlideTransition(
-            position: offsetAnimation,
-            child: child,
-          );
-        },
-      ),
-    );
-  }
 }
 
 /// LOCKED state view - Onboarding-style design
-class _LockedStateView extends StatefulWidget {
+class _LockedStateView extends StatelessWidget {
   final PushinAppController controller;
 
   const _LockedStateView({required this.controller});
 
   @override
-  State<_LockedStateView> createState() => _LockedStateViewState();
-}
-
-class _LockedStateViewState extends State<_LockedStateView> {
-  @override
   Widget build(BuildContext context) {
-    final homeState = context.findAncestorStateOfType<_HomeScreenState>()!;
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Spacer for top
+          SizedBox(height: MediaQuery.of(context).size.height * 0.06),
 
-    return AnimatedBuilder(
-      animation: homeState._animationController,
-      builder: (context, child) {
-        return Transform.translate(
-          offset: Offset(0, homeState._slideAnimation.value),
-          child: Opacity(
-            opacity: homeState._fadeAnimation.value,
-            child: child,
-          ),
-        );
-      },
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Spacer for top
-            SizedBox(height: MediaQuery.of(context).size.height * 0.06),
-
-            // Main headline
-            Padding(
+          // Main headline
+          AnimatedBuilder(
+            animation: _headerController,
+            builder: (context, child) {
+              return Transform.translate(
+                offset: Offset(0, _headerSlideAnimation.value),
+                child: Opacity(
+                  opacity: _headerFadeAnimation.value,
+                  child: child,
+                ),
+              );
+            },
+            child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -361,103 +329,79 @@ class _LockedStateViewState extends State<_LockedStateView> {
                 ],
               ),
             ),
+          ),
 
-            const SizedBox(height: 40),
+          const SizedBox(height: 40),
 
-            // Workout option card
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: _OnboardingStyleWorkoutCard(
-                icon: Icons.fitness_center,
-                title: 'Push-Ups',
-                subtitle: widget.controller.getWorkoutRewardDescription('push-ups', 20),
-                onTap: () {
-                  _navigateWithSlideAnimation(context, const RepCounterScreen(
-                    workoutType: 'push-ups',
-                    targetReps: 20,
-                    desiredScreenTimeMinutes: 10,
-                  ));
-                },
-              ),
+          // Workout option card
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: _OnboardingStyleWorkoutCard(
+              icon: Icons.fitness_center,
+              title: 'Push-Ups',
+              subtitle: controller.getWorkoutRewardDescription('push-ups', 20),
+              onTap: () {
+                _navigateWithSlideAnimation(const RepCounterScreen( 
+                  workoutType: 'push-ups', 
+                  targetReps: 20, 
+                  desiredScreenTimeMinutes: 10, 
+                ));
+                );
+              },
             ),
+          ),
 
-            const Spacer(),
+          const Spacer(),
 
-            // Start Workout Button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(32, 16, 32, 16),
-              child: PressAnimationButton(
-                onTap: () {
-                  _navigateWithSlideAnimation(context, const WorkoutSelectionScreen());
-                },
-                child: Container(
-                  width: double.infinity,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.95),
-                    borderRadius: BorderRadius.circular(100),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.white.withOpacity(0.2),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'Choose Workout',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF2A2A6A),
-                        letterSpacing: -0.3,
-                      ),
+          // Start Workout Button
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 16, 32, 16),
+            child: PressAnimationButton(
+              onTap: () {
+                _navigateWithSlideAnimation(const WorkoutSelectionScreen());
+              child: Container(
+                width: double.infinity,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(100),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.white.withOpacity(0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Text(
+                    'Choose Workout',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF2A2A6A),
+                      letterSpacing: -0.3,
                     ),
                   ),
                 ),
               ),
             ),
+          ),
 
-            // Quick start subtitle
-            Padding(
-              padding: const EdgeInsets.only(bottom: 32),
-              child: Center(
-                child: Text(
-                  'Or tap the card above for quick start',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white.withOpacity(0.5),
-                  ),
+          // Quick start subtitle
+          Padding(
+            padding: const EdgeInsets.only(bottom: 32),
+            child: Center(
+              child: Text(
+                'Or tap the card above for quick start',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.white.withOpacity(0.5),
                 ),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _navigateWithSlideAnimation(BuildContext context, Widget screen) {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => screen,
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(0.0, 1.0);
-          const end = Offset.zero;
-          const curve = Curves.easeOutCubic;
-
-          var tween =
-              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-          var offsetAnimation = animation.drive(tween);
-
-          return SlideTransition(
-            position: offsetAnimation,
-            child: child,
-          );
-        },
-        transitionDuration: const Duration(milliseconds: 400),
+          ),
+        ],
       ),
     );
   }
@@ -769,7 +713,7 @@ class _EarningStateView extends StatelessWidget {
 }
 
 /// UNLOCKED state view - Onboarding style
-class _UnlockedStateView extends StatefulWidget {
+class _UnlockedStateView extends StatelessWidget {
   final PushinAppController controller;
   final DateTime now;
 
@@ -779,37 +723,31 @@ class _UnlockedStateView extends StatefulWidget {
   });
 
   @override
-  State<_UnlockedStateView> createState() => _UnlockedStateViewState();
-}
-
-class _UnlockedStateViewState extends State<_UnlockedStateView> {
-  @override
   Widget build(BuildContext context) {
-    final homeState = context.findAncestorStateOfType<_HomeScreenState>()!;
-    final remainingSeconds = widget.controller.getUnlockTimeRemaining(widget.now);
+    final remainingSeconds = controller.getUnlockTimeRemaining(now);
     final minutes = remainingSeconds ~/ 60;
     final seconds = remainingSeconds % 60;
 
-    return AnimatedBuilder(
-      animation: homeState._animationController,
-      builder: (context, child) {
-        return Transform.translate(
-          offset: Offset(0, homeState._slideAnimation.value),
-          child: Opacity(
-            opacity: homeState._fadeAnimation.value,
-            child: child,
-          ),
-        );
-      },
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Spacer for top
-            SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Spacer for top
+          SizedBox(height: MediaQuery.of(context).size.height * 0.06),
 
-            // Main headline
-            Padding(
+          // Main headline
+          AnimatedBuilder(
+            animation: _headerController,
+            builder: (context, child) {
+              return Transform.translate(
+                offset: Offset(0, _headerSlideAnimation.value),
+                child: Opacity(
+                  opacity: _headerFadeAnimation.value,
+                  child: child,
+                ),
+              );
+            },
+            child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -856,131 +794,106 @@ class _UnlockedStateViewState extends State<_UnlockedStateView> {
                 ],
               ),
             ),
+          ),
 
-            const Spacer(),
+          const Spacer(),
 
-            // Countdown timer card
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 40,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(
-                  children: [
-                    ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [Color(0xFF10B981), Color(0xFF34D399)],
-                      ).createShader(bounds),
-                      blendMode: BlendMode.srcIn,
-                      child: Text(
-                        '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
-                        style: const TextStyle(
-                          fontSize: 72,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 4,
-                        ),
+          // Countdown timer card
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 32,
+                vertical: 40,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                children: [
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [Color(0xFF10B981), Color(0xFF34D399)],
+                    ).createShader(bounds),
+                    blendMode: BlendMode.srcIn,
+                    child: Text(
+                      '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
+                      style: const TextStyle(
+                        fontSize: 72,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 4,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'TIME REMAINING',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white.withOpacity(0.5),
-                        letterSpacing: 2,
-                      ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'TIME REMAINING',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withOpacity(0.5),
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const Spacer(),
+
+          // Earn More Time button
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+            child: PressAnimationButton(
+              onTap: () {
+                _navigateWithSlideAnimation(const WorkoutSelectionScreen());
+              child: Container(
+                width: double.infinity,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(100),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.white.withOpacity(0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
                     ),
                   ],
                 ),
-              ),
-            ),
-
-            const Spacer(),
-
-            // Earn More Time button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
-              child: PressAnimationButton(
-                onTap: () {
-                  _navigateWithSlideAnimation(context, const WorkoutSelectionScreen());
-                },
-                child: Container(
-                  width: double.infinity,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.95),
-                    borderRadius: BorderRadius.circular(100),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.white.withOpacity(0.2),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
+                child: const Center(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.fitness_center, size: 20, color: Color(0xFF2A2A6A)),
+                      SizedBox(width: 8),
+                      Text(
+                        'Earn More Time',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF2A2A6A),
+                          letterSpacing: -0.3,
+                        ),
                       ),
                     ],
-                  ),
-                  child: const Center(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.fitness_center, size: 20, color: Color(0xFF2A2A6A)),
-                        SizedBox(width: 8),
-                        Text(
-                          'Earn More Time',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF2A2A6A),
-                            letterSpacing: -0.3,
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _navigateWithSlideAnimation(BuildContext context, Widget screen) {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => screen,
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(0.0, 1.0);
-          const end = Offset.zero;
-          const curve = Curves.easeOutCubic;
-
-          var tween =
-              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-          var offsetAnimation = animation.drive(tween);
-
-          return SlideTransition(
-            position: offsetAnimation,
-            child: child,
-          );
-        },
-        transitionDuration: const Duration(milliseconds: 400),
+          ),
+        ],
       ),
     );
   }
 }
 
 /// EXPIRED state view (grace period) - Onboarding style
-class _ExpiredStateView extends StatefulWidget {
+class _ExpiredStateView extends StatelessWidget {
   final PushinAppController controller;
   final DateTime now;
 
@@ -990,35 +903,29 @@ class _ExpiredStateView extends StatefulWidget {
   });
 
   @override
-  State<_ExpiredStateView> createState() => _ExpiredStateViewState();
-}
-
-class _ExpiredStateViewState extends State<_ExpiredStateView> {
-  @override
   Widget build(BuildContext context) {
-    final homeState = context.findAncestorStateOfType<_HomeScreenState>()!;
-    final graceRemaining = widget.controller.getGracePeriodRemaining(widget.now);
+    final graceRemaining = controller.getGracePeriodRemaining(now);
 
-    return AnimatedBuilder(
-      animation: homeState._animationController,
-      builder: (context, child) {
-        return Transform.translate(
-          offset: Offset(0, homeState._slideAnimation.value),
-          child: Opacity(
-            opacity: homeState._fadeAnimation.value,
-            child: child,
-          ),
-        );
-      },
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Spacer for top
-            SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Spacer for top
+          SizedBox(height: MediaQuery.of(context).size.height * 0.06),
 
-            // Main headline
-            Padding(
+          // Main headline
+          AnimatedBuilder(
+            animation: _headerController,
+            builder: (context, child) {
+              return Transform.translate(
+                offset: Offset(0, _headerSlideAnimation.value),
+                child: Opacity(
+                  opacity: _headerFadeAnimation.value,
+                  child: child,
+                ),
+              );
+            },
+            child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1065,122 +972,92 @@ class _ExpiredStateViewState extends State<_ExpiredStateView> {
                 ],
               ),
             ),
+          ),
 
-            const Spacer(),
+          const Spacer(),
 
-            // Grace period card
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 40,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.timer_off,
-                      size: 64,
-                      color: Colors.amber.shade400,
-                    ),
-                    const SizedBox(height: 16),
-                    ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [Color(0xFFF59E0B), Color(0xFFFBBF24)],
-                      ).createShader(bounds),
-                      blendMode: BlendMode.srcIn,
-                      child: Text(
-                        '$graceRemaining',
-                        style: const TextStyle(
-                          fontSize: 56,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+          // Grace period card
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 32,
+                vertical: 40,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.timer_off,
+                    size: 64,
+                    color: Colors.amber.shade400,
+                  ),
+                  const SizedBox(height: 16),
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [Color(0xFFF59E0B), Color(0xFFFBBF24)],
+                    ).createShader(bounds),
+                    blendMode: BlendMode.srcIn,
+                    child: Text(
+                      '$graceRemaining',
+                      style: const TextStyle(
+                        fontSize: 56,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'SECONDS GRACE PERIOD',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white.withOpacity(0.5),
-                        letterSpacing: 1,
-                      ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'SECONDS GRACE PERIOD',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withOpacity(0.5),
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const Spacer(),
+
+          // Start Workout button
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+            child: PressAnimationButton(
+              onTap: () {
+                _navigateWithSlideAnimation(const WorkoutSelectionScreen());
+                  borderRadius: BorderRadius.circular(100),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.white.withOpacity(0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
                     ),
                   ],
                 ),
-              ),
-            ),
-
-            const Spacer(),
-
-            // Start Workout button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
-              child: PressAnimationButton(
-                onTap: () {
-                  _navigateWithSlideAnimation(context, const WorkoutSelectionScreen());
-                },
-                child: Container(
-                  width: double.infinity,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.95),
-                    borderRadius: BorderRadius.circular(100),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.white.withOpacity(0.2),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'Start Workout Now',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF2A2A6A),
-                        letterSpacing: -0.3,
-                      ),
+                child: const Center(
+                  child: Text(
+                    'Start Workout Now',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF2A2A6A),
+                      letterSpacing: -0.3,
                     ),
                   ),
                 ),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _navigateWithSlideAnimation(BuildContext context, Widget screen) {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => screen,
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(0.0, 1.0);
-          const end = Offset.zero;
-          const curve = Curves.easeOutCubic;
-
-          var tween =
-              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-          var offsetAnimation = animation.drive(tween);
-
-          return SlideTransition(
-            position: offsetAnimation,
-            child: child,
-          );
-        },
-        transitionDuration: const Duration(milliseconds: 400),
+          ),
+        ],
       ),
     );
   }
@@ -1489,6 +1366,31 @@ class _PaymentCancelOverlay extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+  void _navigateWithSlideAnimation(Widget screen) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => screen,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          // Smooth slide transition from bottom
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          const curve = Curves.easeOutCubic;
+
+          var tween =
+              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400),
       ),
     );
   }
