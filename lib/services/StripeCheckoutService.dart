@@ -349,6 +349,60 @@ class StripeCheckoutService implements PaymentService {
     }
   }
 
+  /// Open Stripe Customer Portal for subscription management
+  /// Requires authenticated user - userId must be provided
+  Future<bool> openCustomerPortal({
+    required String userId,
+    String? anonymousId,
+  }) async {
+    try {
+      print('🔵 StripeCheckoutService: Opening customer portal');
+      print('   URL: $baseUrl/stripe/create-portal-session');
+      print('   userId: $userId');
+      if (anonymousId != null) print('   anonymousId: $anonymousId');
+
+      final requestBody = {
+        'userId': userId,
+        if (anonymousId != null) 'anonymousId': anonymousId,
+      };
+
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/stripe/create-portal-session'),
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(requestBody),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      print('📡 Portal session response: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final portalUrl = data['url'] as String;
+
+        print('✅ Portal URL received, launching: $portalUrl');
+
+        final uri = Uri.parse(portalUrl);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          return true;
+        } else {
+          print('❌ Could not launch portal URL');
+          return false;
+        }
+      } else {
+        print('❌ Failed to create portal session: ${response.statusCode}');
+        print('   Response: ${response.body}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Error opening customer portal: $e');
+      return false;
+    }
+  }
+
   /// Simulate Stripe Checkout for testing without real keys
   Future<bool> _simulateTestCheckout(String userId, String planId,
       String billingPeriod, String userEmail) async {
@@ -536,7 +590,6 @@ class SubscriptionStatus {
 
   String get displayName {
     switch (planId) {
-      case 'pro':
       case 'pro':
         return 'Pro Plan';
       case 'advanced':

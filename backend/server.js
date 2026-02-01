@@ -507,7 +507,59 @@ app.post('/api/stripe/cancel-subscription', async (req, res) => {
   }
 });
 
-// 5. Link Anonymous Subscription to User Account
+// 5. Create Customer Portal Session
+app.post('/api/stripe/create-portal-session', async (req, res) => {
+  try {
+    const { userId, anonymousId } = req.body;
+    
+    console.log('Creating portal session:', { userId, anonymousId });
+
+    if (!userId && !anonymousId) {
+      return res.status(400).json({ error: 'Missing userId or anonymousId' });
+    }
+
+    // Get customer_id from database
+    let customerId;
+    if (userId) {
+      const result = await pool.query(
+        'SELECT customer_id FROM subscriptions WHERE user_id = $1 AND is_active = true LIMIT 1',
+        [userId]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'No active subscription found' });
+      }
+      customerId = result.rows[0].customer_id;
+    } else {
+      const result = await pool.query(
+        'SELECT customer_id FROM anonymous_subscriptions WHERE anonymous_id = $1 AND is_active = true LIMIT 1',
+        [anonymousId]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'No active subscription found' });
+      }
+      customerId = result.rows[0].customer_id;
+    }
+
+    if (!customerId) {
+      return res.status(404).json({ error: 'Customer ID not found' });
+    }
+
+    // Create portal session
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: 'pushinapp://portal-return',
+    });
+
+    console.log('✅ Portal session created:', session.id);
+
+    res.json({ url: session.url });
+  } catch (error) {
+    console.error('❌ Error creating portal session:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 6. Link Anonymous Subscription to User Account
 app.post('/api/stripe/link-anonymous-subscription', async (req, res) => {
   try {
     const { anonymousId, userId, email } = req.body;
@@ -904,13 +956,41 @@ app.post('/api/stripe/webhook',
         case 'customer.subscription.updated':
           const updatedSub = event.data.object;
           console.log('🔄 Subscription updated:', updatedSub.id);
-          // Update subscription status in database
+          
+          // Update database
+          const status = updatedSub.status;
+          const isActive = status === 'active';
+          
+          // Update subscriptions table
+          await pool.query(
+            `UPDATE subscriptions SET is_active = $1, current_period_end = $2, updated_at = $3 WHERE subscription_id = $4`,
+            [isActive, new Date(updatedSub.current_period_end * 1000), new Date(), updatedSub.id]
+          );
+          
+          // Update anonymous_subscriptions table
+          await pool.query(
+            `UPDATE anonymous_subscriptions SET is_active = $1, current_period_end = $2, updated_at = $3 WHERE subscription_id = $4`,
+            [isActive, new Date(updatedSub.current_period_end * 1000), new Date(), updatedSub.id]
+          );
+          
+          console.log(`✅ Subscription ${updatedSub.id} updated - status: ${status}`);
           break;
           
         case 'customer.subscription.deleted':
           const deletedSub = event.data.object;
           console.log('❌ Subscription canceled:', deletedSub.id);
-          // Mark subscription as inactive in database
+          
+          // Mark as inactive in both tables
+          await pool.query(
+            'UPDATE subscriptions SET is_active = false, updated_at = $1 WHERE subscription_id = $2',
+            [new Date(), deletedSub.id]
+          );
+          await pool.query(
+            'UPDATE anonymous_subscriptions SET is_active = false, updated_at = $1 WHERE subscription_id = $2',
+            [new Date(), deletedSub.id]
+          );
+          
+          console.log(`✅ Subscription ${deletedSub.id} marked as inactive`);
           break;
           
         case 'invoice.payment_succeeded':

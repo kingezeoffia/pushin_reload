@@ -692,16 +692,24 @@ class _PaywallScreenState extends State<PaywallScreen>
                             isPopular: _currentSubscriptionPlan !=
                                 'pro', // Only show POPULAR if not current plan
                             isCurrentPlan: _currentSubscriptionPlan == 'pro',
-                            onTap: _isInitializingPlan ||
-                                    _currentSubscriptionPlan == 'pro'
+                            onTap: _isInitializingPlan
                                 ? null
-                                : () {
-                                    HapticFeedback.lightImpact();
-                                    setState(() {
-                                      _selectedPlan = 'pro';
-                                      _hasUserManuallySelectedPlan = true;
-                                    });
-                                  },
+                                : _currentSubscriptionPlan == 'pro'
+                                    ? () {
+                                        // Current plan - still update selection for visual feedback
+                                        HapticFeedback.lightImpact();
+                                        setState(() {
+                                          _selectedPlan = 'pro';
+                                          _hasUserManuallySelectedPlan = true;
+                                        });
+                                      }
+                                    : () {
+                                        HapticFeedback.lightImpact();
+                                        setState(() {
+                                          _selectedPlan = 'pro';
+                                          _hasUserManuallySelectedPlan = true;
+                                        });
+                                      },
                           ),
 
                           const SizedBox(height: 16),
@@ -729,16 +737,24 @@ class _PaywallScreenState extends State<PaywallScreen>
                             ],
                             isSelected: _selectedPlan == 'advanced',
                             isPopular: false,
-                            onTap: _isInitializingPlan ||
-                                    _currentSubscriptionPlan == 'advanced'
+                            onTap: _isInitializingPlan
                                 ? null
-                                : () {
-                                    HapticFeedback.lightImpact();
-                                    setState(() {
-                                      _selectedPlan = 'advanced';
-                                      _hasUserManuallySelectedPlan = true;
-                                    });
-                                  },
+                                : _currentSubscriptionPlan == 'advanced'
+                                    ? () {
+                                        // Current plan - still update selection for visual feedback
+                                        HapticFeedback.lightImpact();
+                                        setState(() {
+                                          _selectedPlan = 'advanced';
+                                          _hasUserManuallySelectedPlan = true;
+                                        });
+                                      }
+                                    : () {
+                                        HapticFeedback.lightImpact();
+                                        setState(() {
+                                          _selectedPlan = 'advanced';
+                                          _hasUserManuallySelectedPlan = true;
+                                        });
+                                      },
                           ),
 
                           const SizedBox(height: 150), // Space for fixed button
@@ -780,9 +796,12 @@ class _PaywallScreenState extends State<PaywallScreen>
                   _StartTrialButton(
                     isLoading: _isLoading || _isInitializingPlan,
                     planName: _selectedPlan,
+                    isCurrentPlan: _selectedPlan == _currentSubscriptionPlan,
                     onTap: _isInitializingPlan
                         ? null
-                        : () => _handleSubscribe(context),
+                        : () => _selectedPlan == _currentSubscriptionPlan
+                            ? _handleManageSubscription()
+                            : _handleSubscribe(context),
                   ),
                   const SizedBox(height: 12),
                   GestureDetector(
@@ -1049,6 +1068,44 @@ class _PaywallScreenState extends State<PaywallScreen>
     );
   }
 
+  Future<void> _handleManageSubscription() async {
+    try {
+      final authProvider = context.read<AuthStateProvider>();
+      final currentUser = authProvider.currentUser;
+
+      if (currentUser == null) {
+        print('❌ Cannot open portal: user not authenticated');
+        _showErrorDialog('Please sign in to manage your subscription.');
+        return;
+      }
+
+      setState(() => _isLoading = true);
+
+      final stripeService = StripeCheckoutService(
+        baseUrl: 'https://pushin-production.up.railway.app/api',
+        isTestMode: true,
+      );
+
+      final success = await stripeService.openCustomerPortal(
+        userId: currentUser.id.toString(),
+      );
+
+      if (!success && mounted) {
+        _showErrorDialog(
+            'Unable to open subscription management. Please try again.');
+      }
+    } catch (e) {
+      print('❌ Error opening customer portal: $e');
+      if (mounted) {
+        _showErrorDialog('An error occurred: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   void _showRestorePurchasesDialog() async {
     // Create payment service
     final stripeService = StripeCheckoutService(
@@ -1175,6 +1232,7 @@ class _PlanCardState extends State<_PlanCard>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
+  bool _isPressed = false;
 
   @override
   void initState() {
@@ -1212,10 +1270,26 @@ class _PlanCardState extends State<_PlanCard>
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: widget.onTap,
+      onTapDown: widget.onTap != null
+          ? (_) {
+              setState(() => _isPressed = true);
+            }
+          : null,
+      onTapUp: widget.onTap != null
+          ? (_) {
+              setState(() => _isPressed = false);
+              widget.onTap?.call();
+            }
+          : null,
+      onTapCancel: widget.onTap != null
+          ? () {
+              setState(() => _isPressed = false);
+            }
+          : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOutCubic,
+        transform: Matrix4.identity()..scale(_isPressed ? 0.98 : 1.0),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: widget.isSelected
@@ -1567,11 +1641,13 @@ class _PlanCardState extends State<_PlanCard>
 class _StartTrialButton extends StatelessWidget {
   final bool isLoading;
   final String planName;
+  final bool isCurrentPlan;
   final VoidCallback? onTap;
 
   const _StartTrialButton({
     required this.isLoading,
     required this.planName,
+    this.isCurrentPlan = false,
     required this.onTap,
   });
 
@@ -1604,9 +1680,11 @@ class _StartTrialButton extends StatelessWidget {
                   ),
                 )
               : Text(
-                  planName == 'free'
-                      ? 'Continue for Free'
-                      : 'Start Free Trial — ${planName.toUpperCase()}',
+                  isCurrentPlan
+                      ? 'Manage Subscription'
+                      : planName == 'free'
+                          ? 'Continue for Free'
+                          : 'Start Free Trial — ${planName.toUpperCase()}',
                   style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
