@@ -36,81 +36,78 @@ class WelcomeScreen extends StatelessWidget {
       body: GOStepsBackground(
         blackRatio: 0.25,
         child: SafeArea(
-          child: Column(
+          child: Stack(
             children: [
               // Scrollable content area
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Logo Space - Reserved for PNG logo (approximately 1/2 of screen)
-                      SizedBox(
-                        height: screenHeight * 0.5,
-                        child: Center(
-                          child: Container(
-                            width: 200,
-                            height: 200,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(28),
-                              color: Colors.white.withOpacity(0.05),
-                            ),
-                            child: Center(
-                              child: Text(
-                                'LOGO',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white.withOpacity(0.3),
-                                  letterSpacing: 2,
-                                ),
-                              ),
-                            ),
+              SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Logo Space - PNG logo (approximately 1/2 of screen)
+                    SizedBox(
+                      height: screenHeight * 0.5,
+                      child: Center(
+                        child: ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [Colors.white, Color(0xFFB0B8FF)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ).createShader(
+                            Rect.fromLTWH(
+                                0, 0, bounds.width, bounds.height * 1.3),
+                          ),
+                          blendMode: BlendMode.srcIn,
+                          child: Image.asset(
+                            'assets/icons/pushin_logo_2.png',
+                            width: 320,
+                            height: 320,
+                            fit: BoxFit.contain,
                           ),
                         ),
                       ),
+                    ),
 
-                      // Spacer to push title down towards buttons
-                      SizedBox(height: screenHeight * 0.15),
+                    // Spacer to push title down towards buttons
+                    SizedBox(height: screenHeight * 0.15),
 
-                      // Welcome Title (left-aligned)
-                      const Text(
-                        'Welcome to',
+                    // Welcome Title (left-aligned)
+                    const Text(
+                      'Welcome to',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white70,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Colors.white, Color(0xFFB0B8FF)],
+                      ).createShader(
+                        Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                      ),
+                      blendMode: BlendMode.srcIn,
+                      child: const Text(
+                        "PUSHIN'",
                         style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w400,
-                          color: Colors.white70,
+                          fontSize: 52,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
                           letterSpacing: -0.5,
+                          height: 1.1,
                         ),
                       ),
+                    ),
 
-
-                      ShaderMask(
-                        shaderCallback: (bounds) => const LinearGradient(
-                          colors: [Colors.white, Color(0xFFB0B8FF)],
-                        ).createShader(
-                          Rect.fromLTWH(
-                              0, 0, bounds.width, bounds.height * 1.3),
-                        ),
-                        blendMode: BlendMode.srcIn,
-                        child: const Text(
-                          "PUSHIN'",
-                          style: TextStyle(
-                            fontSize: 52,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            letterSpacing: -0.5,
-                            height: 1.1,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    // Add spacing at bottom to prevent content from being hidden by buttons
+                    const SizedBox(height: 200),
+                  ],
                 ),
               ),
 
-              // Fixed bottom buttons - context-aware
+              // Fixed bottom buttons - context-aware (Positioned widget requires Stack)
               BottomActionContainer(
                 child: _buildBottomButtons(context, authProvider),
               ),
@@ -175,7 +172,6 @@ class WelcomeScreen extends StatelessWidget {
     );
   }
 }
-
 
 /// Value proposition point widget
 class _ValuePoint extends StatelessWidget {

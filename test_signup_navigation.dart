@@ -34,20 +34,13 @@ void main() async {
 
   // Trigger sign up flow
   authProvider.triggerSignUpFlow();
-  print('After triggerSignUpFlow: showSignUpScreen=${authProvider.showSignUpScreen}');
+  print(
+      'After triggerSignUpFlow: showSignUpScreen=${authProvider.showSignUpScreen}');
 
   // Test that we can clear it
   authProvider.clearSignUpFlow();
-  print('After clearSignUpFlow: showSignUpScreen=${authProvider.showSignUpScreen}');
+  print(
+      'After clearSignUpFlow: showSignUpScreen=${authProvider.showSignUpScreen}');
 
   print('✅ State-driven navigation test completed successfully!');
 }
-
-
-
-
-
-
-
-
-

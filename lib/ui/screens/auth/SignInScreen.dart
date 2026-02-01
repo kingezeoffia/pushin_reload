@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../../state/auth_state_provider.dart';
+import 'ForgotPasswordScreen.dart';
 
 /// Sign In Screen - Email/Password authentication
 ///
@@ -91,32 +92,55 @@ class _SignInScreenState extends State<SignInScreen> {
     );
 
     if (success && mounted) {
-      // Navigate based on user state
-      _navigateAfterAuth();
+      // login() already updated auth state, router will handle navigation to main app
+      // BMAD v6: No direct navigation - router reacts to state changes
+      print(
+          '🎯 SignInScreen: Login successful - AppRouter will handle navigation');
+
+      // Clear auth screen flags to let router take over
+      authProvider.clearSignInFlow();
+
+      // Don't navigate manually - let AppRouter handle state-driven navigation
+      // Router will detect isAuthenticated=true and route appropriately
     }
     // Error is handled by the provider and displayed in UI
   }
 
   void _handleForgotPassword() {
-    // TODO: Implement forgot password functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Forgot password functionality coming soon')),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ForgotPasswordScreen(),
+      ),
     );
   }
 
   void _navigateToSignUp() {
+    debugPrint('🔘 SignInScreen: Sign Up button tapped');
+
     // Add haptic feedback for button press
     HapticFeedback.lightImpact();
 
-    // BMAD v6: State-driven navigation - no Navigator.push
+    debugPrint(
+        '🔘 SignInScreen: Triggering state-driven navigation to SignUpScreen...');
     final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
     authProvider.triggerSignUpFlow();
+    debugPrint(
+        '🔘 SignInScreen: State-driven navigation to SignUpScreen triggered');
   }
 
-  void _navigateAfterAuth() {
-    // Navigation is handled automatically by AppRouter when auth state changes
-    // AppRouter listens to AuthStateProvider and will route appropriately
+  void _navigateBack() {
+    debugPrint('🔘 SignInScreen: Back button tapped');
+
+    // Add haptic feedback for button press
+    HapticFeedback.lightImpact();
+
+    debugPrint(
+        '🔘 SignInScreen: Clearing sign in screen flag to return to WelcomeScreen...');
+    final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
+    authProvider.clearSignInFlow();
+    debugPrint(
+        '🔘 SignInScreen: Sign in screen flag cleared - router will show WelcomeScreen');
   }
 
   Future<void> _handleThirdPartySignIn(String provider) async {
@@ -130,8 +154,16 @@ class _SignInScreenState extends State<SignInScreen> {
     }
 
     if (success && mounted) {
-      // Navigate based on user state
-      _navigateAfterAuth();
+      // signInWithGoogle/Apple() already updated auth state, router will handle navigation
+      // BMAD v6: No direct navigation - router reacts to state changes
+      print(
+          '🎯 SignInScreen: Third-party sign-in successful - AppRouter will handle navigation');
+
+      // Clear auth screen flags to let router take over
+      authProvider.clearSignInFlow();
+
+      // Don't navigate manually - let AppRouter handle state-driven navigation
+      // Router will detect isAuthenticated=true and route appropriately
     }
     // Error is handled by the provider and displayed in UI
   }
@@ -161,53 +193,75 @@ class _SignInScreenState extends State<SignInScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Top navigation bar with sign up button
+                        // Top navigation bar with back and sign up buttons
                         Padding(
-                          padding: const EdgeInsets.only(top: 16, right: 16),
+                          padding: const EdgeInsets.only(
+                              top: 16, left: 16, right: 16),
                           child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              GestureDetector(
-                                onTap: _navigateToSignUp,
-                                child: Container(
+                              // Back button
+                              IconButton(
+                                onPressed: () {
+                                  debugPrint(
+                                      '🔘 SignInScreen: Back button TAPPED');
+                                  _navigateBack();
+                                },
+                                icon: const Icon(
+                                  Icons.arrow_back,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                                style: IconButton.styleFrom(
+                                  backgroundColor:
+                                      Colors.white.withOpacity(0.1),
+                                  padding: const EdgeInsets.all(12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+
+                              TextButton(
+                                onPressed: () {
+                                  debugPrint(
+                                      '🔘 SignInScreen: Sign Up button TAPPED');
+                                  _navigateToSignUp();
+                                },
+                                style: TextButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 16, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
+                                  backgroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
+                                    side: BorderSide(
                                       color: Colors.white.withOpacity(0.2),
                                       width: 1,
                                     ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.white.withOpacity(0.1),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
                                   ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        'Sign Up',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: const Color(0xFF2A2A6A),
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: -0.1,
-                                        ),
+                                  shadowColor: Colors.white.withOpacity(0.1),
+                                  elevation: 4,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Sign Up',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: const Color(0xFF2A2A6A),
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: -0.1,
                                       ),
-                                      const SizedBox(width: 6),
-                                      Icon(
-                                        Icons.arrow_forward,
-                                        size: 16,
-                                        color: const Color(0xFF2A2A6A)
-                                            .withOpacity(0.7),
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Icon(
+                                      Icons.arrow_forward,
+                                      size: 16,
+                                      color: const Color(0xFF2A2A6A)
+                                          .withOpacity(0.7),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -249,7 +303,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                 child: Text(
                                   'PUSHIN\'',
                                   style: TextStyle(
-                                    fontSize: 38,
+                                    fontSize: 50,
                                     fontWeight: FontWeight.w800,
                                     color: Colors.white,
                                     height: 1.1,
@@ -263,9 +317,46 @@ class _SignInScreenState extends State<SignInScreen> {
                           ),
                         ),
 
-                        const SizedBox(
-                            height:
-                                250), // Large spacing between title and content
+                        // Large spacing between title and content with background logo
+                        SizedBox(
+                          height: 250,
+                          child: Stack(
+                            children: [
+                              // Background logo positioned on the right side
+                              Positioned(
+                                right:
+                                    -600, // Position so only half is visible on phone edge
+                                top: 0,
+                                bottom: 0,
+                                child: Opacity(
+                                  opacity:
+                                      0.12, // Slightly more visible with gradient
+                                  child: ShaderMask(
+                                    shaderCallback: (bounds) =>
+                                        const LinearGradient(
+                                      colors: [
+                                        Color(0xFF6060FF),
+                                        Color(0xFF9090FF)
+                                      ],
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                    ).createShader(
+                                      Rect.fromLTWH(0, 0, bounds.width,
+                                          bounds.height * 1.3),
+                                    ),
+                                    blendMode: BlendMode.srcIn,
+                                    child: Image.asset(
+                                      'assets/icons/pushin_logo_2.png',
+                                      width: 1200,
+                                      height: 1200,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
 
                         // Input Fields Section
                         Padding(

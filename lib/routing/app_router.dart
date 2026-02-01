@@ -19,6 +19,7 @@ import '../ui/screens/onboarding/HowItWorksBlockAppsScreen.dart';
 import '../ui/screens/onboarding/HowItWorksExerciseSelectionScreen.dart';
 import '../ui/screens/onboarding/HowItWorksPushUpTestScreen.dart';
 import '../ui/screens/onboarding/HowItWorksEmergencyUnlockScreen.dart';
+import '../ui/screens/paywall/PaywallScreen.dart';
 
 /// Production-ready state-driven router
 ///
@@ -68,7 +69,8 @@ class AppRouter extends StatelessWidget {
     debugPrint('  - isInitialized: ${authProvider.isInitialized}');
     debugPrint('  - isAuthenticated: ${authProvider.isAuthenticated}');
     debugPrint('  - isGuestMode: ${authProvider.isGuestMode}');
-    debugPrint('  - isOnboardingCompleted: ${authProvider.isOnboardingCompleted}');
+    debugPrint(
+        '  - isOnboardingCompleted: ${authProvider.isOnboardingCompleted}');
     debugPrint('  - onboardingStep: ${authProvider.onboardingStep}');
     debugPrint('  - showSignUpScreen: ${authProvider.showSignUpScreen}');
     debugPrint('  - showSignInScreen: ${authProvider.showSignInScreen}');
@@ -77,9 +79,14 @@ class AppRouter extends StatelessWidget {
     // 1. App loading
     if (!authProvider.isInitialized) {
       debugPrint('🧭 Router: App not initialized yet → Loading screen');
-      return const Scaffold(
-        key: ValueKey('loading_screen'),
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        key: const ValueKey('loading_screen'),
+        backgroundColor: Colors.black,
+        body: const Center(
+          child: CircularProgressIndicator(
+            color: Colors.white,
+          ),
+        ),
       );
     }
 
@@ -175,6 +182,12 @@ class AppRouter extends StatelessWidget {
             blockedApps: authProvider.blockedApps,
             selectedWorkout: authProvider.selectedWorkout ?? '',
             unlockDuration: authProvider.unlockDuration ?? 30,
+          );
+        case OnboardingStep.paywall:
+          debugPrint(
+              '🧭 Router: PAYWALL SCREEN - onboardingStep=${authProvider.onboardingStep}');
+          return PaywallScreen(
+            key: const ValueKey('paywall_screen'),
           );
         case OnboardingStep.completed:
           // Should not reach here due to outer condition

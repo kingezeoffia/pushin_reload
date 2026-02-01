@@ -90,7 +90,8 @@ class _WorkoutConfiguratorState extends State<WorkoutConfigurator> {
             min: 1,
             max: 30,
             divisions: 29,
-            onChanged: (value) => setState(() => _durationMinutes = value.round()),
+            onChanged: (value) =>
+                setState(() => _durationMinutes = value.round()),
             icon: Icons.timer,
           ),
 
@@ -174,8 +175,11 @@ class _WorkoutConfiguratorState extends State<WorkoutConfigurator> {
 
   Widget _buildRewardPreview() {
     // Calculate estimated reward based on reps and mode
-    final rewardMultiplier = widget.mode == WorkoutMode.tuff ? 1.5 :
-                           widget.mode == WorkoutMode.normal ? 1.0 : 0.7;
+    final rewardMultiplier = widget.mode == WorkoutMode.tuff
+        ? 1.5
+        : widget.mode == WorkoutMode.normal
+            ? 1.0
+            : 0.7;
     final estimatedMinutes = (_reps * rewardMultiplier).round();
 
     return Container(
@@ -210,10 +214,3 @@ class _WorkoutConfiguratorState extends State<WorkoutConfigurator> {
     );
   }
 }
-
-
-
-
-
-
-

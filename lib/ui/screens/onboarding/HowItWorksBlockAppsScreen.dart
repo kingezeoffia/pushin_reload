@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/pill_navigation_bar.dart';
-import '../../theme/pushin_theme.dart';
 import '../../../state/pushin_app_controller.dart';
 import '../../../state/auth_state_provider.dart';
 import 'HowItWorksExerciseSelectionScreen.dart';
@@ -79,34 +78,28 @@ class _HowItWorksBlockAppsScreenState extends State<HowItWorksBlockAppsScreen> {
       // Present native FamilyActivityPicker
       final selectionResult = await focusModeService.presentAppPicker();
 
-      if (selectionResult != null && selectionResult.totalSelected > 0) {
-        // Save the selected apps to the controller
-        await appController.updateBlockedApps(selectionResult.appTokens);
+      // Always advance onboarding regardless of app selection
+      final authProvider = context.read<AuthStateProvider>();
+      authProvider.advanceOnboardingStep();
 
-        // Permission granted and apps selected - advance onboarding
-        final authProvider = context.read<AuthStateProvider>();
-        authProvider.advanceOnboardingStep();
+      // Save the selected apps to the controller (empty list if none selected)
+      final appTokens = selectionResult?.appTokens ?? [];
+      await appController.updateBlockedApps(appTokens);
 
-        // Navigate to next screen
-        if (mounted) {
-          Navigator.push(
-            context,
-            _NoSwipeBackRoute(
-              builder: (context) => HowItWorksExerciseSelectionScreen(
-                fitnessLevel: widget.fitnessLevel,
-                goals: widget.goals,
-                otherGoal: widget.otherGoal,
-                workoutHistory: widget.workoutHistory,
-                blockedApps: [], // No longer needed - tokens are persisted in service
-              ),
+      // Navigate to next screen
+      if (mounted) {
+        Navigator.push(
+          context,
+          _NoSwipeBackRoute(
+            builder: (context) => HowItWorksExerciseSelectionScreen(
+              fitnessLevel: widget.fitnessLevel,
+              goals: widget.goals,
+              otherGoal: widget.otherGoal,
+              workoutHistory: widget.workoutHistory,
+              blockedApps: [], // No longer needed - tokens are persisted in service
             ),
-          );
-        }
-      } else {
-        // User cancelled or no apps selected
-        setState(() {
-          _errorMessage = 'Please select at least one app to continue';
-        });
+          ),
+        );
       }
     } catch (e) {
       setState(() {
@@ -190,7 +183,7 @@ class _HowItWorksBlockAppsScreenState extends State<HowItWorksBlockAppsScreen> {
                         ),
                         const SizedBox(height: 20),
                         const Text(
-                          'Block',
+                          'Block Your',
                           style: TextStyle(
                             fontSize: 44,
                             fontWeight: FontWeight.w800,
@@ -210,7 +203,7 @@ class _HowItWorksBlockAppsScreenState extends State<HowItWorksBlockAppsScreen> {
                           ),
                           blendMode: BlendMode.srcIn,
                           child: Text(
-                            'Distracting Apps',
+                            'Apps',
                             style: TextStyle(
                               fontSize: 44,
                               fontWeight: FontWeight.w800,
@@ -244,7 +237,7 @@ class _HowItWorksBlockAppsScreenState extends State<HowItWorksBlockAppsScreen> {
                       children: [
                         _ValuePoint(
                           icon: Icons.block,
-                          text: 'Block social media and games',
+                          text: 'Block distracting apps',
                         ),
                         SizedBox(height: 16),
                         _ValuePoint(
@@ -254,7 +247,7 @@ class _HowItWorksBlockAppsScreenState extends State<HowItWorksBlockAppsScreen> {
                         SizedBox(height: 16),
                         _ValuePoint(
                           icon: Icons.phone_android,
-                          text: 'Break the scroll habit',
+                          text: 'Break your scrolling habits',
                         ),
                       ],
                     ),
@@ -353,7 +346,6 @@ class _AllowAndSelectButton extends StatelessWidget {
     );
   }
 }
-
 
 /// Value proposition point widget - styled like emergency unlock
 class _ValuePoint extends StatelessWidget {

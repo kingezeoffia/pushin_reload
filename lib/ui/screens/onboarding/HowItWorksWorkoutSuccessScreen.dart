@@ -1,4 +1,6 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/pill_navigation_bar.dart';
@@ -34,7 +36,10 @@ class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
 /// - Clean, modern, confident design
 /// - Motivational green gradient background
 /// - Manual continue button (no auto-advance)
-class HowItWorksWorkoutSuccessScreen extends StatelessWidget {
+/// - Animated confetti particles celebration
+/// - Pulsing glow effects
+/// - Success celebration with haptic feedback
+class HowItWorksWorkoutSuccessScreen extends StatefulWidget {
   final String fitnessLevel;
   final List<String> goals;
   final String otherGoal;
@@ -53,14 +58,90 @@ class HowItWorksWorkoutSuccessScreen extends StatelessWidget {
   });
 
   @override
+  State<HowItWorksWorkoutSuccessScreen> createState() => _HowItWorksWorkoutSuccessScreenState();
+}
+
+class _HowItWorksWorkoutSuccessScreenState extends State<HowItWorksWorkoutSuccessScreen>
+    with TickerProviderStateMixin {
+  late AnimationController _mainController;
+  late AnimationController _pulseController;
+  late AnimationController _confettiController;
+
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _pulseAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Haptic feedback on success
+    HapticFeedback.heavyImpact();
+
+    // Main entrance animation
+    _mainController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    );
+
+    // Continuous pulse for glow effect
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    // Confetti animation
+    _confettiController = AnimationController(
+      duration: const Duration(milliseconds: 3000),
+      vsync: this,
+    )..repeat();
+
+    _scaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _mainController,
+        curve: const Interval(0.0, 0.6, curve: Curves.elasticOut),
+      ),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _mainController,
+        curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
+      ),
+    );
+
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    _mainController.forward();
+  }
+
+  @override
+  void dispose() {
+    _mainController.dispose();
+    _pulseController.dispose();
+    _confettiController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Capture widget properties for use in callbacks
+    final fitnessLevel = widget.fitnessLevel;
+    final goals = widget.goals;
+    final otherGoal = widget.otherGoal;
+    final workoutHistory = widget.workoutHistory;
+    final blockedApps = widget.blockedApps;
+    final workoutType = widget.workoutType;
+
     return Scaffold(
       backgroundColor: Colors.black,
-      body: GOStepsBackground(
-        blackRatio: 0.25,
-        child: Stack(
-          children: [
-            SafeArea(
+      body: Stack(
+        children: [
+          GOStepsBackground(
+            blackRatio: 0.25,
+            child: SafeArea(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -68,66 +149,80 @@ class HowItWorksWorkoutSuccessScreen extends StatelessWidget {
 
                   // Success Content
                   Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Large Checkmark with Glow
-                        Container(
-                          width: 140,
-                          height: 140,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: const LinearGradient(
-                              colors: [
-                                Color(0xFF10B981), // success green
-                                Color(0xFF059669), // darker green
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
+                    child: FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: ScaleTransition(
+                        scale: _scaleAnimation,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // Large Checkmark with Glow
+                            AnimatedBuilder(
+                              animation: _pulseAnimation,
+                              builder: (context, child) {
+                                return Transform.scale(
+                                  scale: _pulseAnimation.value,
+                                  child: Container(
+                                    width: 140,
+                                    height: 140,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Color(0xFF10B981), // success green
+                                          Color(0xFF059669), // darker green
+                                        ],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF10B981).withOpacity(0.4),
+                                          blurRadius: 40,
+                                          spreadRadius: 10,
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.check_rounded,
+                                      color: Colors.white,
+                                      size: 80,
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF10B981).withOpacity(0.4),
-                                blurRadius: 40,
-                                spreadRadius: 10,
+
+                            const SizedBox(height: 32),
+
+                            // Success Headline
+                            const Text(
+                              'Great Job!',
+                              style: TextStyle(
+                                fontSize: 42,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                height: 1.05,
+                                letterSpacing: -1.2,
                               ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.check_rounded,
-                            color: Colors.white,
-                            size: 80,
-                          ),
+                            ),
+
+                            const SizedBox(height: 12),
+
+                            // Supporting Text
+                            Text(
+                              _getSuccessMessage(workoutType),
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.white.withOpacity(0.7),
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: -0.3,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
-
-                        const SizedBox(height: 32),
-
-                        // Success Headline
-                        const Text(
-                          'Great Job!',
-                          style: TextStyle(
-                            fontSize: 42,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            height: 1.05,
-                            letterSpacing: -1.2,
-                          ),
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        // Supporting Text
-                        Text(
-                          _getSuccessMessage(workoutType),
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.white.withOpacity(0.7),
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: -0.3,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
 
@@ -135,9 +230,15 @@ class HowItWorksWorkoutSuccessScreen extends StatelessWidget {
                 ],
               ),
             ),
+          ),
 
-            // Continue Button - positioned at screen edge like other major onboarding buttons
-            BottomActionContainer(
+          // Continue Button - positioned at screen edge like other major onboarding buttons
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: MediaQuery.of(context).padding.bottom,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: _ContinueButton(
                 onTap: () {
                   Navigator.push(
@@ -157,9 +258,29 @@ class HowItWorksWorkoutSuccessScreen extends StatelessWidget {
                 },
               ),
             ),
-          ],
-        ),
+          ),
+
+          // Confetti celebration overlay (IgnorePointer so touches pass through)
+          IgnorePointer(
+            child: _buildConfetti(),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildConfetti() {
+    return AnimatedBuilder(
+      animation: _confettiController,
+      builder: (context, child) {
+        return CustomPaint(
+          size: Size.infinite,
+          painter: _ConfettiPainter(
+            progress: _confettiController.value,
+            particleCount: 30,
+          ),
+        );
+      },
     );
   }
 
@@ -220,5 +341,119 @@ class _ContinueButton extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Custom painter for confetti particles
+class _ConfettiPainter extends CustomPainter {
+  final double progress;
+  final int particleCount;
+  final List<_Particle> particles;
+
+  _ConfettiPainter({
+    required this.progress,
+    required this.particleCount,
+  }) : particles = List.generate(
+          particleCount,
+          (i) => _Particle(
+            seed: i,
+            color: [
+              const Color(0xFF10B981),
+              const Color(0xFF34D399),
+              const Color(0xFF6EE7B7),
+              const Color(0xFFFFD700),
+              const Color(0xFFFF6B6B),
+            ][i % 5],
+          ),
+        );
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final particle in particles) {
+      final x = particle.getX(progress, size.width);
+      final y = particle.getY(progress, size.height);
+      final opacity = particle.getOpacity(progress);
+      final rotation = particle.getRotation(progress);
+
+      if (opacity <= 0) continue;
+
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.rotate(rotation);
+
+      final paint = Paint()
+        ..color = particle.color.withOpacity(opacity * 0.8)
+        ..style = PaintingStyle.fill;
+
+      // Draw different shapes
+      if (particle.seed % 3 == 0) {
+        // Circle
+        canvas.drawCircle(Offset.zero, 4, paint);
+      } else if (particle.seed % 3 == 1) {
+        // Rectangle
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            const Rect.fromLTWH(-4, -2, 8, 4),
+            const Radius.circular(1),
+          ),
+          paint,
+        );
+      } else {
+        // Diamond
+        final path = Path()
+          ..moveTo(0, -5)
+          ..lineTo(3, 0)
+          ..lineTo(0, 5)
+          ..lineTo(-3, 0)
+          ..close();
+        canvas.drawPath(path, paint);
+      }
+
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ConfettiPainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
+}
+
+class _Particle {
+  final int seed;
+  final Color color;
+  final double startX;
+  final double startDelay;
+  final double speed;
+  final double wobble;
+
+  _Particle({required this.seed, required this.color})
+      : startX = (seed * 37 % 100) / 100,
+        startDelay = (seed * 17 % 30) / 100,
+        speed = 0.5 + (seed * 13 % 50) / 100,
+        wobble = (seed * 23 % 100) / 100 * 2 * math.pi;
+
+  double getX(double progress, double width) {
+    final adjustedProgress = ((progress - startDelay) * speed).clamp(0.0, 1.0);
+    final baseX = startX * width;
+    final wobbleOffset = math.sin(adjustedProgress * math.pi * 4 + wobble) * 30;
+    return baseX + wobbleOffset;
+  }
+
+  double getY(double progress, double height) {
+    final adjustedProgress = ((progress - startDelay) * speed).clamp(0.0, 1.0);
+    return -20 + adjustedProgress * (height + 40);
+  }
+
+  double getOpacity(double progress) {
+    final adjustedProgress = ((progress - startDelay) * speed).clamp(0.0, 1.0);
+    if (adjustedProgress < 0.1) return adjustedProgress * 10;
+    if (adjustedProgress > 0.8) return (1 - adjustedProgress) * 5;
+    return 1.0;
+  }
+
+  double getRotation(double progress) {
+    final adjustedProgress = ((progress - startDelay) * speed).clamp(0.0, 1.0);
+    return adjustedProgress * math.pi * 4 + wobble;
   }
 }

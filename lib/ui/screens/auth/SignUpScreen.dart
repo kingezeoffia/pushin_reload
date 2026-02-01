@@ -36,6 +36,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   @override
   void initState() {
     super.initState();
+    print('🎯 SignUpScreen: initState called');
+
     _emailFocus.addListener(() => _scrollToFocusedField(_emailFocus));
     _passwordFocus.addListener(() => _scrollToFocusedField(_passwordFocus));
     _confirmPasswordFocus
@@ -85,17 +87,31 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   void _navigateToSignIn() {
+    debugPrint('🔘 SignUpScreen: Sign In button tapped');
+
     // Add haptic feedback for button press
     HapticFeedback.lightImpact();
 
-    // BMAD v6: State-driven navigation - no Navigator.pushReplacement
+    debugPrint(
+        '🔘 SignUpScreen: Triggering state-driven navigation to SignInScreen...');
     final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
     authProvider.triggerSignInFlow();
+    debugPrint(
+        '🔘 SignUpScreen: State-driven navigation to SignInScreen triggered');
   }
 
-  void _navigateAfterAuth() {
-    // Navigation is handled automatically by AppRouter when auth state changes
-    // AppRouter listens to AuthStateProvider and will route appropriately
+  void _navigateBack() {
+    debugPrint('🔘 SignUpScreen: Back button tapped');
+
+    // Add haptic feedback for button press
+    HapticFeedback.lightImpact();
+
+    debugPrint(
+        '🔘 SignUpScreen: Clearing sign up screen flag to return to WelcomeScreen...');
+    final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
+    authProvider.clearSignUpFlow();
+    debugPrint(
+        '🔘 SignUpScreen: Sign up screen flag cleared - router will show WelcomeScreen');
   }
 
   bool _isFormValid() {
@@ -125,6 +141,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (success && mounted) {
       // register() already set justRegistered = true, router will handle navigation to NewUserWelcomeScreen
       // BMAD v6: No direct navigation - router reacts to state changes
+      print(
+          '🎯 SignUpScreen: Registration successful - AppRouter will handle navigation');
+
+      // Clear auth screen flags to let router take over
+      authProvider.clearSignUpFlow();
+
+      // Don't pop or navigate manually - let AppRouter handle state-driven navigation
+      // Router will detect justRegistered=true and show NewUserWelcomeScreen
     }
     // Error is handled by the provider and displayed in UI
   }
@@ -140,8 +164,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
 
     if (success && mounted) {
-      // Navigate based on user state
-      _navigateAfterAuth();
+      // register() already set justRegistered = true, router will handle navigation to NewUserWelcomeScreen
+      print(
+          '🎯 SignUpScreen: Third-party registration successful - AppRouter will handle navigation');
+
+      // Clear auth screen flags to let router take over
+      authProvider.clearSignUpFlow();
+
+      // Don't pop or navigate manually - let AppRouter handle state-driven navigation
+      // Router will detect justRegistered=true and show NewUserWelcomeScreen
     }
     // Error is handled by the provider and displayed in UI
   }
@@ -220,53 +251,76 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Top navigation bar with sign in button
+                        // Top navigation bar with back and sign in buttons
                         Padding(
-                          padding: const EdgeInsets.only(top: 16, right: 16),
+                          padding: const EdgeInsets.only(
+                              top: 16, left: 16, right: 16),
                           child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              GestureDetector(
-                                onTap: _navigateToSignIn,
-                                child: Container(
+                              // Back button
+                              IconButton(
+                                onPressed: () {
+                                  debugPrint(
+                                      '🔘 SignUpScreen: Back button TAPPED');
+                                  _navigateBack();
+                                },
+                                icon: const Icon(
+                                  Icons.arrow_back,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                                style: IconButton.styleFrom(
+                                  backgroundColor:
+                                      Colors.white.withOpacity(0.1),
+                                  padding: const EdgeInsets.all(12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+
+                              // Sign In button
+                              TextButton(
+                                onPressed: () {
+                                  debugPrint(
+                                      '🔘 SignUpScreen: Sign In button TAPPED');
+                                  _navigateToSignIn();
+                                },
+                                style: TextButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 16, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
+                                  backgroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
+                                    side: BorderSide(
                                       color: Colors.white.withOpacity(0.2),
                                       width: 1,
                                     ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.white.withOpacity(0.1),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
                                   ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        'Sign In',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: const Color(0xFF2A2A6A),
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: -0.1,
-                                        ),
+                                  shadowColor: Colors.white.withOpacity(0.1),
+                                  elevation: 4,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Sign In',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: const Color(0xFF2A2A6A),
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: -0.1,
                                       ),
-                                      const SizedBox(width: 6),
-                                      Icon(
-                                        Icons.arrow_forward,
-                                        size: 16,
-                                        color: const Color(0xFF2A2A6A)
-                                            .withOpacity(0.7),
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Icon(
+                                      Icons.arrow_forward,
+                                      size: 16,
+                                      color: const Color(0xFF2A2A6A)
+                                          .withOpacity(0.7),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -308,7 +362,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 child: Text(
                                   'PUSHIN\'',
                                   style: TextStyle(
-                                    fontSize: 38,
+                                    fontSize: 50,
                                     fontWeight: FontWeight.w800,
                                     color: Colors.white,
                                     height: 1.1,
@@ -322,9 +376,46 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                         ),
 
-                        const SizedBox(
-                            height:
-                                200), // Large spacing between title and content
+                        // Large spacing between title and content with background logo
+                        SizedBox(
+                          height: 250,
+                          child: Stack(
+                            children: [
+                              // Background logo positioned on the right side
+                              Positioned(
+                                right:
+                                    -800, // Position so only half is visible on phone edge
+                                top: 0,
+                                bottom: 0,
+                                child: Opacity(
+                                  opacity:
+                                      0.12, // Slightly more visible with gradient
+                                  child: ShaderMask(
+                                    shaderCallback: (bounds) =>
+                                        const LinearGradient(
+                                      colors: [
+                                        Color(0xFF6060FF),
+                                        Color(0xFF9090FF)
+                                      ],
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                    ).createShader(
+                                      Rect.fromLTWH(0, 0, bounds.width,
+                                          bounds.height * 1.3),
+                                    ),
+                                    blendMode: BlendMode.srcIn,
+                                    child: Image.asset(
+                                      'assets/icons/pushin_logo_2.png',
+                                      width: 1600,
+                                      height: 1600,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
 
                         // Input Fields Section
                         Padding(

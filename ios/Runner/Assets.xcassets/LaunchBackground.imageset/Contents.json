@@ -1,0 +1,26 @@
+{
+  "images" : [
+    {
+      "filename" : "background.png",
+      "idiom" : "universal"
+    },
+    {
+      "filename" : "darkbackground.png",
+      "idiom" : "universal",
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ]
+    },
+    {
+      "filename" : "gosteps_background.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

@@ -1,7 +1,12 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../theme/dashboard_design_tokens.dart';
-import '../SelectionButton.dart';
+import '../../screens/paywall/PaywallScreen.dart';
+import '../../../state/pushin_app_controller.dart';
+import '../../../state/auth_state_provider.dart';
+import '../../screens/workout/CustomWorkoutScreen.dart';
 
 class CustomWorkoutCard extends StatefulWidget {
   const CustomWorkoutCard({super.key});
@@ -14,46 +19,6 @@ class _CustomWorkoutCardState extends State<CustomWorkoutCard>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
-  late AnimationController _shimmerController;
-  late Animation<double> _shimmerAnimation;
-
-class _CustomWorkoutCardState extends State<CustomWorkoutCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
-  late AnimationController _shimmerController;
-  late Animation<double> _shimmerAnimation;
-
-  // Custom workout data
-  final List<CustomExercise> _exercises = [
-    CustomExercise(
-      name: 'Push-ups',
-      icon: Icons.fitness_center,
-      pointsPerRep: 5,
-      color: const Color(0xFF4CAF50),
-    ),
-    CustomExercise(
-      name: 'Squats',
-      icon: Icons.accessibility,
-      pointsPerRep: 3,
-      color: const Color(0xFF2196F3),
-    ),
-    CustomExercise(
-      name: 'Jumping Jacks',
-      icon: Icons.directions_run,
-      pointsPerRep: 2,
-      color: const Color(0xFFFF9800),
-    ),
-    CustomExercise(
-      name: 'Burpees',
-      icon: Icons.sports_gymnastics,
-      pointsPerRep: 8,
-      color: const Color(0xFFE91E63),
-    ),
-  ];
-
-  CustomExercise? _selectedExercise;
-  int _repCount = 0;
 
   @override
   void initState() {
@@ -67,23 +32,12 @@ class _CustomWorkoutCardState extends State<CustomWorkoutCard>
       CurvedAnimation(parent: _controller, curve: Curves.easeInOutCubic),
     );
 
-    // Add shimmer effect like other cards
-    _shimmerController = AnimationController(
-      duration: const Duration(milliseconds: 2500),
-      vsync: this,
-    )..repeat();
-
-    _shimmerAnimation = Tween<double>(begin: -1.0, end: 2.0).animate(
-      CurvedAnimation(parent: _shimmerController, curve: Curves.easeInOut),
-    );
-
     _controller.forward();
   }
 
   @override
   void dispose() {
     _controller.dispose();
-    _shimmerController.dispose();
     super.dispose();
   }
 
@@ -91,379 +45,128 @@ class _CustomWorkoutCardState extends State<CustomWorkoutCard>
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _fadeAnimation,
-      child: AnimatedBuilder(
-        animation: _shimmerAnimation,
-        builder: (context, child) {
-          return Container(
-            margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFF2A3166).withOpacity(0.95),
-                  const Color(0xFF1F2547).withOpacity(0.95),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(28), // Match other cards
-              boxShadow: [
-                // Main glow shadow - similar to other cards
-                BoxShadow(
-                  color: DashboardDesignTokens.accentGreen.withOpacity(0.3),
-                  blurRadius: 24,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 8),
-                ),
-                // Secondary subtle glow
-                BoxShadow(
-                  color: DashboardDesignTokens.accentGreen.withOpacity(0.15),
-                  blurRadius: 40,
-                  spreadRadius: 0,
-                  offset: const Offset(0, 4),
-                ),
-                // Base shadow
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 15,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(28),
-              child: Stack(
-                children: [
-                  child!,
-                  // Shimmer overlay - similar to CurrentStatusCard
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment(-2.0 + (_shimmerAnimation.value * 2), -0.5),
-                            end: Alignment(-1.0 + (_shimmerAnimation.value * 2), 0.5),
-                            colors: [
-                              Colors.transparent,
-                              Colors.white.withOpacity(0.0),
-                              Colors.white.withOpacity(0.08),
-                              Colors.white.withOpacity(0.12),
-                              Colors.white.withOpacity(0.08),
-                              Colors.white.withOpacity(0.0),
-                              Colors.transparent,
-                            ],
-                            stops: const [0.0, 0.2, 0.35, 0.5, 0.65, 0.8, 1.0],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          final controller =
+              Provider.of<PushinAppController>(context, listen: false);
+          final authProvider =
+              Provider.of<AuthStateProvider>(context, listen: false);
+          final planTier = controller.planTier;
+          final isFree = planTier == 'free';
+          final isGuest = authProvider.isGuestMode;
+
+          if (isFree || isGuest) {
+            _navigateToPaywall(context);
+          }
+          // For Pro and Advanced users: do nothing (stays coming soon)
         },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            // Clean glassmorphism - matching home screen widgets
+            color: Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.08),
+              width: 1,
+            ),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.settings,
-                  color: DashboardDesignTokens.accentGreen,
-                  size: 24,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'Custom Workout',
-                  style: TextStyle(
-                    color: DashboardDesignTokens.textPrimary,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+                // Coming soon icon - sparkle/star with gradient
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    shape: BoxShape.circle,
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Create your own workout and assign point values.',
-              style: TextStyle(
-                color: DashboardDesignTokens.textSecondary,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Exercise Selection - 2x2 Grid similar to onboarding
-            Text(
-              'Choose Exercise',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 16),
-            // 2x2 Grid of Exercise Options
-            Row(
-              children: [
-                Expanded(
-                  child: SelectionButton(
-                    label: 'Push-ups',
-                    isSelected: _selectedExercise?.name == 'Push-ups',
-                    onTap: () => setState(() => _selectedExercise = _exercises[0]),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: SelectionButton(
-                    label: 'Squats',
-                    isSelected: _selectedExercise?.name == 'Squats',
-                    onTap: () => setState(() => _selectedExercise = _exercises[1]),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: SelectionButton(
-                    label: 'Jumping Jacks',
-                    isSelected: _selectedExercise?.name == 'Jumping Jacks',
-                    onTap: () => setState(() => _selectedExercise = _exercises[2]),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: SelectionButton(
-                    label: 'Burpees',
-                    isSelected: _selectedExercise?.name == 'Burpees',
-                    onTap: () => setState(() => _selectedExercise = _exercises[3]),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // Points Configuration
-            if (_selectedExercise != null) ...[
-              Text(
-                'Point Configuration',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _selectedExercise!.icon,
-                      color: _selectedExercise!.color,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _selectedExercise!.name,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            '${_selectedExercise!.pointsPerRep} points per rep',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.6),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Points per rep adjuster
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => _adjustPoints(-1),
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Icon(
-                              Icons.remove,
-                              color: Colors.white.withOpacity(0.7),
-                              size: 16,
-                            ),
-                          ),
-                        ),
-                        Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 12),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: _selectedExercise!.color.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '${_selectedExercise!.pointsPerRep}',
-                            style: TextStyle(
-                              color: _selectedExercise!.color,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () => _adjustPoints(1),
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Icon(
-                              Icons.add,
-                              color: Colors.white.withOpacity(0.7),
-                              size: 16,
-                            ),
-                          ),
-                        ),
+                  child: ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0xFFFFD700), // Gold
+                        Color(0xFFFFA500), // Orange
                       ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Rep Counter
-              Text(
-                'Track Reps',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            '$_repCount',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            'Reps Completed',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.6),
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '${_repCount * _selectedExercise!.pointsPerRep} points earned',
-                            style: TextStyle(
-                              color: _selectedExercise!.color,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
+                    ).createShader(bounds),
+                    child: const Icon(
+                      Icons.star_rounded,
+                      color: Colors.white,
+                      size: 28,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Column(
-                    children: [
-                      GestureDetector(
-                        onTap: _incrementReps,
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: _selectedExercise!.color.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.add,
-                            color: _selectedExercise!.color,
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      GestureDetector(
-                        onTap: _resetReps,
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            Icons.refresh,
-                            color: Colors.white.withOpacity(0.6),
-                            size: 16,
-                          ),
-                        ),
-                      ),
-                    ],
+                ),
+                const SizedBox(height: 16),
+                // "COMING SOON" text - clearly visible
+                const Text(
+                  'COMING SOON',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.5,
                   ),
-                ],
-              ),
-            ],
-          ],
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
         ),
-      ),
       ),
     );
   }
 
-  void _adjustPoints(int delta) {
-    setState(() {
-      _selectedExercise!.pointsPerRep = math.max(1, _selectedExercise!.pointsPerRep + delta);
-    });
+  void _navigateToPaywall(BuildContext context) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const PaywallScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          const curve = Curves.easeOutCubic;
+
+          var tween =
+              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400),
+      ),
+    );
   }
 
-  void _incrementReps() {
-    setState(() {
-      _repCount++;
-    });
-  }
+  void _navigateToCustomWorkout(BuildContext context) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const CustomWorkoutScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          const curve = Curves.easeOutCubic;
 
-  void _resetReps() {
-    setState(() {
-      _repCount = 0;
-    });
+          var tween =
+              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400),
+      ),
+    );
   }
 }
 
@@ -712,4 +415,3 @@ class CircularProgressPainter extends CustomPainter {
     return oldDelegate.progress != progress;
   }
 }
-

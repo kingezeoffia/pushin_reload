@@ -461,7 +461,7 @@ LOCKED → EARNING → UNLOCKED → EXPIRED → LOCKED
     - Price: "€14.99 / month"
     - Bullet list: "5 blocked apps", "5 workouts", "Unlimited unlock time", "Priority support"
 - **CTA Button** (large, prominent):
-  - Text: "Start Free 5-Day Trial" (if first-time) OR "Subscribe Now"
+  - Text: "Start Free 3-Day Trial" (if first-time) OR "Subscribe Now"
   - Subtext: "Cancel anytime. Billed monthly."
 - **Footer Links**:
   - "Restore Purchases" (if previously subscribed)

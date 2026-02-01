@@ -40,13 +40,14 @@ enum JumpingJackPhase {
 /// Burpee phase enum for complex multi-phase workout
 enum BurpeePhase {
   unknown, // Initial state
-  standing, // Starting position
-  squatDown, // Squat to floor
-  plankPosition, // Hands on ground, legs back
-  pushUpDown, // Lower to ground (optional)
-  pushUpUp, // Push back up (optional)
-  squatUp, // Jump feet forward
-  jump, // Explosive jump up
+  standing, // Starting position, legs straight
+  squatDown, // Squat to floor, knees bent
+  plankPosition, // Hands on ground, legs extended back (plank)
+  pushUpDown, // Lower to ground (optional push-up down phase)
+  pushUpUp, // Push back up (optional push-up up phase)
+  squatUp, // Jump feet forward to squat
+  jumpUp, // Explosive jump up with arms raised
+  landing, // Landing from jump, transitioning to standing
 }
 
 /// Glute Bridge phase enum for hip bridge exercise
@@ -134,6 +135,15 @@ class PoseDetectionService {
   // Glute Bridge confidence system
   int _gluteBridgeConfidence = 0; // Consecutive frame counter for stability
 
+  // Glute Bridge rep counting state machine (prevents double counting)
+  GluteBridgeState _repCountingState =
+      GluteBridgeState.down; // Tracks rep counting cycle
+
+  // Burpee confidence system and state tracking
+  int _burpeeConfidence = 0; // Consecutive frame counter for stability
+  BurpeePhase _confirmedBurpeePhase =
+      BurpeePhase.standing; // Confirmed stable state
+
   // Thresholds for detection (more lenient for better user experience)
   static const double _downAngleThreshold =
       100.0; // Angle for "down" position (was 90)
@@ -186,9 +196,12 @@ class PoseDetectionService {
         _confirmedJumpingJackPhase = JumpingJackPhase.together;
         _previousConfirmedPhase = JumpingJackPhase.together;
       case 'burpees':
-        _currentPhase = BurpeePhase.unknown;
+        _currentPhase = BurpeePhase.standing;
+        _burpeeConfidence = 0;
+        _confirmedBurpeePhase = BurpeePhase.standing;
       case 'glute-bridge':
         _currentGluteBridgeState = GluteBridgeState.down;
+        _repCountingState = GluteBridgeState.down;
       default:
         _currentPhase = PushUpPhase.unknown;
     }
@@ -212,13 +225,6 @@ class PoseDetectionService {
   /// Auto-trigger countdown (when pose is stable)
   void startCountdown() {
     _workoutState = WorkoutState.countdown;
-  }
-
-  /// Cancel countdown (when user moves away during countdown)
-  void cancelCountdown() {
-    if (_workoutState == WorkoutState.countdown) {
-      _workoutState = WorkoutState.positioning;
-    }
   }
 
   /// Activate workout (after countdown) - enable rep counting
@@ -444,6 +450,11 @@ class PoseDetectionService {
       final poses = await _poseDetector!.processImage(inputImage);
 
       if (poses.isEmpty) {
+        // For plank workouts, still update timer even when no pose detected
+        if (workoutType.toLowerCase() == 'plank' && isCountingEnabled) {
+          _updatePlankTime(false);
+        }
+
         return PoseDetectionResult(
           isPoseDetected: false,
           confidence: 0.0,
@@ -560,6 +571,8 @@ class PoseDetectionService {
   }
 
   /// Analyze pose and determine push-up phase
+  /// ENHANCED: Now includes body alignment validation (shoulder-hip-ankle straightness)
+  /// Research-based approach from ML Kit best practices and fitness biomechanics
   PoseDetectionResult _analyzePushUpsPose(
     Pose pose,
     Size imageSize,
@@ -573,13 +586,19 @@ class PoseDetectionService {
 
     final landmarks = pose.landmarks;
 
-    // Extract key landmarks
+    // Extract key landmarks (expanded to include full body)
     final leftShoulder = landmarks[PoseLandmarkType.leftShoulder];
     final rightShoulder = landmarks[PoseLandmarkType.rightShoulder];
     final leftElbow = landmarks[PoseLandmarkType.leftElbow];
     final rightElbow = landmarks[PoseLandmarkType.rightElbow];
     final leftWrist = landmarks[PoseLandmarkType.leftWrist];
     final rightWrist = landmarks[PoseLandmarkType.rightWrist];
+    final leftHip = landmarks[PoseLandmarkType.leftHip];
+    final rightHip = landmarks[PoseLandmarkType.rightHip];
+    final leftKnee = landmarks[PoseLandmarkType.leftKnee];
+    final rightKnee = landmarks[PoseLandmarkType.rightKnee];
+    final leftAnkle = landmarks[PoseLandmarkType.leftAnkle];
+    final rightAnkle = landmarks[PoseLandmarkType.rightAnkle];
 
     // Check if we have the necessary landmarks
     if (leftShoulder == null ||
@@ -587,19 +606,21 @@ class PoseDetectionService {
         leftElbow == null ||
         rightElbow == null ||
         leftWrist == null ||
-        rightWrist == null) {
+        rightWrist == null ||
+        leftHip == null ||
+        rightHip == null) {
       return PoseDetectionResult(
         isPoseDetected: false,
         confidence: 0.0,
         phase: PushUpPhase.unknown,
         keyPoints: _extractKeyPoints(landmarks),
-        feedbackMessage: 'Position your arms in the frame',
+        feedbackMessage: 'Position your full body in the frame',
         isFullBodyDetected: false,
         isReadyToStart: false,
       );
     }
 
-    // Calculate average confidence
+    // Calculate average confidence (expanded landmark set)
     final avgConfidence = _calculateAverageConfidence([
       leftShoulder,
       rightShoulder,
@@ -607,6 +628,12 @@ class PoseDetectionService {
       rightElbow,
       leftWrist,
       rightWrist,
+      leftHip,
+      rightHip,
+      if (leftKnee != null) leftKnee,
+      if (rightKnee != null) rightKnee,
+      if (leftAnkle != null) leftAnkle,
+      if (rightAnkle != null) rightAnkle,
     ]);
 
     // Before workout starts, give positioning feedback only
@@ -635,7 +662,11 @@ class PoseDetectionService {
       );
     }
 
-    // Calculate elbow angles (both arms)
+    // === RESEARCH-BASED PUSH-UP FORM VALIDATION ===
+    // Based on: LearnOpenCV AI Fitness Trainer, MediaPipe Pose best practices
+    // Key metrics: elbow angle, body alignment (shoulder-hip-ankle/knee straightness)
+
+    // 1. ELBOW ANGLE CALCULATION (Primary movement indicator)
     final leftElbowAngle = _calculateAngle(
       Offset(leftShoulder.x, leftShoulder.y),
       Offset(leftElbow.x, leftElbow.y),
@@ -650,13 +681,72 @@ class PoseDetectionService {
 
     final avgElbowAngle = (leftElbowAngle + rightElbowAngle) / 2;
 
-    // Determine push-up phase
-    final newPhase = _determinePushUpPhase(avgElbowAngle);
-    final feedbackMessage = _getPushUpFeedback(newPhase, avgElbowAngle);
+    // 2. BODY ALIGNMENT VALIDATION (Critical for proper form)
+    // Research: Body should form straight line from shoulders through hips to knees/ankles
+    // This prevents "worm" push-ups and ensures proper plank position
 
-    // Only check for completed rep if workout is active AND full body detected
+    // Calculate average body points
+    final avgShoulder = Offset((leftShoulder.x + rightShoulder.x) / 2,
+        (leftShoulder.y + rightShoulder.y) / 2);
+    final avgHip =
+        Offset((leftHip.x + rightHip.x) / 2, (leftHip.y + rightHip.y) / 2);
+
+    // Use knee or ankle as endpoint (prefer ankle if available for full body check)
+    Offset avgLowerBody;
+    if (leftAnkle != null && rightAnkle != null) {
+      avgLowerBody = Offset(
+          (leftAnkle.x + rightAnkle.x) / 2, (leftAnkle.y + rightAnkle.y) / 2);
+    } else if (leftKnee != null && rightKnee != null) {
+      avgLowerBody = Offset(
+          (leftKnee.x + rightKnee.x) / 2, (leftKnee.y + rightKnee.y) / 2);
+    } else {
+      // Fallback: can't validate full body alignment, allow anyway
+      avgLowerBody = avgHip;
+    }
+
+    // Calculate body alignment angle (shoulder-hip-lowerBody)
+    // Research: Should be 160-200° for proper plank position
+    final bodyAlignmentAngle =
+        _calculateAngle(avgShoulder, avgHip, avgLowerBody);
+
+    // Body straightness validation
+    // Research shows 160° minimum for proper push-up form
+    final isBodyStraight = bodyAlignmentAngle >= 160.0 &&
+        bodyAlignmentAngle <= 200.0; // Allow slight natural curvature
+
+    // 3. PLANK POSITION VALIDATION (Arms supporting body weight)
+    // Research: In push-up position, body should be horizontal with arms supporting
+    // Check if body is in horizontal orientation (not standing)
+    final shoulderY = avgShoulder.dy / imageSize.height;
+    final hipY = avgHip.dy / imageSize.height;
+    final verticalDifference = (hipY - shoulderY).abs();
+
+    // Horizontal orientation check: shoulder and hip should be at similar height
+    // Allow up to 15% difference for natural body angle
+    final isHorizontalOrientation = verticalDifference < 0.15;
+
+    // COMPREHENSIVE FORM VALIDATION
+    // Only count reps when proper form is maintained
+    final hasProperForm = isBodyStraight && isHorizontalOrientation;
+
+    // Determine push-up phase with form validation
+    final newPhase =
+        _determinePushUpPhase(avgElbowAngle, hasProperForm, bodyAlignmentAngle);
+    final feedbackMessage =
+        _getPushUpFeedback(newPhase, avgElbowAngle, hasProperForm);
+
+    // DEBUG LOGGING - Research validation
+    debugPrint(
+        '💪 PUSH-UP FORM: elbowAngle=${avgElbowAngle.toStringAsFixed(1)}°, '
+        'bodyAlign=${bodyAlignmentAngle.toStringAsFixed(1)}° (straight=$isBodyStraight), '
+        'horiz=$isHorizontalOrientation (${verticalDifference.toStringAsFixed(3)}), '
+        'properForm=$hasProperForm, phase=$newPhase');
+
+    // Only check for completed rep if workout is active AND full body detected AND proper form
     if (isCountingEnabled) {
-      if (isFullBodyDetected && avgConfidence >= _minConfidenceForCounting) {
+      if (isFullBodyDetected &&
+          avgConfidence >= _minConfidenceForCounting &&
+          hasProperForm) {
         _checkForCompletedPushUpRep(newPhase);
       } else {
         // Debug why rep check was skipped
@@ -665,6 +755,8 @@ class PoseDetectionService {
         } else if (avgConfidence < _minConfidenceForCounting) {
           debugPrint(
               '⏸️ PUSH-UP REP CHECK SKIPPED: Low confidence ${avgConfidence.toStringAsFixed(2)} < $_minConfidenceForCounting');
+        } else if (!hasProperForm) {
+          debugPrint('⏸️ PUSH-UP REP CHECK SKIPPED: Poor form detected');
         }
       }
     }
@@ -713,16 +805,57 @@ class PoseDetectionService {
     return angle * 180 / math.pi;
   }
 
-  /// Determine push-up phase based on elbow angle
-  PushUpPhase _determinePushUpPhase(double elbowAngle) {
+  /// Calculate hip extension angle between torso and thigh (key for glute bridge detection)
+  /// Returns angle between shoulder→hip vector and hip→knee vector
+  /// Uses proper vector normalization and dot product for accurate angle calculation
+  double _calculateHipExtensionAngle(Offset shoulder, Offset hip, Offset knee) {
+    // Vector from shoulder to hip (torso direction: shoulder → hip)
+    final torso = Offset(hip.dx - shoulder.dx, hip.dy - shoulder.dy);
+
+    // Vector from hip to knee (thigh direction: hip → knee)
+    final thigh = Offset(knee.dx - hip.dx, knee.dy - hip.dy);
+
+    // Calculate dot product
+    final dot = torso.dx * thigh.dx + torso.dy * thigh.dy;
+
+    // Calculate magnitudes
+    final magTorso = math.sqrt(torso.dx * torso.dx + torso.dy * torso.dy);
+    final magThigh = math.sqrt(thigh.dx * thigh.dx + thigh.dy * thigh.dy);
+
+    // Avoid division by zero
+    if (magTorso == 0 || magThigh == 0) return 0.0;
+
+    // Calculate cosine of angle and clamp to valid range
+    final cosTheta = (dot / (magTorso * magThigh)).clamp(-1.0, 1.0);
+
+    // Calculate angle in radians, then convert to degrees
+    final angleRad = math.acos(cosTheta);
+    return angleRad * 180 / math.pi;
+  }
+
+  /// Determine push-up phase based on elbow angle and form validation
+  /// ENHANCED: Now includes body alignment validation
+  PushUpPhase _determinePushUpPhase(
+      double elbowAngle, bool hasProperForm, double bodyAlignmentAngle) {
+    // If form is poor (body not straight or not horizontal), return unknown
+    // This prevents counting reps with improper form
+    if (!hasProperForm) {
+      return PushUpPhase.unknown;
+    }
+
+    // Standard elbow angle thresholds with proper form
     if (elbowAngle < _downAngleThreshold) {
+      // Deep position - chest near ground
       return PushUpPhase.down;
     } else if (elbowAngle > _upAngleThreshold) {
+      // Full extension - arms straight
       return PushUpPhase.up;
     } else if (_currentPhase == PushUpPhase.up ||
         _currentPhase == PushUpPhase.goingDown) {
+      // Transitioning down
       return PushUpPhase.goingDown;
     } else {
+      // Transitioning up
       return PushUpPhase.goingUp;
     }
   }
@@ -747,19 +880,27 @@ class PoseDetectionService {
     }
   }
 
-  /// Get push-up feedback message based on current phase
-  String _getPushUpFeedback(PushUpPhase phase, double elbowAngle) {
+  /// Get push-up feedback message based on current phase and form
+  /// ENHANCED: Provides form feedback when alignment is poor
+  String _getPushUpFeedback(
+      PushUpPhase phase, double elbowAngle, bool hasProperForm) {
+    // Prioritize form feedback if form is compromised
+    if (!hasProperForm) {
+      return 'Keep body straight - form a plank line';
+    }
+
+    // Standard movement feedback with proper form
     switch (phase) {
       case PushUpPhase.unknown:
-        return 'Get ready';
+        return 'Get into push-up position';
       case PushUpPhase.up:
-        return 'Lower down';
+        return 'Lower down slowly';
       case PushUpPhase.goingDown:
         return 'Keep going down';
       case PushUpPhase.down:
-        return 'Push up';
+        return 'Push up explosively';
       case PushUpPhase.goingUp:
-        return 'Push up';
+        return 'Push up - maintain form';
     }
   }
 
@@ -1075,7 +1216,8 @@ class PoseDetectionService {
 
     // STRICT anti-standing check: ankles should NOT be significantly higher than shoulders
     // In plank, all body parts should be roughly at same height (horizontal position)
-    final notStanding = (ankleY - shoulderY) < 0.15; // Ankles only slightly higher (STRICT)
+    final notStanding =
+        (ankleY - shoulderY) < 0.15; // Ankles only slightly higher (STRICT)
 
     // 2. BODY ALIGNMENT (SHOULDER-HIP-ANKLE STRAIGHTNESS)
     // Studies show optimal plank angle range is 160-200 degrees for proper form
@@ -1135,7 +1277,8 @@ class PoseDetectionService {
 
     // === DETAILED SCIENTIFIC DEBUG LOGGING ===
     final validationPath = isValidPlank ? 'VALID' : 'INVALID';
-    final armStatus = avgArmSupportY >= avgShoulder.dy ? 'SUPPORTING' : 'NOT_SUPPORTING';
+    final armStatus =
+        avgArmSupportY >= avgShoulder.dy ? 'SUPPORTING' : 'NOT_SUPPORTING';
     debugPrint(
         '🔍 PLANK Debug (STRICT): horiz=$isHorizontalOrientation (${verticalDifference.toStringAsFixed(3)}), notStanding=$notStanding (${(ankleY - shoulderY).toStringAsFixed(3)}), straight=$isBodyStraight (${bodyAngle.toStringAsFixed(1)}°), arms=$armsSupporting ($armStatus), hips=$hipsLevelWithShoulders (${hipShoulderDifferenceNorm.toStringAsFixed(3)}), knees=$legsRelativelyStraight (${kneeHipDifferenceNorm.toStringAsFixed(3)}), result=$validationPath');
 
@@ -1168,7 +1311,7 @@ class PoseDetectionService {
     debugPrint(
         '🏋️ PLANK STATE (STRICT): confirmedPhase=$_confirmedPlankPhase, isHoldingStable=$isHoldingStable, confidence=$_plankConfidence/5, rawPhase=$rawPhase');
 
-    // Only update time if workout is active AND full body detected with high confidence AND actually in plank position
+    // Update time tracking - always call when workout is active to keep UI in sync
     if (isCountingEnabled) {
       if (isFullBodyDetected && avgConfidence >= _minConfidenceForCounting) {
         _updatePlankTime(isHoldingStable);
@@ -1215,11 +1358,15 @@ class PoseDetectionService {
     } else if (isHolding && _plankStartTime != null) {
       _elapsedSeconds = _totalPlankDuration.inSeconds +
           now.difference(_plankStartTime!).inSeconds;
-      onTimerUpdate?.call(_elapsedSeconds);
     } else if (!isHolding && _plankStartTime != null) {
       _totalPlankDuration += now.difference(_plankStartTime!);
       _elapsedSeconds = _totalPlankDuration.inSeconds;
       _plankStartTime = null;
+    }
+
+    // Always call the timer update callback when workout is active to keep UI in sync
+    if (_workoutState == WorkoutState.active) {
+      onTimerUpdate?.call(_elapsedSeconds);
     }
   }
 
@@ -1504,6 +1651,7 @@ class PoseDetectionService {
   ) {
     if (workoutType.toLowerCase() != 'glute-bridge') {
       _currentGluteBridgeState = GluteBridgeState.down;
+      _repCountingState = GluteBridgeState.down;
       return PoseDetectionResult.empty();
     }
 
@@ -1593,8 +1741,8 @@ class PoseDetectionService {
         avgKnee.dy; // Shoulders below knees = proper supine position
     final bodyOrientationValid = isSupinePosition;
 
-    // 2. KNEE FLEXION ANALYSIS (Research-validated: 70-110° for optimal GMax activation)
-    // Research shows knee flexion in this range maximizes glute bridge effectiveness
+    // 2. KNEE FLEXION ANALYSIS (Soft validity windows based on biomechanics literature)
+    // Different studies show varying optimal ranges depending on foot distance and anthropometry
     final leftKneeAngle = _calculateAngle(
       Offset(leftHip.x, leftHip.y),
       Offset(leftKnee.x, leftKnee.y),
@@ -1607,32 +1755,34 @@ class PoseDetectionService {
     );
     final avgKneeAngle = (leftKneeAngle + rightKneeAngle) / 2;
 
-    // Research-based knee flexion thresholds for maximal glute activation
-    final optimalKneeFlexion = avgKneeAngle >= 70.0 && avgKneeAngle <= 110.0;
-    final kneeFlexionValid = optimalKneeFlexion;
+    // Soft validity windows: acceptable allows rep counting, ideal preferred for feedback
+    final kneeFlexionIdeal = avgKneeAngle >= 90.0 &&
+        avgKneeAngle <= 120.0; // Optimal range for GMax activation
+    final kneeFlexionValid = avgKneeAngle >= 75.0 &&
+        avgKneeAngle <= 130.0; // Use acceptable range for basic validation
 
     // 3. HIP EXTENSION ANALYSIS (PRIMARY MOVEMENT - Research Focus)
-    // Kennedy et al. (2022): Hip extension angle is the key performance indicator
-    // >165° required for >60% MVIC glute activation
-    final leftHipAngle = _calculateAngle(
+    // Based on biomechanics research: Hip extension angle between torso and thigh
+    // At bottom: ~90-120° (bent position), At top: ~165-180° (straight body line)
+    final leftHipExtensionAngle = _calculateHipExtensionAngle(
       Offset(leftShoulder.x, leftShoulder.y),
       Offset(leftHip.x, leftHip.y),
       Offset(leftKnee.x, leftKnee.y),
     );
-    final rightHipAngle = _calculateAngle(
+    final rightHipExtensionAngle = _calculateHipExtensionAngle(
       Offset(rightShoulder.x, rightShoulder.y),
       Offset(rightHip.x, rightHip.y),
       Offset(rightKnee.x, rightKnee.y),
     );
-    final avgHipAngle = (leftHipAngle + rightHipAngle) / 2;
+    final avgHipExtensionAngle =
+        (leftHipExtensionAngle + rightHipExtensionAngle) / 2;
 
-    // Research-validated hip extension thresholds (Kennedy et al. 2022):
-    // < 145° = hips lowered (starting position, minimal GMax activation)
-    // > 165° = full bridge (maximal GMax activation >60% MVIC)
-    final hipsLowered =
-        avgHipAngle < 145.0; // Research: inadequate hip extension
-    final hipsBridged =
-        avgHipAngle > 165.0; // Research: full glute bridge position
+    // Heuristic hip extension thresholds informed by biomechanics literature:
+    // < 130° = hips lowered (starting position, bent at hips)
+    // > 160° = full bridge (body forms straight line from shoulders to knees)
+    // Note: These are practical ranges for computer vision, not hard physiological cutoffs
+    final hipsLowered = avgHipExtensionAngle < 130.0; // Bent position (down)
+    final hipsBridged = avgHipExtensionAngle > 160.0; // Extended position (up)
 
     // 4. SPINE ALIGNMENT VALIDATION (Research: Neutral spine prevents compensation)
     // Research shows neutral spine alignment maximizes glute activation and prevents injury
@@ -1706,26 +1856,34 @@ class PoseDetectionService {
           _currentGluteBridgeState; // Maintain current during uncertainty
     }
 
-    // === RESEARCH-BASED REP COUNTING ===
-    // Count complete cycles: full bridge (up) → return to start (down)
-    // Research shows this ensures maximal glute activation throughout movement
+    // === ROBUST REP COUNTING STATE MACHINE ===
+    // Requires full cycle: DOWN → UP (count rep) → DOWN (reset for next rep)
+    // Prevents double counting and ensures proper form completion
     if (isCountingEnabled) {
       if (isFullBodyDetected && avgConfidence >= _minConfidenceForCounting) {
-        // Detect complete cycle: up → down transition
-        if (_currentGluteBridgeState == GluteBridgeState.up &&
-            confirmedState == GluteBridgeState.down &&
+        // State machine with hysteresis: must return to DOWN before counting another rep
+        if (_repCountingState == GluteBridgeState.down &&
+            confirmedState == GluteBridgeState.up &&
+            kneeFlexionValid && // Require acceptable knee flexion for rep counting
             _gluteBridgeConfidence >= 2) {
+          // Count rep when transitioning from DOWN to UP
           final now = DateTime.now();
-          // 500ms debounce prevents double-counting during fast transitions
+          // 600ms debounce prevents double-counting during fast transitions
           if (_lastRepTime == null ||
               now.difference(_lastRepTime!) >
-                  const Duration(milliseconds: 500)) {
+                  const Duration(milliseconds: 600)) {
             _repCount++;
             _lastRepTime = now;
+            _repCountingState = GluteBridgeState.up; // Move to UP state
             onRepCounted?.call(_repCount);
             debugPrint(
-                '✅ GLUTE BRIDGE REP COUNTED: $_repCount (Research-validated cycle)');
+                '✅ GLUTE BRIDGE REP COUNTED: $_repCount (State: DOWN→UP, knee=${avgKneeAngle.toStringAsFixed(1)}°)');
           }
+        } else if (_repCountingState == GluteBridgeState.up &&
+            confirmedState == GluteBridgeState.down) {
+          // Reset state machine when returning to DOWN
+          _repCountingState = GluteBridgeState.down;
+          debugPrint('🔄 GLUTE BRIDGE CYCLE RESET: Ready for next rep');
         }
       } else {
         // Debug why rep check was skipped
@@ -1743,12 +1901,12 @@ class PoseDetectionService {
 
     // === DETAILED DEBUG LOGGING FOR RESEARCH VALIDATION ===
     debugPrint('🔬 GB SCIENTIFIC DEBUG: '
-        'supine=$bodyOrientationValid, knee=${avgKneeAngle.toStringAsFixed(1)}°(70-110°=$kneeFlexionValid), '
-        'hip=${avgHipAngle.toStringAsFixed(1)}°(>165°=$hipsBridged), '
+        'supine=$bodyOrientationValid, knee=${avgKneeAngle.toStringAsFixed(1)}°(ideal:90-120°=$kneeFlexionIdeal, accept:75-130°=$kneeFlexionValid), '
+        'hipExt=${avgHipExtensionAngle.toStringAsFixed(1)}°(>160°=$hipsBridged, <130°=$hipsLowered), '
         'spine=${spineAlignment.toStringAsFixed(3)}(<0.08=$spineAlignmentValid), '
         'pelvis=${pelvicTilt.toStringAsFixed(3)}(<0.04=$pelvicPositionValid), '
         'feet=$footPositionValid, properForm=$properForm, '
-        'confidence=$_gluteBridgeConfidence/3, state=$confirmedState');
+        'confidence=$_gluteBridgeConfidence/3, repState=$_repCountingState, currentState=$confirmedState');
 
     return PoseDetectionResult(
       isPoseDetected: true,
@@ -1756,32 +1914,42 @@ class PoseDetectionService {
       phase: _currentGluteBridgeState,
       keyPoints: _extractKeyPoints(landmarks),
       feedbackMessage: _getGluteBridgeFeedback(
-          _currentGluteBridgeState, avgHipAngle, avgKneeAngle),
+          _currentGluteBridgeState, avgHipExtensionAngle, avgKneeAngle),
       isFullBodyDetected: isFullBodyDetected,
       isReadyToStart: isReadyToStart,
     );
   }
 
-  /// Get scientifically-informed glute bridge feedback with research-based guidance
+  /// Get scientifically-informed glute bridge feedback with soft validity windows
   String _getGluteBridgeFeedback(
-      GluteBridgeState state, double hipAngle, double kneeAngle) {
-    // Research-based form corrections (Kennedy et al. 2022)
-    if (kneeAngle < 70) {
-      return 'Bend knees more - need 70-110° for optimal glute activation';
-    } else if (kneeAngle > 110) {
-      return 'Move feet closer to hips - knees should be 70-110°';
+      GluteBridgeState state, double hipExtensionAngle, double kneeAngle) {
+    // Soft validity windows: guide toward ideal range (90-120°) while accepting wider range (75-130°)
+    final kneeFlexionIdeal = kneeAngle >= 90.0 && kneeAngle <= 120.0;
+
+    // Prioritize knee feedback if outside acceptable range
+    if (kneeAngle < 75) {
+      return 'Bend knees more - aim for 90-120° for optimal glute activation';
+    } else if (kneeAngle > 130) {
+      return 'Move feet closer to hips - knees should be around 90-120°';
+    } else if (!kneeFlexionIdeal) {
+      // Within acceptable but not ideal range - gentle guidance
+      if (kneeAngle < 90) {
+        return 'Bend knees slightly more for better glute activation';
+      } else if (kneeAngle > 120) {
+        return 'Move feet slightly closer for optimal knee position';
+      }
     }
 
-    // Simple movement guidance
+    // Movement guidance based on hip extension angle (only if knee position is acceptable)
     switch (state) {
       case GluteBridgeState.down:
-        return 'Lift hips up';
+        return 'Lift hips up - aim for straight body line';
       case GluteBridgeState.goingUp:
-        return 'Keep lifting higher';
+        return 'Keep lifting higher - squeeze glutes at the top';
       case GluteBridgeState.up:
-        return 'Hold the bridge';
+        return 'Perfect! Hold and squeeze glutes';
       case GluteBridgeState.goingDown:
-        return 'Lower slowly';
+        return 'Lower slowly with control';
     }
   }
 
@@ -1803,7 +1971,10 @@ class PoseDetectionService {
   // BURPEES DETECTION (Most Complex)
   // ============================================================================
 
-  /// Analyze pose for burpees (simplified version)
+  /// Analyze pose for burpees - SIMPLIFIED STATE MACHINE
+  /// FIXED: Simplified to focus on key transitions instead of complex multi-phase detection
+  /// New approach: standing → plank (down) → standing (up) - similar to push-ups but for burpees
+  /// This handles the natural variation in how people perform burpees
   PoseDetectionResult _analyzeBurpeesPose(
     Pose pose,
     Size imageSize,
@@ -1811,15 +1982,13 @@ class PoseDetectionService {
     bool isReadyToStart,
   ) {
     if (workoutType.toLowerCase() != 'burpees') {
-      _currentPhase = BurpeePhase.unknown;
+      _currentPhase = BurpeePhase.standing;
       return PoseDetectionResult.empty();
     }
 
     final landmarks = pose.landmarks;
 
-    // For now, use a simplified burpee: squat down -> plank -> squat up -> jump
-    // We'll combine squat and plank detection
-
+    // Extract key landmarks for burpee tracking
     final leftHip = landmarks[PoseLandmarkType.leftHip];
     final rightHip = landmarks[PoseLandmarkType.rightHip];
     final leftKnee = landmarks[PoseLandmarkType.leftKnee];
@@ -1840,7 +2009,7 @@ class PoseDetectionService {
       return PoseDetectionResult(
         isPoseDetected: false,
         confidence: 0.0,
-        phase: BurpeePhase.unknown,
+        phase: _confirmedBurpeePhase,
         keyPoints: _extractKeyPoints(landmarks),
         feedbackMessage: 'Position your full body in frame',
         isFullBodyDetected: false,
@@ -1864,7 +2033,7 @@ class PoseDetectionService {
       return PoseDetectionResult(
         isPoseDetected: true,
         confidence: avgConfidence,
-        phase: BurpeePhase.unknown,
+        phase: BurpeePhase.standing,
         keyPoints: _extractKeyPoints(landmarks),
         feedbackMessage:
             _getPositioningFeedback(isFullBodyDetected, avgConfidence),
@@ -1877,7 +2046,7 @@ class PoseDetectionService {
       return PoseDetectionResult(
         isPoseDetected: true,
         confidence: avgConfidence,
-        phase: BurpeePhase.unknown,
+        phase: _confirmedBurpeePhase,
         keyPoints: _extractKeyPoints(landmarks),
         feedbackMessage: 'Move closer or improve lighting',
         isFullBodyDetected: isFullBodyDetected,
@@ -1885,39 +2054,78 @@ class PoseDetectionService {
       );
     }
 
-    // SUPER SIMPLE burpee detection: just standing <-> down
-    final leftLegAngle = _calculateAngle(
-      Offset(leftHip.x, leftHip.y),
-      Offset(leftKnee.x, leftKnee.y),
-      Offset(leftAnkle.x, leftAnkle.y),
-    );
+    // === SIMPLIFIED BURPEE DETECTION ===
+    // Focus on key transitions: standing ↔ plank position
+    // This handles natural variation in burpee performance
 
-    final rightLegAngle = _calculateAngle(
-      Offset(rightHip.x, rightHip.y),
-      Offset(rightKnee.x, rightKnee.y),
-      Offset(rightAnkle.x, rightAnkle.y),
-    );
+    // Calculate body reference points
+    final avgShoulder = Offset((leftShoulder.x + rightShoulder.x) / 2,
+        (leftShoulder.y + rightShoulder.y) / 2);
+    final avgHip =
+        Offset((leftHip.x + rightHip.x) / 2, (leftHip.y + rightHip.y) / 2);
+    final avgAnkle = Offset(
+        (leftAnkle.x + rightAnkle.x) / 2, (leftAnkle.y + rightAnkle.y) / 2);
 
+    // LEG ANGLE - primary indicator
+    final leftLegAngle = _calculateAngle(Offset(leftHip.x, leftHip.y),
+        Offset(leftKnee.x, leftKnee.y), Offset(leftAnkle.x, leftAnkle.y));
+    final rightLegAngle = _calculateAngle(Offset(rightHip.x, rightHip.y),
+        Offset(rightKnee.x, rightKnee.y), Offset(rightAnkle.x, rightAnkle.y));
     final avgKneeAngle = (leftLegAngle + rightLegAngle) / 2;
 
-    // SIMPLE: Just check if standing (legs straight) or down (legs bent/horizontal)
-    final isStanding = avgKneeAngle > 140; // Legs relatively straight
-    final isDown = avgKneeAngle < 120; // Legs bent OR horizontal position
+    // BODY ORIENTATION - standing vs plank
+    final shoulderY = avgShoulder.dy / imageSize.height;
+    final hipY = avgHip.dy / imageSize.height;
+    final verticalDifference = (hipY - shoulderY).abs();
+    final isHorizontalOrientation =
+        verticalDifference < 0.12; // Relaxed threshold
 
-    BurpeePhase newPhase;
-    if (isStanding) {
-      newPhase = BurpeePhase.standing;
-    } else if (isDown) {
-      // Don't care if it's squat or plank - just "down"
-      newPhase = BurpeePhase.plankPosition;
+    // BODY ALIGNMENT - for plank validation
+    final bodyAlignmentAngle = _calculateAngle(avgShoulder, avgHip, avgAnkle);
+    final isBodyStraight = bodyAlignmentAngle >= 150.0 &&
+        bodyAlignmentAngle <= 210.0; // Relaxed range
+
+    // === SIMPLIFIED PHASE DETECTION ===
+    // Two main phases: standing (upright) and plank (horizontal on floor)
+
+    BurpeePhase rawPhase;
+
+    // STANDING: Legs relatively straight, body upright, not horizontal
+    final isStanding = avgKneeAngle > 140 && !isHorizontalOrientation;
+
+    // PLANK: Body horizontal, legs extended (down position)
+    final isPlank =
+        isHorizontalOrientation && isBodyStraight && avgKneeAngle > 130;
+
+    // Determine current phase - more forgiving than before
+    if (isPlank) {
+      rawPhase = BurpeePhase.plankPosition;
+    } else if (isStanding) {
+      rawPhase = BurpeePhase.standing;
     } else {
-      newPhase = BurpeePhase.unknown;
+      // Ambiguous state - maintain current phase
+      rawPhase = _confirmedBurpeePhase;
     }
 
-    // Only check for completed rep if workout is active AND full body detected
+    // === RELAXED CONFIDENCE SYSTEM ===
+    // Only require 1 consecutive frame for phase changes (more responsive)
+    if (rawPhase == _currentPhase) {
+      _burpeeConfidence = (_burpeeConfidence + 1).clamp(0, 2);
+    } else {
+      _burpeeConfidence = 0;
+      _currentPhase = rawPhase;
+    }
+
+    // Update confirmed phase with relaxed threshold
+    if (_burpeeConfidence >= 1) {
+      _confirmedBurpeePhase = rawPhase;
+    }
+
+    // === SIMPLIFIED REP COUNTING ===
+    // Count rep when transitioning from plank back to standing
     if (isCountingEnabled) {
       if (isFullBodyDetected && avgConfidence >= _minConfidenceForCounting) {
-        _checkForCompletedBurpeeRep(newPhase);
+        _checkForCompletedBurpeeRep(_confirmedBurpeePhase);
       } else {
         // Debug why rep check was skipped
         if (!isFullBodyDetected) {
@@ -1929,47 +2137,65 @@ class PoseDetectionService {
       }
     }
 
-    _currentPhase = newPhase;
+    // DEBUG LOGGING - Simplified
+    debugPrint('🏃 BURPEE STATE: phase=$_confirmedBurpeePhase, '
+        'knee=${avgKneeAngle.toStringAsFixed(1)}°, horiz=$isHorizontalOrientation(${verticalDifference.toStringAsFixed(3)}), '
+        'bodyAlign=${bodyAlignmentAngle.toStringAsFixed(1)}°, standing=$isStanding, plank=$isPlank, conf=$_burpeeConfidence');
 
     return PoseDetectionResult(
       isPoseDetected: true,
       confidence: avgConfidence,
-      phase: newPhase,
+      phase: _confirmedBurpeePhase,
       keyPoints: _extractKeyPoints(landmarks),
-      feedbackMessage: _getBurpeeFeedback(newPhase),
+      feedbackMessage: _getBurpeeFeedback(_confirmedBurpeePhase),
       isFullBodyDetected: isFullBodyDetected,
       isReadyToStart: isReadyToStart,
     );
   }
 
-  /// Check if a burpee rep has been completed (SIMPLIFIED)
+  /// Check if a burpee rep has been completed - SIMPLIFIED
+  /// FIXED: Count rep when transitioning from plank back to standing
+  /// This is more forgiving and matches how people actually perform burpees
   void _checkForCompletedBurpeeRep(BurpeePhase newPhase) {
     final now = DateTime.now();
 
-    // SUPER SIMPLE: Rep complete when going from down -> standing
-    // This counts any cycle of: standing -> down (squat/plank) -> standing
-    if (_currentPhase == BurpeePhase.plankPosition &&
+    // === SIMPLIFIED REP COUNTING ===
+    // Count rep when transitioning from plank (down position) to standing (up position)
+    // This captures the complete burpee motion without requiring perfect phase sequencing
+
+    if (_confirmedBurpeePhase == BurpeePhase.plankPosition &&
         newPhase == BurpeePhase.standing) {
+      // Debounce check (minimum 1.5 seconds per burpee - realistic timing)
       if (_lastRepTime != null &&
-          now.difference(_lastRepTime!) < _debounceTime) {
+          now.difference(_lastRepTime!) < const Duration(milliseconds: 1500)) {
+        debugPrint('⏸️ BURPEE REP SKIPPED: Too soon (debounce)');
         return;
       }
 
+      // Count the rep!
       _repCount++;
       _lastRepTime = now;
       onRepCounted?.call(_repCount);
+      debugPrint('✅ BURPEE REP COMPLETED: $_repCount (plank → standing)');
     }
   }
 
-  /// Get burpee feedback (SIMPLIFIED)
+  /// Get burpee feedback - SIMPLIFIED
+  /// FIXED: Simple feedback for the two main phases, inclusive of jumping or stepping
   String _getBurpeeFeedback(BurpeePhase phase) {
     switch (phase) {
       case BurpeePhase.standing:
-        return 'Go down!';
+        return 'Squat down and place hands on floor';
       case BurpeePhase.plankPosition:
-        return 'Stand back up!';
-      default:
-        return 'Keep moving!';
+        return 'Step or jump feet back to plank, then stand up';
+      case BurpeePhase.squatDown:
+      case BurpeePhase.pushUpDown:
+      case BurpeePhase.pushUpUp:
+      case BurpeePhase.squatUp:
+      case BurpeePhase.jumpUp:
+      case BurpeePhase.landing:
+      case BurpeePhase.unknown:
+        return 'Complete the burpee motion';
     }
   }
 

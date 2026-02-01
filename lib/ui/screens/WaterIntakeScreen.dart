@@ -155,154 +155,185 @@ class _WaterIntakeScreenState extends State<WaterIntakeScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new,
-              color: Colors.white, size: 22),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: const Text(
-          "Water Intake",
-          style: TextStyle(
-              fontWeight: FontWeight.w700, color: Colors.white, fontSize: 20),
-        ),
-        actions: [
-          IconButton(
-            onPressed: widget.onEditGoal,
-            icon: const Icon(Icons.settings_outlined, color: Colors.white70),
-          )
-        ],
-      ),
-      body: GOStepsBackground(
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Ambient Background Glow
-            Positioned(
-              top: 100,
-              child: Container(
-                width: 250,
-                height: 250,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: WorkoutsDesignTokens.waterCyan.withOpacity(0.15),
-                ),
-                child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
-                    child: Container()),
-              ),
-            ),
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
 
-            // LAYER 1: Massive Liter Count (Behind Glass)
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+    // Responsive sizing based on screen width
+    final percentageFontSize = screenWidth * 0.25; // ~25% of screen width
+    final goalTextFontSize = screenWidth * 0.03; // ~3% of screen width
+    final verticalOffset = screenHeight * -0.02; // -2% of screen height
+    final textSpacing = screenHeight * -0.01; // -1% of screen height
+
+    return WillPopScope(
+      onWillPop: () async => true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragEnd: (details) {
+          // Only respond to swipe from left edge (first 25% of screen width)
+          // and check if the velocity suggests a back swipe
+          if (details.localPosition.dx < screenWidth * 0.25 &&
+              details.velocity.pixelsPerSecond.dx > 200) {
+            Navigator.of(context).pop();
+          }
+        },
+        child: Scaffold(
+          extendBodyBehindAppBar: true,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            centerTitle: true,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new,
+                  color: Colors.white, size: 22),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            actions: [
+              IconButton(
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  widget.onEditGoal?.call();
+                },
+                icon:
+                    const Icon(Icons.settings_outlined, color: Colors.white70),
+              )
+            ],
+          ),
+          body: GOStepsBackground(
+            child: Stack(
+              alignment: Alignment.center,
               children: [
-                TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0, end: _currentAmount),
-                  duration: const Duration(milliseconds: 800),
-                  builder: (context, value, child) => Text(
-                    value >= 1.0
-                        ? value.toStringAsFixed(1)
-                        : (value * 1000).toInt().toString(),
-                    style: TextStyle(
-                      fontSize: 140,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white.withOpacity(0.15),
-                      letterSpacing: -5,
+                // LAYER 1: Massive Liter Count (Behind Glass)
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: _currentAmount),
+                      duration: const Duration(milliseconds: 800),
+                      builder: (context, value, child) => Text(
+                        value >= 1.0
+                            ? value.toStringAsFixed(1)
+                            : (value * 1000).toInt().toString(),
+                        style: TextStyle(
+                          fontSize: 140,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white.withOpacity(0.15),
+                          letterSpacing: -5,
+                        ),
+                      ),
                     ),
-                  ),
+                    Text(
+                      _currentAmount >= 1.0 ? "LITERS" : "MILLILITERS",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white.withOpacity(0.1),
+                        letterSpacing: 8,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  _currentAmount >= 1.0 ? "LITERS" : "MILLILITERS",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white.withOpacity(0.1),
-                    letterSpacing: 8,
+
+                // LAYER 2: Glass & Water Visualization
+                SafeArea(
+                  // Setting bottom to false allows us to handle the bottom padding manually
+                  // so the buttons can sit closer to the physical edge if desired.
+                  bottom: false,
+                  child: Column(
+                    children: [
+                      // Top Percentage
+                      Transform.translate(
+                        offset: Offset(0, verticalOffset),
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween(
+                              begin: 0,
+                              end: (_currentAmount / _targetAmount) * 100),
+                          duration: const Duration(milliseconds: 1000),
+                          builder: (context, value, child) => Column(
+                            children: [
+                              Text(
+                                "${value.toInt()}%",
+                                style: TextStyle(
+                                    fontSize: percentageFontSize,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white),
+                              ),
+                              Transform.translate(
+                                offset: Offset(0, textSpacing),
+                                child: Text(
+                                  "DAILY GOAL",
+                                  style: TextStyle(
+                                      fontSize: goalTextFontSize,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white.withOpacity(0.5),
+                                      letterSpacing: 2),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // The Glass Container - This fills all available middle space
+                      Expanded(
+                        child: AnimatedBuilder(
+                          animation: Listenable.merge(
+                              [_mainController, _waveController]),
+                          builder: (context, child) {
+                            _updateBubbles();
+                            return Center(
+                              child: CustomPaint(
+                                size: const Size(200, 450),
+                                painter: PremiumWaterPainter(
+                                  fillProgress: _fillAnimation.value,
+                                  wavePhase: _waveController.value,
+                                  bubbles: _bubbles,
+                                  accentColor: WorkoutsDesignTokens.waterCyan,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+
+                      // Spacer to position minus button more centrally between bottle and add buttons
+                      const SizedBox(height: 24),
+
+                      // Minus Button (Undo Last)
+                      _buildRemoveButton(),
+
+                      // Spacer between Remove button and Intake buttons
+                      const SizedBox(height: 32),
+
+                      // Pill Shape Intake Buttons
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          24,
+                          0,
+                          24,
+                          // This ensures buttons respect the system "Home Bar" on modern phones
+                          MediaQuery.of(context).padding.bottom > 0
+                              ? MediaQuery.of(context).padding.bottom
+                              : 20,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildPillButton("250ml", 0.25),
+                            const SizedBox(width: 12),
+                            _buildPillButton("500ml", 0.5),
+                            const SizedBox(width: 12),
+                            _buildPillButton("1.0L", 1.0),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-
-            // LAYER 2: Glass & Water Visualization
-            SafeArea(
-              child: Column(
-                children: [
-                  const SizedBox(height: 20),
-                  // Top Percentage
-                  TweenAnimationBuilder<double>(
-                    tween: Tween(
-                        begin: 0, end: (_currentAmount / _targetAmount) * 100),
-                    duration: const Duration(milliseconds: 1000),
-                    builder: (context, value, child) => Column(
-                      children: [
-                        Text(
-                          "${value.toInt()}%",
-                          style: const TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white),
-                        ),
-                        Text(
-                          "DAILY GOAL",
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white.withOpacity(0.5),
-                              letterSpacing: 2),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // The Glass Container
-                  Expanded(
-                    child: AnimatedBuilder(
-                      animation:
-                          Listenable.merge([_mainController, _waveController]),
-                      builder: (context, child) {
-                        _updateBubbles();
-                        return CustomPaint(
-                          size: const Size(200, 450),
-                          painter: PremiumWaterPainter(
-                            fillProgress: _fillAnimation.value,
-                            wavePhase: _waveController.value,
-                            bubbles: _bubbles,
-                            accentColor: WorkoutsDesignTokens.waterCyan,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-
-                  // Minus Button (Undo Last)
-                  _buildRemoveButton(),
-
-                  const SizedBox(height: 30),
-
-                  // Pill Shape Intake Buttons
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildPillButton("250ml", 0.25),
-                        const SizedBox(width: 12),
-                        _buildPillButton("500ml", 0.5),
-                        const SizedBox(width: 12),
-                        _buildPillButton("1.0L", 1.0),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -324,33 +355,25 @@ class _WaterIntakeScreenState extends State<WaterIntakeScreen>
       onTap: hasData ? _removeLastEntry : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        width: 48,
+        height: 48,
         decoration: BoxDecoration(
-          color: hasData
-              ? Colors.red.withOpacity(0.15)
-              : Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: hasData
-                ? Colors.red.withOpacity(0.5)
-                : Colors.white.withOpacity(0.1),
-          ),
+          color: hasData ? Colors.red : Colors.grey.shade600,
+          shape: BoxShape.circle,
+          boxShadow: hasData
+              ? [
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.remove_circle_outline,
-                size: 18, color: hasData ? Colors.redAccent : Colors.white24),
-            const SizedBox(width: 8),
-            Text(
-              "REMOVE LAST",
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: hasData ? Colors.redAccent : Colors.white24,
-              ),
-            ),
-          ],
+        child: const Icon(
+          Icons.remove,
+          color: Colors.white,
+          size: 24,
         ),
       ),
     );
@@ -545,5 +568,10 @@ class PremiumWaterPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant PremiumWaterPainter oldDelegate) => true;
+  bool shouldRepaint(covariant PremiumWaterPainter oldDelegate) {
+    return oldDelegate.fillProgress != fillProgress ||
+        oldDelegate.wavePhase != wavePhase ||
+        oldDelegate.bubbles.length != bubbles.length ||
+        oldDelegate.accentColor != accentColor;
+  }
 }

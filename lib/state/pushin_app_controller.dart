@@ -23,6 +23,7 @@ import '../services/IntentHandler.dart';
 import '../services/WorkoutHistoryService.dart';
 import '../ui/widgets/AppBlockOverlay.dart';
 import '../controller/PushinController.dart';
+import 'auth_state_provider.dart';
 
 /// Enhanced PUSHIN controller integrating:
 /// - Core state machine (PushinController)
@@ -39,6 +40,7 @@ class PushinAppController extends ChangeNotifier {
   late final PushinController _core;
 
   // Services
+  final AuthStateProvider _authProvider;
   final DailyUsageTracker? _usageTracker;
   final WorkoutRewardCalculator _rewardCalculator;
   late final StreakTrackingService _streakTracker;
@@ -73,8 +75,15 @@ class PushinAppController extends ChangeNotifier {
       ValueNotifier(null);
   final ValueNotifier<bool> paymentCancelState = ValueNotifier(false);
 
+  // Upgrade welcome state (for showing AdvancedUpgradeWelcomeScreen)
+  final ValueNotifier<bool> upgradeWelcomeState = ValueNotifier(false);
+
+  // Password reset state (for handling password reset deep links)
+  final ValueNotifier<String?> passwordResetToken = ValueNotifier(null);
+
   // Plan tier (free, pro, advanced)
   String _planTier = 'free';
+  String? _previousPlanTier; // Track previous tier to detect upgrades
 
   // Deep link handler
   DeepLinkHandler? _deepLinkHandler;
@@ -94,6 +103,8 @@ class PushinAppController extends ChangeNotifier {
   List<String> _iosAppTokens = [];
   List<String> _iosCategoryTokens = [];
   bool _iosBlockingActive = false;
+  bool _iosBlockingConfigured =
+      false; // Tracks if user has completed iOS app selection
 
   // Pending workout navigation (from iOS shield action)
   bool _pendingWorkoutNavigation = false;
@@ -136,9 +147,9 @@ class PushinAppController extends ChangeNotifier {
       'bundleId': 'com.reddit.Reddit'
     },
     {
-      'name': 'Netflix',
-      'packageName': 'com.netflix.mediaclient',
-      'bundleId': 'com.netflix.Netflix'
+      'name': 'Figma',
+      'packageName': 'com.figma.mirror',
+      'bundleId': 'com.figma.Desktop'
     },
   ];
 
@@ -147,11 +158,13 @@ class PushinAppController extends ChangeNotifier {
     required UnlockService unlockService,
     required AppBlockingService blockingService,
     required List<AppBlockTarget> blockTargets,
+    required AuthStateProvider authProvider,
     DailyUsageTracker? usageTracker,
     WorkoutRewardCalculator? rewardCalculator,
     StreakTrackingService? streakTracker,
     int gracePeriodSeconds = 0, // Instant blocking - no grace period
-  })  : _usageTracker = usageTracker,
+  })  : _authProvider = authProvider,
+        _usageTracker = usageTracker,
         _rewardCalculator = rewardCalculator ?? WorkoutRewardCalculator(),
         _streakTracker = streakTracker ?? StreakTrackingService() {
     // Initialize core state machine
@@ -214,30 +227,104 @@ class PushinAppController extends ChangeNotifier {
     // Check for pending emergency unlocks initiated from shield
     await _checkForPendingEmergencyUnlock();
 
-    // Load current plan tier
-    // TODO: Integrate with subscription service
-    _planTier = 'free'; // Hardcoded for MVP
-
-    // Initialize deep link handler for Stripe payments
+    // Initialize Stripe service first (needed for subscription check)
     final stripeService = StripeCheckoutService(
       baseUrl: 'https://pushin-production.up.railway.app/api',
       isTestMode: true,
     );
 
+    // Load current plan tier from cached subscription status
+    await _loadCachedPlanTier(stripeService);
+
     _deepLinkHandler = DeepLinkHandler(
       stripeService: stripeService,
-      onPaymentSuccess: (status) {
-        print('Payment success! Plan: ${status.planId}');
+      getCurrentUserId: () => _authProvider.currentUser?.id,
+      onPaymentSuccess: (status) async {
+        print('═══════════════════════════════════════════════');
+        print('💰 PAYMENT SUCCESS CALLBACK');
+        print('   - New plan: ${status.planId}');
+        print('   - isActive: ${status.isActive}');
+        print('   - subscriptionId: ${status.subscriptionId}');
+        print('   - customerId: ${status.customerId}');
+        print('   - currentPeriodEnd: ${status.currentPeriodEnd}');
+        print('   - Current plan tier: $_planTier');
+        print('   - Previous plan tier: $_previousPlanTier');
+        print('   - currentUserId: ${_authProvider.currentUser?.id}');
+        print('═══════════════════════════════════════════════');
+
+        // Detect if this is an upgrade from PRO to ADVANCED
+        final currentTier = _planTier;
+        final newTier = status.planId;
+        final isUpgradeToAdvanced =
+            (currentTier == 'pro' || _previousPlanTier == 'pro') &&
+                newTier == 'advanced';
+
+        print('💰 Upgrade detection:');
+        print('   - Current tier: $currentTier');
+        print('   - Previous tier: $_previousPlanTier');
+        print('   - New tier: $newTier');
+        print('   - Is upgrade to ADVANCED: $isUpgradeToAdvanced');
+
+        // Update previous tier before changing current tier
+        _previousPlanTier = _planTier;
+
         // Update plan tier based on subscription
         _planTier = status.planId;
-        notifyListeners();
+        print('✅ Updated _planTier from $currentTier to $_planTier');
 
-        // Trigger UI to show success dialog
-        paymentSuccessState.value = status;
-        // Reset after a delay (give user time to read and tap)
-        Future.delayed(const Duration(seconds: 8), () {
-          paymentSuccessState.value = null;
-        });
+        // CRITICAL: Save subscription status to cache with user ID
+        final currentUserId = _authProvider.currentUser?.id;
+        if (currentUserId != null) {
+          try {
+            final statusWithUserId = SubscriptionStatus(
+              isActive: status.isActive,
+              planId: status.planId,
+              customerId: status.customerId,
+              subscriptionId: status.subscriptionId,
+              currentPeriodEnd: status.currentPeriodEnd,
+              cachedUserId: currentUserId,
+            );
+            await stripeService.saveSubscriptionStatus(statusWithUserId);
+            print(
+                '✅ Subscription status saved to cache with userId: $currentUserId');
+          } catch (e) {
+            print('❌ Error saving subscription status: $e');
+          }
+        } else {
+          print(
+              '⚠️ No user ID available - subscription may not persist correctly');
+        }
+
+        // CRITICAL: Update usage tracker with new plan tier
+        try {
+          await _usageTracker?.updatePlanTier(_planTier);
+          print('✅ Usage tracker updated with plan tier: $_planTier');
+        } catch (e) {
+          print('❌ Error updating usage tracker: $e');
+        }
+
+        if (isUpgradeToAdvanced) {
+          // User upgraded from PRO to ADVANCED - show upgrade welcome screen
+          print(
+              '🎉 Detected upgrade to ADVANCED - setting upgradeWelcomeState');
+          upgradeWelcomeState.value = true;
+          // Don't set paymentSuccessState for upgrades - use the upgrade screen instead
+        } else {
+          // New subscription (not an upgrade) - show regular success screen
+          print('💰 New subscription - setting paymentSuccessState');
+          // IMPORTANT: Set paymentSuccessState BEFORE notifyListeners
+          // This ensures AppRouter sees the success state when it rebuilds
+          paymentSuccessState.value = status;
+          print('💰 paymentSuccessState set, triggering router rebuild');
+        }
+
+        // Trigger AppRouter rebuild to show appropriate screen
+        notifyListeners();
+        print(
+            '🔔 notifyListeners called - UI should update with plan tier: $_planTier');
+
+        // Note: Don't auto-reset states here
+        // Success screens will clear them when user taps continue
       },
       onPaymentCanceled: () {
         print('Payment canceled by user');
@@ -247,6 +334,21 @@ class PushinAppController extends ChangeNotifier {
         // Reset after a delay
         Future.delayed(const Duration(seconds: 3), () {
           paymentCancelState.value = false;
+        });
+      },
+      onPasswordReset: (String token) {
+        print('🔑 Password reset deep link received');
+        print('   Token: ${token.substring(0, 8)}...');
+
+        // Store the token to trigger navigation to ResetPasswordScreen
+        passwordResetToken.value = token;
+
+        // Auto-clear after navigation (will be handled by the screen)
+        Future.delayed(const Duration(seconds: 1), () {
+          if (passwordResetToken.value == token) {
+            print('🧹 Auto-clearing password reset token');
+            passwordResetToken.value = null;
+          }
         });
       },
     );
@@ -393,8 +495,12 @@ class PushinAppController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       _iosAppTokens = prefs.getStringList('ios_app_tokens') ?? [];
       _iosCategoryTokens = prefs.getStringList('ios_category_tokens') ?? [];
+      _iosBlockingConfigured =
+          prefs.getBool('ios_blocking_configured') ?? false;
       print(
-          'Loaded ${_iosAppTokens.length} app tokens and ${_iosCategoryTokens.length} category tokens');
+          'Loaded ${_iosAppTokens.length} app tokens and ${_iosCategoryTokens.length} category tokens, configured: $_iosBlockingConfigured');
+      // Notify listeners since blockedApps getter now depends on iOS tokens
+      notifyListeners();
     } catch (e) {
       print('Error loading iOS tokens: $e');
     }
@@ -406,6 +512,7 @@ class PushinAppController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList('ios_app_tokens', _iosAppTokens);
       await prefs.setStringList('ios_category_tokens', _iosCategoryTokens);
+      await prefs.setBool('ios_blocking_configured', _iosBlockingConfigured);
     } catch (e) {
       print('Error saving iOS tokens: $e');
     }
@@ -437,9 +544,11 @@ class PushinAppController extends ChangeNotifier {
 
       // Present the picker
       final result = await _focusModeService!.presentAppPicker();
-      if (result != null && result.hasSelection) {
+      if (result != null) {
         _iosAppTokens = result.appTokens;
         _iosCategoryTokens = result.categoryTokens;
+        _iosBlockingConfigured =
+            true; // Mark as configured even if 0 apps selected
         await _saveIOSTokens();
         print('User selected ${result.totalSelected} items for blocking');
         notifyListeners();
@@ -489,8 +598,18 @@ class PushinAppController extends ChangeNotifier {
       final storedApps = prefs.getStringList('blocked_apps');
 
       if (storedApps != null && storedApps.isNotEmpty) {
-        _blockedApps = storedApps;
-        print('Loaded ${_blockedApps.length} blocked apps from storage');
+        // Migrate Netflix to Figma if present
+        _blockedApps = storedApps.map((app) {
+          if (app == 'com.netflix.mediaclient') {
+            return Platform.isIOS ? 'com.figma.Desktop' : 'com.figma.mirror';
+          }
+          return app;
+        }).toList();
+        // Save migrated list
+        await prefs.setStringList('blocked_apps', _blockedApps);
+        print('Migrated Netflix to Figma in stored blocked apps');
+        print(
+            'Loaded ${_blockedApps.length} blocked apps from storage (migrated)');
       } else {
         // Initialize with default blocked apps
         _blockedApps = defaultBlockedApps
@@ -843,6 +962,7 @@ class PushinAppController extends ChangeNotifier {
         _iosAppTokens = [];
         _iosCategoryTokens = [];
         await _saveIOSTokens();
+        notifyListeners();
       }
       return false;
     } catch (e) {
@@ -975,6 +1095,9 @@ class PushinAppController extends ChangeNotifier {
   /// Check if iOS blocking is currently active
   bool get isIOSBlockingActive => _iosBlockingActive;
 
+  /// Check if user has completed iOS app selection setup (even if they selected 0 apps)
+  bool get hasIOSBlockingBeenConfigured => _iosBlockingConfigured;
+
   /// Check if there's a pending workout navigation from iOS shield action
   bool get hasPendingWorkoutNavigation => _pendingWorkoutNavigation;
 
@@ -1025,6 +1148,15 @@ class PushinAppController extends ChangeNotifier {
     print('   iOS tokens configured: $hasIOSBlockingConfigured');
     print('   Emergency unlock active: $isEmergencyUnlockActive');
     print('   Current overlay: ${blockOverlayState.value?.reason}');
+    print('   User authenticated: ${_authProvider.isAuthenticated}');
+
+    // Skip overlay updates for unauthenticated users (welcome/onboarding screens)
+    if (!_authProvider.isAuthenticated) {
+      print(
+          '   → Skipping: user not authenticated (welcome/onboarding screen)');
+      blockOverlayState.value = null;
+      return;
+    }
 
     // Skip if emergency unlock is active
     if (isEmergencyUnlockActive) {
@@ -1209,6 +1341,177 @@ class PushinAppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Load cached plan tier from StripeCheckoutService on startup
+  Future<void> _loadCachedPlanTier(StripeCheckoutService stripeService) async {
+    try {
+      print('📦 Loading cached subscription status...');
+      final cachedStatus = await stripeService.getCachedSubscriptionStatus();
+
+      if (cachedStatus != null) {
+        print('📦 Found cached status:');
+        print('   - planId: ${cachedStatus.planId}');
+        print('   - isActive: ${cachedStatus.isActive}');
+        print('   - customerId: ${cachedStatus.customerId}');
+      } else {
+        print('📦 No cached subscription status found');
+      }
+
+      if (cachedStatus != null && cachedStatus.isActive) {
+        _planTier = cachedStatus.planId;
+        _previousPlanTier = _planTier; // Initialize previous tier
+        print('✅ Loaded cached plan tier: $_planTier');
+
+        // Also update the usage tracker with the plan tier
+        await _usageTracker?.updatePlanTier(_planTier);
+        print('✅ Updated usage tracker with plan tier: $_planTier');
+      } else {
+        _planTier = 'free';
+        _previousPlanTier = 'free'; // Initialize previous tier
+        print('📦 No active subscription, defaulting to free tier');
+      }
+
+      // Notify listeners so UI updates with the loaded plan tier
+      notifyListeners();
+      print('🔔 notifyListeners called after loading cached plan tier');
+    } catch (e) {
+      print('❌ Error loading cached plan tier: $e');
+      _planTier = 'free';
+      _previousPlanTier = 'free';
+    }
+  }
+
+  /// Refresh plan tier from cached subscription status
+  ///
+  /// Call this after login/logout to ensure the UI shows the correct subscription tier
+  /// Requires authenticated user - subscriptions are only available after sign up
+  Future<void> refreshPlanTier() async {
+    print('🔄 ═══════════════════════════════════════════════');
+    print('🔄 refreshPlanTier() called');
+    print('   - isAuthenticated: ${_authProvider.isAuthenticated}');
+    print('   - currentUser: ${_authProvider.currentUser?.id}');
+    print('🔄 ═══════════════════════════════════════════════');
+
+    final stripeService = StripeCheckoutService(
+      baseUrl: 'https://pushin-production.up.railway.app/api',
+      isTestMode: true,
+    );
+
+    // 1. Handle Unauthenticated State - always free tier
+    if (!_authProvider.isAuthenticated) {
+      print('👤 User not authenticated - setting plan to free');
+      _planTier = 'free';
+      _previousPlanTier = 'free';
+      await _usageTracker?.updatePlanTier(_planTier);
+      notifyListeners();
+      return;
+    }
+
+    final currentUserId = _authProvider.currentUser?.id;
+    if (currentUserId == null) {
+      print('⚠️ Authenticated but no user ID - this should not happen');
+      _planTier = 'free';
+      _previousPlanTier = 'free';
+      await _usageTracker?.updatePlanTier(_planTier);
+      notifyListeners();
+      return;
+    }
+
+    // 2. Check Local Cache
+    final cachedStatus = await stripeService.getCachedSubscriptionStatus();
+    print(
+        '📦 Cached status: ${cachedStatus?.planId}, active: ${cachedStatus?.isActive}, cachedUserId: ${cachedStatus?.cachedUserId}');
+
+    // 3. Validate Cache - must belong to current user
+    if (cachedStatus != null &&
+        cachedStatus.isActive &&
+        cachedStatus.cachedUserId == currentUserId) {
+      _planTier = cachedStatus.planId;
+      _previousPlanTier = _planTier;
+      await _usageTracker?.updatePlanTier(_planTier);
+      print('✅ Restored plan from cache (user match): $_planTier');
+      notifyListeners();
+      return;
+    }
+
+    // 4. Handle legacy cache with no user ID - claim it for current user
+    if (cachedStatus != null &&
+        cachedStatus.isActive &&
+        cachedStatus.cachedUserId == null) {
+      print(
+          '🔗 Linking legacy subscription (no cachedUserId) to user $currentUserId');
+
+      final claimedStatus = SubscriptionStatus(
+        isActive: cachedStatus.isActive,
+        planId: cachedStatus.planId,
+        customerId: cachedStatus.customerId,
+        subscriptionId: cachedStatus.subscriptionId,
+        currentPeriodEnd: cachedStatus.currentPeriodEnd,
+        cachedUserId: currentUserId,
+      );
+
+      await stripeService.saveSubscriptionStatus(claimedStatus);
+      _planTier = claimedStatus.planId;
+      _previousPlanTier = _planTier;
+      await _usageTracker?.updatePlanTier(_planTier);
+      print('✅ Legacy subscription linked: $_planTier');
+      notifyListeners();
+      return;
+    }
+
+    // 5. Cache is missing, inactive, or belongs to different user - fetch from server
+    if (cachedStatus != null && cachedStatus.cachedUserId != currentUserId) {
+      print(
+          '⚠️ Cache belongs to different user (${cachedStatus.cachedUserId}). Fetching fresh data...');
+    } else {
+      print('ℹ️ No valid cache. Fetching from server...');
+    }
+
+    try {
+      print(
+          '🌐 Fetching subscription status from server for user: $currentUserId');
+      final freshStatus = await stripeService.checkSubscriptionStatus(
+        userId: currentUserId,
+      );
+
+      if (freshStatus != null && freshStatus.isActive) {
+        _planTier = freshStatus.planId;
+        _previousPlanTier = _planTier;
+        await _usageTracker?.updatePlanTier(_planTier);
+        print('✅ Server fetch success. Plan: $_planTier');
+      } else {
+        // User is confirmed free on server
+        print('ℹ️ No active subscription on server for user $currentUserId');
+        _planTier = 'free';
+        _previousPlanTier = 'free';
+        // Cache the 'free' status with user ID to avoid repeated server calls
+        await stripeService.saveSubscriptionStatus(SubscriptionStatus(
+            isActive: false, planId: 'free', cachedUserId: currentUserId));
+        await _usageTracker?.updatePlanTier(_planTier);
+        print('✅ Confirmed free tier on server.');
+      }
+    } catch (e) {
+      print('❌ Error fetching fresh subscription status: $e');
+      // On error, default to free if no plan set
+      if (_planTier.isEmpty) {
+        _planTier = 'free';
+        _previousPlanTier = 'free';
+        await _usageTracker?.updatePlanTier(_planTier);
+      }
+      print('⚠️ Using fallback plan tier: $_planTier');
+    }
+
+    notifyListeners();
+  }
+
+  /// Clear the upgrade welcome state after user sees the welcome screen
+  Future<void> clearUpgradeWelcomeState() async {
+    print('🧹 Clearing upgrade welcome state');
+    print('   - Current plan tier: $_planTier');
+    upgradeWelcomeState.value = false;
+    notifyListeners();
+    print('   - Plan tier after clear: $_planTier (should remain advanced)');
+  }
+
   /// Get workout reward description for UI
   String getWorkoutRewardDescription(String workoutType, int reps) {
     return _rewardCalculator.getRewardDescription(
@@ -1223,10 +1526,43 @@ class PushinAppController extends ChangeNotifier {
   /// Get focus mode service
   FocusModeService? get focusModeService => _focusModeService;
 
+  /// Set the pending checkout user ID for payment verification
+  /// Call this before launching Stripe checkout so the deep link handler
+  /// knows which user to verify the payment for
+  void setPendingCheckoutUserId(String? userId) {
+    _deepLinkHandler?.pendingCheckoutUserId = userId;
+    print('💳 Set pendingCheckoutUserId: $userId');
+  }
+
+  /// Set the pending checkout plan ID for payment verification fallback
+  /// Call this before launching Stripe checkout so the deep link handler
+  /// knows which plan to show if backend verification fails
+  Future<void> setPendingCheckoutPlanId(String? planId) async {
+    _deepLinkHandler?.pendingCheckoutPlanId = planId;
+
+    // CRITICAL: Persist to SharedPreferences so it survives app kill/recreation
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (planId != null) {
+        await prefs.setString('pending_checkout_plan_id', planId);
+        print('💳 Set and persisted pendingCheckoutPlanId: $planId');
+      } else {
+        await prefs.remove('pending_checkout_plan_id');
+        print('💳 Cleared pendingCheckoutPlanId');
+      }
+    } catch (e) {
+      print('❌ Error persisting pendingCheckoutPlanId: $e');
+    }
+  }
+
   // ============ Emergency Unlock Getters ============
 
-  /// Whether emergency unlock feature is enabled
+  /// Whether emergency unlock feature is enabled (user toggle)
   bool get emergencyUnlockEnabled => _emergencyUnlockEnabled;
+
+  /// Whether user has access to emergency unlock (requires Pro or Advanced plan)
+  bool get hasEmergencyUnlockAccess =>
+      _planTier == 'pro' || _planTier == 'advanced';
 
   /// Minutes per emergency unlock session
   int get emergencyUnlockMinutes => _emergencyUnlockMinutes;
@@ -1259,7 +1595,18 @@ class PushinAppController extends ChangeNotifier {
   }
 
   /// Get list of blocked apps
-  List<String> get blockedApps => List.unmodifiable(_blockedApps);
+  List<String> get blockedApps {
+    // For iOS, if user has completed iOS setup, return the iOS tokens (even if empty)
+    if (!kIsWeb && Platform.isIOS && hasIOSBlockingBeenConfigured) {
+      return List.unmodifiable(_iosAppTokens);
+    }
+    // For iOS without setup completed, return empty list (no apps blocked)
+    if (!kIsWeb && Platform.isIOS) {
+      return const [];
+    }
+    // For Android, return the blocked apps list
+    return List.unmodifiable(_blockedApps);
+  }
 
   // ============ Emergency Unlock Setters ============
 
@@ -1306,34 +1653,63 @@ class PushinAppController extends ChangeNotifier {
 
   /// Update the list of blocked apps and persist to storage
   Future<void> updateBlockedApps(List<String> apps) async {
-    _blockedApps = List.from(apps);
-    notifyListeners();
+    // Check if user is currently unlocked before updating
+    final wasUnlocked = currentState == PushinState.unlocked;
 
-    // Persist to storage
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList('blocked_apps', _blockedApps);
-      print('Saved ${_blockedApps.length} blocked apps to storage');
-    } catch (e) {
-      print('Error saving blocked apps: $e');
+    // On iOS, update iOS tokens; on Android, update blocked apps list
+    if (!kIsWeb && Platform.isIOS) {
+      _iosAppTokens = List.from(apps);
+      _iosBlockingConfigured = true; // Mark as configured
+      await _saveIOSTokens();
+      print('Updated ${_iosAppTokens.length} iOS app tokens');
+    } else {
+      _blockedApps = List.from(apps);
+      // Persist to storage
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('blocked_apps', _blockedApps);
+        print('Saved ${_blockedApps.length} blocked apps to storage');
+      } catch (e) {
+        print('Error saving blocked apps: $e');
+      }
+
+      // Sync to native blocking service (Android, for when app is in background)
+      if (!kIsWeb && Platform.isAndroid) {
+        await _blockingServiceBridge.updateBlockedApps(_blockedApps);
+      }
     }
+
+    notifyListeners();
 
     // Sync to platform monitor (Flutter-based, for when app is in foreground)
     await _syncBlockedAppsToMonitor();
 
-    // Sync to native blocking service (Android, for when app is in background)
-    if (!kIsWeb && Platform.isAndroid) {
-      await _blockingServiceBridge.updateBlockedApps(_blockedApps);
+    // If user was unlocked before updating apps, preserve that unlocked state
+    if (wasUnlocked && !kIsWeb && Platform.isIOS && hasIOSBlockingConfigured) {
+      print(
+          'User was unlocked before app list update - preserving unlocked state');
+      // Get remaining unlock time and re-apply unblocking
+      final remainingSeconds = getUnlockTimeRemaining(DateTime.now());
+      if (remainingSeconds > 0) {
+        final remainingMinutes = (remainingSeconds / 60).ceil();
+        await _startIOSUnblocking(remainingMinutes);
+      }
     }
   }
 
   // ============ Emergency Unlock Actions ============
 
   /// Use an emergency unlock to grant temporary access to a blocked app
-  /// Returns true if successful, false if no unlocks remaining
+  /// Returns true if successful, false if no unlocks remaining or feature not available
   Future<bool> useEmergencyUnlock(String appName) async {
     try {
       debugPrint('🚨 useEmergencyUnlock called for: $appName');
+
+      // Check if user has Pro or Advanced plan (emergency unlock is a premium feature)
+      if (!hasEmergencyUnlockAccess) {
+        debugPrint('❌ Emergency unlock requires Pro or Advanced plan');
+        return false;
+      }
 
       // Check if emergency unlocks reset is needed
       _checkEmergencyUnlockReset();
@@ -1541,6 +1917,7 @@ class PushinAppController extends ChangeNotifier {
     blockOverlayState.dispose();
     paymentSuccessState.dispose();
     paymentCancelState.dispose();
+    upgradeWelcomeState.dispose();
     _deepLinkHandler?.dispose();
     super.dispose();
   }

@@ -96,6 +96,39 @@ const tables = [
     `
   },
   {
+    name: 'password_reset_tokens',
+    sql: `
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        token_hash TEXT NOT NULL UNIQUE,
+        expires_at TIMESTAMP NOT NULL,
+        used BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+        UNIQUE(user_id) -- Only one active reset per user
+      );
+    `
+  },
+  {
+    name: 'audit_logs',
+    sql: `
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id SERIAL PRIMARY KEY,
+        event_type VARCHAR(100) NOT NULL,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        ip_address INET,
+        user_agent TEXT,
+        metadata JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+        INDEX idx_audit_logs_event_type (event_type),
+        INDEX idx_audit_logs_user_id (user_id),
+        INDEX idx_audit_logs_created_at (created_at)
+      );
+    `
+  },
+  {
     name: 'subscriptions',
     sql: `
       CREATE TABLE IF NOT EXISTS subscriptions (
@@ -108,6 +141,30 @@ const tables = [
         is_active BOOLEAN DEFAULT true,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `
+  },
+  {
+    name: 'anonymous_subscriptions',
+    sql: `
+      CREATE TABLE IF NOT EXISTS anonymous_subscriptions (
+        id SERIAL PRIMARY KEY,
+        anonymous_id VARCHAR(255) UNIQUE NOT NULL, -- UUID or random identifier for anonymous user
+        email VARCHAR(255) NOT NULL,
+        customer_id VARCHAR(255),
+        subscription_id VARCHAR(255) UNIQUE,
+        plan_id VARCHAR(50),
+        current_period_end TIMESTAMP,
+        is_active BOOLEAN DEFAULT true,
+        linked_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, -- NULL until linked to real account
+        recovery_token VARCHAR(255), -- For account linking/recovery
+        recovery_expires_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+        INDEX idx_anonymous_subscriptions_email (email),
+        INDEX idx_anonymous_subscriptions_recovery_token (recovery_token),
+        INDEX idx_anonymous_subscriptions_linked_user (linked_user_id)
       );
     `
   },

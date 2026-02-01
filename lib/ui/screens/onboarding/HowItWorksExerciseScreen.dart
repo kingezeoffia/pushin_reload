@@ -65,12 +65,12 @@ class _HowItWorksExerciseScreenState extends State<HowItWorksExerciseScreen> {
         Icons.fitness_center, '20 reps = 10 minutes'),
     _WorkoutInfo('Squats', 'assets/icons/squats_icon.png',
         Icons.airline_seat_legroom_normal, '30 reps = 15 minutes'),
-    _WorkoutInfo('Glute Bridge', 'assets/icons/glutebridge_icon.png',
-        Icons.accessibility_new, '15 reps = 12 minutes'),
-    _WorkoutInfo('Plank', 'assets/icons/plank_icon.png', Icons.self_improvement,
-        '60 sec = 15 minutes'),
     _WorkoutInfo('Jumping Jacks', 'assets/icons/jumping_jacks_icon.png',
         Icons.sports_gymnastics, '40 reps = 16 minutes'),
+    _WorkoutInfo('Plank', 'assets/icons/plank_icon.png', Icons.self_improvement,
+        '60 sec = 15 minutes'),
+    _WorkoutInfo('Glute Bridge', 'assets/icons/glutebridge_icon.png',
+        Icons.accessibility_new, '15 reps = 12 minutes'),
   ];
 
   @override

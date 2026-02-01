@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
 import '../theme/dashboard_design_tokens.dart';
 import '../widgets/GOStepsBackground.dart';
 import '../../domain/models/workout_mode.dart';
@@ -10,6 +11,7 @@ import '../widgets/workouts/workout_mode_selector.dart';
 import '../widgets/workouts/quick_start_card.dart';
 import '../widgets/dashboard/goal_progress_card.dart' show CustomWorkoutCard;
 import 'paywall/PaywallScreen.dart';
+import '../../state/pushin_app_controller.dart';
 
 class EnhancedWorkoutsScreen extends StatefulWidget {
   const EnhancedWorkoutsScreen({super.key});
@@ -193,29 +195,40 @@ class _EnhancedWorkoutsScreenState extends State<EnhancedWorkoutsScreen>
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              // Pro badge
-                              GestureDetector(
-                                onTap: () {
-                                  HapticFeedback.mediumImpact();
-                                  _navigateToPaywall(context);
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: const Text(
-                                    'PRO',
-                                    style: TextStyle(
-                                      color: Color(0xFFFFB347),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.8,
+                              // Pro badge - only show for free users
+                              Consumer<PushinAppController>(
+                                builder: (context, controller, _) {
+                                  final hasProOrAdvanced =
+                                      controller.planTier == 'pro' ||
+                                          controller.planTier == 'advanced';
+                                  if (hasProOrAdvanced) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return GestureDetector(
+                                    onTap: () {
+                                      HapticFeedback.mediumImpact();
+                                      _navigateToPaywall(context);
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 16, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            Colors.white.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: const Text(
+                                        'PRO',
+                                        style: TextStyle(
+                                          color: Color(0xFFFFB347),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.8,
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
+                                  );
+                                },
                               ),
                             ],
                           ),
@@ -272,7 +285,7 @@ class _EnhancedWorkoutsScreenState extends State<EnhancedWorkoutsScreen>
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            const PaywallScreen(),
+            const PaywallScreen(preSelectedPlan: 'pro'),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(0.0, 1.0);
           const end = Offset.zero;
@@ -396,7 +409,7 @@ class _CustomModeComingSoonPreview extends StatelessWidget {
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            const PaywallScreen(),
+            const PaywallScreen(preSelectedPlan: 'pro'),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(0.0, 1.0);
           const end = Offset.zero;

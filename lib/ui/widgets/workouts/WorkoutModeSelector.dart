@@ -81,7 +81,8 @@ class _ModeCard extends StatelessWidget {
           border: isSelected
               ? Border.all(color: mode.color, width: 2)
               : Border.all(color: PushinTheme.surfaceDark, width: 2),
-          boxShadow: isSelected ? PushinTheme.buttonShadow : PushinTheme.cardShadow,
+          boxShadow:
+              isSelected ? PushinTheme.buttonShadow : PushinTheme.cardShadow,
         ),
         child: Column(
           children: [
@@ -148,4 +149,3 @@ extension WorkoutModeExtension on WorkoutMode {
     }
   }
 }
-

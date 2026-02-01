@@ -36,9 +36,9 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
       fallbackIcon: Icons.airline_seat_legroom_normal,
     ),
     _WorkoutInfo(
-      name: 'Glute Bridge',
-      iconPath: 'assets/icons/glutebridge_icon.png',
-      fallbackIcon: Icons.accessibility_new,
+      name: 'Jumping Jacks',
+      iconPath: 'assets/icons/jumping_jacks_icon.png',
+      fallbackIcon: Icons.sports_gymnastics,
     ),
     _WorkoutInfo(
       name: 'Plank',
@@ -46,9 +46,9 @@ class _SkipExerciseScreenState extends State<SkipExerciseScreen> {
       fallbackIcon: Icons.self_improvement,
     ),
     _WorkoutInfo(
-      name: 'Jumping Jacks',
-      iconPath: 'assets/icons/jumping_jacks_icon.png',
-      fallbackIcon: Icons.sports_gymnastics,
+      name: 'Glute Bridge',
+      iconPath: 'assets/icons/glutebridge_icon.png',
+      fallbackIcon: Icons.accessibility_new,
     ),
   ];
 

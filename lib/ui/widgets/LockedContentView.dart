@@ -107,4 +107,3 @@ class LockedContentView extends StatelessWidget {
     );
   }
 }
-

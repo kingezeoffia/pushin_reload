@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../../state/auth_state_provider.dart';
+import '../paywall/PaywallScreen.dart';
 
 /// Step 4: Emergency Unlock
 ///
@@ -169,7 +170,7 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
               ),
             ),
 
-            // Complete Setup Button - properly positioned in Stack
+            // Continue to Paywall Button - properly positioned in Stack
             Positioned(
               left: 0,
               right: 0,
@@ -182,26 +183,33 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
                   onTap: () async {
                     try {
                       debugPrint(
-                          '🎯 Complete Setup button pressed - using canonical completeOnboardingFlow()');
+                          '🎯 Continue to Paywall button pressed - manual navigation to paywall');
 
-                      // BMAD v6: ONLY call completeOnboardingFlow() - handles ALL state transitions
-                      await authProvider.completeOnboardingFlow();
-
-                      debugPrint(
-                          '✅ Emergency Unlock setup completed successfully');
-
-                      // Clear navigation stack and let router take over (BMAD v6: state-driven navigation)
+                      // Manual navigation to paywall screen
                       if (context.mounted) {
-                        Navigator.of(context)
-                            .popUntil((route) => route.isFirst);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => PaywallScreen(
+                              onboardingData: {
+                                'fitnessLevel': fitnessLevel,
+                                'goals': goals,
+                                'otherGoal': otherGoal,
+                                'workoutHistory': workoutHistory,
+                                'blockedApps': blockedApps,
+                                'selectedWorkout': selectedWorkout,
+                                'unlockDuration': unlockDuration,
+                              },
+                            ),
+                          ),
+                        );
                       }
                     } catch (e) {
-                      debugPrint('❌ Error completing setup: $e');
+                      debugPrint('❌ Error navigating to paywall: $e');
                       // Show error to user
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Error completing setup: $e'),
+                            content: Text('Error continuing setup: $e'),
                             backgroundColor: Colors.red,
                           ),
                         );
@@ -317,7 +325,7 @@ class _ContinueButton extends StatelessWidget {
         ),
         child: const Center(
           child: Text(
-            'Complete Setup',
+            'Continue',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,

@@ -5,6 +5,8 @@ import '../widgets/workouts/WorkoutModeSelector.dart';
 import '../widgets/workouts/WorkoutConfigurator.dart';
 import '../widgets/workouts/RecentWorkouts.dart';
 import '../../state/pushin_app_controller.dart';
+import '../../domain/models/workout_mode.dart' as domain_workout_mode;
+import 'workouts/screen_time_selection_screen.dart';
 
 /// Workouts screen with configurable workout modes and settings
 class WorkoutsScreen extends StatefulWidget {
@@ -14,7 +16,8 @@ class WorkoutsScreen extends StatefulWidget {
   State<WorkoutsScreen> createState() => _WorkoutsScreenState();
 }
 
-class _WorkoutsScreenState extends State<WorkoutsScreen> with TickerProviderStateMixin {
+class _WorkoutsScreenState extends State<WorkoutsScreen>
+    with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _headerSlideAnimation;
   late Animation<double> _headerFadeAnimation;
@@ -258,12 +261,26 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with TickerProviderStat
   }
 
   void _startWorkout(BuildContext context, PushinAppController controller) {
-    // Navigate to existing workout screen or implement new workout flow
-    // For now, navigate to the existing RepCounterScreen
+    // Convert local WorkoutMode to domain WorkoutMode
+    domain_workout_mode.WorkoutMode domainMode;
+    switch (_selectedMode) {
+      case WorkoutMode.cozy:
+        domainMode = domain_workout_mode.WorkoutMode.cozy;
+        break;
+      case WorkoutMode.normal:
+        domainMode = domain_workout_mode.WorkoutMode.normal;
+        break;
+      case WorkoutMode.tuff:
+        domainMode = domain_workout_mode.WorkoutMode.tuff;
+        break;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const Placeholder(), // TODO: Replace with actual workout screen
+        builder: (context) => ScreenTimeSelectionScreen(
+          selectedMode: domainMode,
+        ),
       ),
     );
   }
@@ -271,9 +288,12 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with TickerProviderStat
 
 /// Workout mode enum
 enum WorkoutMode {
-  cozy('Cozy', 'Gentle introduction to habit building', Icons.spa, PushinTheme.successGreen),
-  normal('Normal', 'Pro workout for consistent progress', Icons.fitness_center, PushinTheme.primaryBlue),
-  tuff('Tuff', 'Challenging workout with bigger rewards', Icons.flash_on, PushinTheme.warningYellow);
+  cozy('Cozy', 'Gentle introduction to habit building', Icons.spa,
+      PushinTheme.successGreen),
+  normal('Normal', 'Pro workout for consistent progress', Icons.fitness_center,
+      PushinTheme.primaryBlue),
+  tuff('Tuff', 'Challenging workout with bigger rewards', Icons.flash_on,
+      PushinTheme.warningYellow);
 
   const WorkoutMode(this.displayName, this.description, this.icon, this.color);
 
@@ -282,4 +302,3 @@ enum WorkoutMode {
   final IconData icon;
   final Color color;
 }
-

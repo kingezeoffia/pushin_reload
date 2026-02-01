@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'dart:io' show Platform;
+import 'dart:ui' as ui;
 import 'improved_water_intake_widget.dart';
+import '../../screens/paywall/PaywallScreen.dart';
 import '../../../services/HealthKitService.dart';
 import '../../../services/WorkoutHistoryService.dart';
 import '../../../services/platform/ScreenTimeMonitor.dart';
@@ -41,7 +43,8 @@ class StatsWidgetsGrid extends StatefulWidget {
   State<StatsWidgetsGrid> createState() => _StatsWidgetsGridState();
 }
 
-class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
+class _StatsWidgetsGridState extends State<StatsWidgetsGrid>
+    with SingleTickerProviderStateMixin {
   final HealthKitService _healthKit = HealthKitService();
   final WorkoutHistoryService _workoutHistoryService = WorkoutHistoryService();
   final ScreenTimeService _screenTimeService = ScreenTimeService();
@@ -58,11 +61,44 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
   bool _screenTimeLoading = true;
   bool _screenTimeIsMockData = false;
 
+  // Blur overlay animation
+  late AnimationController _blurOverlayAnimationController;
+  late Animation<double> _blurOverlaySlideAnimation;
+  late Animation<double> _blurOverlayFadeAnimation;
+
   @override
   void initState() {
     super.initState();
     _controller = context.read<PushinAppController>();
     _controller.addListener(_onWorkoutCompleted);
+
+    // Initialize blur overlay animation
+    _blurOverlayAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+
+    _blurOverlaySlideAnimation = Tween<double>(
+      begin: 30.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(
+      parent: _blurOverlayAnimationController,
+      curve: Curves.easeOutCubic,
+    ));
+
+    _blurOverlayFadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _blurOverlayAnimationController,
+      curve: Curves.easeOut,
+    ));
+
+    // Start the blur overlay animation after a shorter delay
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) _blurOverlayAnimationController.forward();
+    });
+
     _checkPermissionAndLoad();
     _loadWorkoutHistory();
     _loadScreenTimeData();
@@ -71,12 +107,21 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
   @override
   void dispose() {
     _controller.removeListener(_onWorkoutCompleted);
+    _blurOverlayAnimationController.dispose();
     super.dispose();
   }
 
   void _onWorkoutCompleted() {
     // Reload workout history when controller notifies of changes
     _loadWorkoutHistory();
+
+    // IMPORTANT: Rebuild widget when controller changes (e.g., plan tier upgrade)
+    // This ensures the blur overlay is removed when user upgrades to ADVANCED
+    if (mounted) {
+      setState(() {
+        // Trigger rebuild to reflect new plan tier
+      });
+    }
   }
 
   Future<void> _checkPermissionAndLoad() async {
@@ -240,7 +285,11 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
       final cardSpacing = isSmallScreen ? 10.0 : 12.0;
       final verticalSpacing = isSmallScreen ? 10.0 : 12.0;
 
-      return Column(
+      // Check if user has Advanced plan
+      final isAdvanced = _controller.planTier == 'advanced';
+
+      // Build the widgets column
+      final widgetsColumn = Column(
         children: [
           // Row 1: Most Used Apps + Screen Time
           Row(
@@ -264,14 +313,21 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
                               ..sort((a, b) =>
                                   b.usageHours.compareTo(a.usageHours)))
                             .map((app) {
+                          // Replace Netflix with Figma and Twitter with Pinterest in the display
+                          final lowerAppName = app.name.toLowerCase();
+                          final displayName = lowerAppName.contains('netflix')
+                              ? 'Figma'
+                              : lowerAppName.contains('twitter') ||
+                                      lowerAppName.contains('x')
+                                  ? 'Pinterest'
+                                  : app.name;
                           return AppUsageData(
-                            name: app.name,
+                            name: displayName,
                             usageTime:
                                 double.parse(app.usageHours.toStringAsFixed(1)),
                             icon: Icons.apps, // Placeholder - not used anymore
                           );
                         }).toList(),
-                        delay: 0,
                         compact: isSmallScreen,
                       ),
               ),
@@ -292,7 +348,6 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
                     : ScreentimeWidget(
                         hoursUsed: _totalScreenTimeMinutes / 60.0,
                         dailyLimit: 8.0,
-                        delay: 100,
                         compact: isSmallScreen,
                       ),
               ),
@@ -301,8 +356,10 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
 
           SizedBox(height: verticalSpacing),
 
-          // Row 2: Steps Bar (Full Width) - Now using real Apple Health data
-          _isLoading
+          // Row 2: Steps Bar (Full Width)
+          // For non-Advanced users: show mock data (7k steps, no Apple Health overlay)
+          // For Advanced users: show real data with Apple Health connection if needed
+          _isLoading && isAdvanced
               ? Container(
                   height: isSmallScreen ? 145 : 165,
                   padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
@@ -314,10 +371,13 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
                   ),
                 )
               : StepsBarWidget(
-                  steps: _healthStats.steps,
-                  delay: 200,
+                  steps: isAdvanced
+                      ? _healthStats.steps
+                      : 7234, // Mock 7k steps for preview
                   compact: isSmallScreen,
-                  hasPermission: _hasPermission,
+                  hasPermission: isAdvanced
+                      ? _hasPermission
+                      : true, // Hide Apple Health overlay for preview
                   onRequestPermission: _requestPermission,
                 ),
 
@@ -327,11 +387,14 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Water Intake - Advanced only feature
+              // For non-Advanced users: show 1L preview
+              // For Advanced users: show actual data (TODO: implement real tracking)
               Flexible(
                 flex: 9,
                 fit: FlexFit.tight,
                 child: ImprovedWaterIntakeWidget(
-                  current: 2.08,
+                  current: isAdvanced ? 1.1 : 1.0, // 1L for preview
                   target: 2.5,
                   delay: 400,
                   compact: isSmallScreen,
@@ -341,7 +404,7 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
               Flexible(
                 flex: 11,
                 fit: FlexFit.tight,
-                child: _workoutsLoading
+                child: _workoutsLoading && isAdvanced
                     ? Container(
                         height: isSmallScreen ? 165 : 185,
                         padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
@@ -353,22 +416,38 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
                         ),
                       )
                     : WorkoutsWidget(
-                        workouts: _recentWorkouts.isEmpty
-                            ? [
+                        workouts: isAdvanced
+                            ? (_recentWorkouts.isEmpty
+                                ? [
+                                    WorkoutData(
+                                        type: 'No workouts yet',
+                                        duration: 0,
+                                        iconAsset:
+                                            'assets/icons/pushup_icon.png'),
+                                  ]
+                                : _recentWorkouts
+                                    .map((workout) => WorkoutData(
+                                          type: workout.displayName,
+                                          duration:
+                                              (workout.earnedTimeSeconds / 60)
+                                                  .round(),
+                                          iconAsset: workout.iconAsset,
+                                        ))
+                                    .toList())
+                            : [
+                                // Mock workouts for preview
                                 WorkoutData(
-                                    type: 'No workouts yet',
-                                    duration: 0,
-                                    iconAsset: 'assets/icons/pushup_icon.png'),
-                              ]
-                            : _recentWorkouts
-                                .map((workout) => WorkoutData(
-                                      type: workout.displayName,
-                                      duration: (workout.earnedTimeSeconds / 60)
-                                          .round(),
-                                      iconAsset: workout.iconAsset,
-                                    ))
-                                .toList(),
-                        delay: 300,
+                                  type: 'Jumping Jacks',
+                                  duration: 5,
+                                  iconAsset:
+                                      'assets/icons/jumping_jacks_icon.png',
+                                ),
+                                WorkoutData(
+                                  type: 'Squats',
+                                  duration: 3,
+                                  iconAsset: 'assets/icons/squats_icon.png',
+                                ),
+                              ],
                         compact: isSmallScreen,
                         showIcons: true, // Show workout icons
                       ),
@@ -376,6 +455,121 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid> {
             ],
           ),
         ],
+      );
+
+      // For Advanced users, show widgets normally
+      // For non-Advanced users, show blurred widgets with tap to upgrade
+      if (isAdvanced) {
+        return widgetsColumn;
+      }
+
+      // Blurred overlay for non-Advanced users
+      return GestureDetector(
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) =>
+                  const PaywallScreen(preSelectedPlan: 'advanced'),
+            ),
+          );
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color.fromARGB(212, 255, 217, 0),
+              width: 4,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Stack(
+              children: [
+                // Actual widgets (visible but blurred)
+                widgetsColumn,
+
+                // Blur overlay - always applied consistently
+                Positioned.fill(
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 6.0, sigmaY: 6.0),
+                    child: Container(
+                      color: Colors.black.withOpacity(0.1),
+                    ),
+                  ),
+                ),
+
+                // Lock overlay content with animation
+                Positioned.fill(
+                  child: AnimatedBuilder(
+                    animation: _blurOverlayAnimationController,
+                    builder: (context, child) {
+                      return Transform.translate(
+                        offset: Offset(0, _blurOverlaySlideAnimation.value),
+                        child: Opacity(
+                          opacity: _blurOverlayFadeAnimation.value,
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Star icon with circle container - same as coming soon widget
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: ShaderMask(
+                              shaderCallback: (bounds) => const LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Color(0xFFFFD700), // Gold
+                                  Color(0xFFFFA500), // Orange
+                                ],
+                              ).createShader(bounds),
+                              child: const Icon(
+                                Icons.star_rounded,
+                                color: Colors.white,
+                                size:
+                                    96, // Adjusted size to account for padding
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          // "ADVANCED" text with same gradient effect as star icon
+                          ShaderMask(
+                            shaderCallback: (bounds) => const LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Color(0xFFFFD700), // Gold
+                                Color(0xFFFFA500), // Orange
+                              ],
+                            ).createShader(bounds),
+                            child: const Text(
+                              'ADVANCED',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 2,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     } catch (e, stackTrace) {
       return Container(
@@ -403,13 +597,11 @@ class AppUsageData {
 
 class MostUsedAppsWidget extends StatefulWidget {
   final List<AppUsageData> apps;
-  final int delay;
   final bool compact;
 
   const MostUsedAppsWidget({
     super.key,
     required this.apps,
-    this.delay = 0,
     this.compact = false,
   });
 
@@ -429,6 +621,7 @@ class _MostUsedAppsWidgetState extends State<MostUsedAppsWidget>
   @override
   void initState() {
     super.initState();
+
     _controller = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
@@ -446,9 +639,7 @@ class _MostUsedAppsWidgetState extends State<MostUsedAppsWidget>
           curve: const Interval(0.2, 1.0, curve: Curves.fastOutSlowIn)),
     );
 
-    Future.delayed(Duration(milliseconds: widget.delay), () {
-      if (mounted) _controller.forward();
-    });
+    _controller.forward();
   }
 
   @override
@@ -498,45 +689,31 @@ class _MostUsedAppsWidgetState extends State<MostUsedAppsWidget>
 
   String? _getAppIconAssetPath(String appName) {
     final lowerName = appName.toLowerCase();
-    print('DEBUG: _getAppIconAssetPath called for: "$appName" -> "$lowerName"');
     if (lowerName.contains('instagram')) {
-      print('DEBUG: Returning instagram.png');
       return 'assets/app_icons/instagram.png';
     }
     if (lowerName.contains('youtube')) {
-      print('DEBUG: Returning youtube.png');
       return 'assets/app_icons/youtube.png';
     }
     if (lowerName.contains('tiktok')) {
-      print('DEBUG: Returning tiktok.png');
       return 'assets/app_icons/tiktok.png';
     }
     if (lowerName.contains('twitter') || lowerName.contains('x')) {
-      print('DEBUG: Returning twitter.png');
       return 'assets/app_icons/twitter.png';
     }
     if (lowerName.contains('facebook')) {
-      print('DEBUG: Returning facebook.png');
       return 'assets/app_icons/facebook.png';
     }
     if (lowerName.contains('snapchat')) {
-      print('DEBUG: Returning snapchat.png');
       return 'assets/app_icons/snapchat.png';
     }
     if (lowerName.contains('whatsapp') || lowerName.contains('message')) {
-      print('DEBUG: Returning whatsapp.png');
       return 'assets/app_icons/whatsapp.png';
     }
     if (lowerName.contains('reddit')) {
-      print('DEBUG: Returning reddit.png');
       return 'assets/app_icons/reddit.png';
     }
-    if (lowerName.contains('netflix')) {
-      print('DEBUG: Returning netflix.png');
-      return 'assets/app_icons/netflix.png';
-    }
     if (lowerName.contains('spotify')) {
-      print('DEBUG: Returning spotify.png');
       return 'assets/app_icons/spotify.png';
     }
     if (lowerName.contains('chrome')) return 'assets/app_icons/chrome.png';
@@ -559,48 +736,34 @@ class _MostUsedAppsWidgetState extends State<MostUsedAppsWidget>
     if (lowerName.contains('figma')) return 'assets/app_icons/figma.png';
     if (lowerName.contains('bluesky')) return 'assets/app_icons/bluesky.png';
     if (lowerName.contains('game')) return 'assets/app_icons/game.png';
-    print('DEBUG: No match found for "$lowerName", returning null');
     return null;
   }
 
   IconData _getIconForApp(String appName) {
     final lowerName = appName.toLowerCase();
-    print('DEBUG: _getIconForApp called for: "$appName" -> "$lowerName"');
     if (lowerName.contains('instagram')) {
-      print('DEBUG: Returning camera_alt for instagram');
       return Icons.camera_alt;
     }
     if (lowerName.contains('youtube')) {
-      print('DEBUG: Returning play_circle_filled for youtube');
       return Icons.play_circle_filled;
     }
     if (lowerName.contains('tiktok')) {
-      print('DEBUG: Returning music_note for tiktok');
       return Icons.music_note;
     }
     if (lowerName.contains('twitter') || lowerName.contains('x')) {
-      print('DEBUG: Returning tag for twitter/x');
       return Icons.tag;
     }
     if (lowerName.contains('facebook')) {
-      print('DEBUG: Returning facebook for facebook');
       return Icons.facebook;
     }
     if (lowerName.contains('snapchat')) {
-      print('DEBUG: Returning camera for snapchat');
       return Icons.camera;
     }
     if (lowerName.contains('whatsapp') || lowerName.contains('message')) {
-      print('DEBUG: Returning message for whatsapp/message');
       return Icons.message;
     }
     if (lowerName.contains('reddit')) {
-      print('DEBUG: Returning forum for reddit');
       return Icons.forum;
-    }
-    if (lowerName.contains('netflix')) {
-      print('DEBUG: Returning tv for netflix');
-      return Icons.tv;
     }
     if (lowerName.contains('spotify')) return Icons.music_note;
     if (lowerName.contains('game')) return Icons.videogame_asset;
@@ -825,14 +988,12 @@ class _MostUsedAppsWidgetState extends State<MostUsedAppsWidget>
 class ScreentimeWidget extends StatefulWidget {
   final double hoursUsed;
   final double dailyLimit;
-  final int delay;
   final bool compact;
 
   const ScreentimeWidget({
     super.key,
     required this.hoursUsed,
     required this.dailyLimit,
-    this.delay = 0,
     this.compact = false,
   });
 
@@ -857,9 +1018,7 @@ class _ScreentimeWidgetState extends State<ScreentimeWidget>
       CurvedAnimation(parent: _controller, curve: Curves.easeOut),
     );
 
-    Future.delayed(Duration(milliseconds: widget.delay), () {
-      if (mounted) _controller.forward();
-    });
+    _controller.forward();
   }
 
   @override
@@ -888,7 +1047,7 @@ class _ScreentimeWidgetState extends State<ScreentimeWidget>
               '${hours}h',
               style: TextStyle(
                 color: Colors.white,
-                fontSize: widget.compact ? 36 : 44,
+                fontSize: widget.compact ? 36 : 40,
                 fontWeight: FontWeight.w700,
                 height: 1.0,
                 letterSpacing: -2,
@@ -929,7 +1088,6 @@ class _ScreentimeWidgetState extends State<ScreentimeWidget>
 
 class StepsBarWidget extends StatefulWidget {
   final int steps;
-  final int delay;
   final bool compact;
   final bool hasPermission;
   final VoidCallback onRequestPermission;
@@ -937,7 +1095,6 @@ class StepsBarWidget extends StatefulWidget {
   const StepsBarWidget({
     super.key,
     required this.steps,
-    this.delay = 0,
     this.compact = false,
     required this.hasPermission,
     required this.onRequestPermission,
@@ -958,6 +1115,7 @@ class _StepsBarWidgetState extends State<StepsBarWidget>
   @override
   void initState() {
     super.initState();
+
     _controller = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
@@ -972,9 +1130,7 @@ class _StepsBarWidgetState extends State<StepsBarWidget>
       CurvedAnimation(parent: _controller, curve: Curves.easeOut),
     );
 
-    Future.delayed(Duration(milliseconds: widget.delay), () {
-      if (mounted) _controller.forward();
-    });
+    _controller.forward();
   }
 
   @override
@@ -1215,14 +1371,12 @@ class _StepsBarWidgetState extends State<StepsBarWidget>
 
 class WorkoutsWidget extends StatefulWidget {
   final List<WorkoutData> workouts;
-  final int delay;
   final bool compact;
   final bool showIcons;
 
   const WorkoutsWidget({
     super.key,
     required this.workouts,
-    this.delay = 0,
     this.compact = false,
     this.showIcons = true,
   });
@@ -1242,6 +1396,7 @@ class _WorkoutsWidgetState extends State<WorkoutsWidget>
   @override
   void initState() {
     super.initState();
+
     _controller = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
@@ -1256,9 +1411,7 @@ class _WorkoutsWidgetState extends State<WorkoutsWidget>
       CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
     );
 
-    Future.delayed(Duration(milliseconds: widget.delay), () {
-      if (mounted) _controller.forward();
-    });
+    _controller.forward();
   }
 
   @override
@@ -1303,7 +1456,7 @@ class _WorkoutsWidgetState extends State<WorkoutsWidget>
                   ),
                   const SizedBox(width: 10),
                   const Text(
-                    'Recent Workouts',
+                    'Workouts',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 15,

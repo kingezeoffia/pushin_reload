@@ -18,18 +18,29 @@ class AuthenticationService {
   final TokenManager _tokenManager = TokenManager();
   late final http.Client _httpClient;
 
-  AuthenticationService._internal({
-    this.baseUrl = 'http://192.168.1.89:3000/api', // Local development server
-  }) {
+  AuthenticationService._internal() {
+    // For physical devices, use Mac's local IP address
+    // For simulators/emulators: iOS uses 127.0.0.1, Android uses 10.0.2.2
+    if (Platform.isIOS) {
+      baseUrl =
+          'http://192.168.1.107:3000/api'; // Mac's local IP for physical iPhone
+    } else if (Platform.isAndroid) {
+      baseUrl = 'http://10.0.2.2:3000/api';
+    } else {
+      baseUrl = 'http://localhost:3000/api';
+    }
     _httpClient = _createHttpClient();
   }
 
-  /// Create HTTP client that handles SSL certificate issues for Railway
+  /// Create HTTP client for local development
   http.Client _createHttpClient() {
     final ioClient = HttpClient()
       ..badCertificateCallback = (X509Certificate cert, String host, int port) {
-        // Trust Railway certificates specifically
-        return host.contains('railway.app') || host.contains('up.railway.app');
+        // Allow local development connections
+        return host == 'localhost' ||
+            host == '127.0.0.1' ||
+            host == '10.0.2.2' ||
+            host.startsWith('192.168.');
       };
 
     return IOClient(ioClient);
@@ -444,6 +455,82 @@ class AuthenticationService {
     final accessToken = await _tokenManager.getAccessToken();
     return accessToken != null;
   }
+
+  /// Initiate password reset
+  Future<AuthResult> forgotPassword({required String email}) async {
+    final requestUrl = '$baseUrl/auth/forgot-password';
+    final requestBody = jsonEncode({'email': email});
+
+    print('🔑 FORGOT PASSWORD REQUEST:');
+    print('  URL: $requestUrl');
+    print('  Body: $requestBody');
+
+    try {
+      final response = await _httpClient.post(
+        Uri.parse(requestUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: requestBody,
+      );
+
+      print('📡 FORGOT PASSWORD RESPONSE:');
+      print('  Status Code: ${response.statusCode}');
+      print('  Response Body: ${response.body}');
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return AuthResult
+            .successWithoutData(); // No AuthData for forgot password
+      } else {
+        final errorMessage = data['error'] ?? 'Failed to send reset email';
+        print('❌ FORGOT PASSWORD FAILED: $errorMessage');
+        return AuthResult.failure(errorMessage);
+      }
+    } catch (e) {
+      print('💥 FORGOT PASSWORD NETWORK ERROR: $e');
+      return AuthResult.failure('Network error: ${e.toString()}');
+    }
+  }
+
+  /// Reset password with token
+  Future<AuthResult> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async {
+    final requestUrl = '$baseUrl/auth/reset-password';
+    final requestBody = jsonEncode({
+      'token': token,
+      'newPassword': newPassword,
+    });
+
+    print('🔄 RESET PASSWORD REQUEST:');
+    print('  URL: $requestUrl');
+
+    try {
+      final response = await _httpClient.post(
+        Uri.parse(requestUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: requestBody,
+      );
+
+      print('📡 RESET PASSWORD RESPONSE:');
+      print('  Status Code: ${response.statusCode}');
+      print('  Response Body: ${response.body}');
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return AuthResult.successWithoutData(); // No AuthData for reset
+      } else {
+        final errorMessage = data['error'] ?? 'Failed to reset password';
+        print('❌ RESET PASSWORD FAILED: $errorMessage');
+        return AuthResult.failure(errorMessage);
+      }
+    } catch (e) {
+      print('💥 RESET PASSWORD NETWORK ERROR: $e');
+      return AuthResult.failure('Network error: ${e.toString()}');
+    }
+  }
 }
 
 /// Authentication result wrapper
@@ -456,6 +543,10 @@ class AuthResult {
 
   factory AuthResult.success(AuthData data) {
     return AuthResult._(success: true, data: data);
+  }
+
+  factory AuthResult.successWithoutData() {
+    return AuthResult._(success: true);
   }
 
   factory AuthResult.failure(String error) {

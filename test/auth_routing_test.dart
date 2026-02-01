@@ -36,6 +36,7 @@ void main() {
         unlockService: MockUnlockService(),
         blockingService: MockAppBlockingService(),
         blockTargets: const [],
+        authProvider: authProvider,
         usageTracker: usageTracker,
       );
     });

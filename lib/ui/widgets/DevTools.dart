@@ -51,7 +51,8 @@ class DevTools extends StatelessWidget {
                 print('🔄 DEV RESET initiated');
 
                 // Complete reset to ensure we always go to WelcomeScreen
-                final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
+                final authProvider =
+                    Provider.of<AuthStateProvider>(context, listen: false);
 
                 // 1. Clear all tokens and guest mode completely
                 await authProvider.logout(); // This clears user and tokens
@@ -66,7 +67,8 @@ class DevTools extends StatelessWidget {
                 // 4. Force AuthStateProvider to reinitialize to ensure clean state
                 await authProvider.initialize();
 
-                print('✅ DEV RESET complete - AppRouter should show WelcomeScreen');
+                print(
+                    '✅ DEV RESET complete - AppRouter should show WelcomeScreen');
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

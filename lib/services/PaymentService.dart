@@ -7,10 +7,13 @@ import 'MockPaymentService.dart';
 /// - Real Stripe (production)
 /// - Stripe Test Mode (development)
 /// - Mock Service (UI development)
+///
+/// Note: All payment methods require authenticated user (userId required)
 abstract class PaymentService {
   Future<bool> launchCheckout({
     required String userId,
     required String planId,
+    required String billingPeriod, // 'monthly' or 'yearly'
     required String userEmail,
   });
 
@@ -29,6 +32,13 @@ abstract class PaymentService {
     required String userId,
     required String subscriptionId,
   });
+
+  /// Restore subscription by email verification
+  ///
+  /// Returns RestorePurchaseResult with subscription if active subscription found
+  Future<RestorePurchaseResult> restoreSubscriptionByEmail({
+    required String email,
+  });
 }
 
 /// Payment Service Factory
@@ -44,13 +54,13 @@ class PaymentServiceFactory {
         return StripeCheckoutService(
           baseUrl: backendUrl ?? 'https://api.pushinapp.com/api',
           isTestMode: false,
-        );
+        ) as PaymentService;
 
       case PaymentMode.stripeTest:
         return StripeCheckoutService(
           baseUrl: backendUrl ?? 'https://your-test-backend.up.railway.app/api',
           isTestMode: true,
-        );
+        ) as PaymentService;
 
       case PaymentMode.mock:
         return MockPaymentServiceAdapter();
@@ -60,9 +70,9 @@ class PaymentServiceFactory {
 
 /// Payment Configuration Modes
 enum PaymentMode {
-  stripeLive,    // Production Stripe
-  stripeTest,    // Stripe Test Mode
-  mock,         // Mock service for development
+  stripeLive, // Production Stripe
+  stripeTest, // Stripe Test Mode
+  mock, // Mock service for development
 }
 
 /// Adapter to make MockPaymentService compatible with PaymentService interface
@@ -73,6 +83,7 @@ class MockPaymentServiceAdapter implements PaymentService {
   Future<bool> launchCheckout({
     required String userId,
     required String planId,
+    required String billingPeriod,
     required String userEmail,
   }) {
     return _mockService.launchMockCheckout(
@@ -117,13 +128,21 @@ class MockPaymentServiceAdapter implements PaymentService {
       subscriptionId: subscriptionId,
     );
   }
+
+  @override
+  Future<RestorePurchaseResult> restoreSubscriptionByEmail({
+    required String email,
+  }) {
+    return _mockService.restoreMockSubscriptionByEmail(email: email);
+  }
 }
 
 /// Configuration Helper
 class PaymentConfig {
   static PaymentMode get currentMode {
     // You can read this from environment variables, shared preferences, etc.
-    const modeString = String.fromEnvironment('PAYMENT_MODE', defaultValue: 'mock');
+    const modeString =
+        String.fromEnvironment('PAYMENT_MODE', defaultValue: 'mock');
     switch (modeString) {
       case 'stripe_live':
         return PaymentMode.stripeLive;
@@ -170,36 +189,42 @@ flutter run --dart-define=PAYMENT_MODE=stripe_test --dart-define=BACKEND_URL=htt
 
 */
 
+/// Result of restore purchase attempt
+class RestorePurchaseResult {
+  final bool success;
+  final SubscriptionStatus? subscription;
+  final String?
+      errorCode; // 'invalid_email', 'no_active_subscription', 'rate_limit_exceeded', etc.
+  final String? errorMessage;
+  final List<ExpiredSubscription>? expiredSubscriptions;
 
+  RestorePurchaseResult({
+    required this.success,
+    this.subscription,
+    this.errorCode,
+    this.errorMessage,
+    this.expiredSubscriptions,
+  });
 
+  bool get hasActiveSubscription => success && subscription != null;
+  bool get hasExpiredSubscriptions =>
+      expiredSubscriptions != null && expiredSubscriptions!.isNotEmpty;
+}
 
+/// Expired subscription information
+class ExpiredSubscription {
+  final String planId;
+  final DateTime expiredOn;
 
+  ExpiredSubscription({
+    required this.planId,
+    required this.expiredOn,
+  });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  factory ExpiredSubscription.fromJson(Map<String, dynamic> json) {
+    return ExpiredSubscription(
+      planId: json['planId'] as String,
+      expiredOn: DateTime.parse(json['expiredOn'] as String),
+    );
+  }
+}

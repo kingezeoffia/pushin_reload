@@ -39,6 +39,7 @@ void main() {
         unlockService: MockUnlockService(),
         blockingService: MockAppBlockingService(),
         blockTargets: const [],
+        authProvider: authProvider,
       );
 
       debugPrint('✅ Test providers created');
@@ -57,8 +58,10 @@ void main() {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
-            ChangeNotifierProvider<AuthStateProvider>.value(value: authProvider),
-            ChangeNotifierProvider<PushinAppController>.value(value: pushinController),
+            ChangeNotifierProvider<AuthStateProvider>.value(
+                value: authProvider),
+            ChangeNotifierProvider<PushinAppController>.value(
+                value: pushinController),
           ],
           child: const MaterialApp(
             home: AppRouter(),
@@ -73,7 +76,8 @@ void main() {
       debugPrint('✅ AppRouter pumped and settled');
     }
 
-    testWidgets('Sign Up Flow: WelcomeScreen → SignUpScreen → register() → justRegistered=true → NewUserWelcomeScreen → clearJustRegisteredFlag() → OnboardingFitnessLevelScreen → HomeScreen',
+    testWidgets(
+        'Sign Up Flow: WelcomeScreen → SignUpScreen → register() → justRegistered=true → NewUserWelcomeScreen → clearJustRegisteredFlag() → OnboardingFitnessLevelScreen → HomeScreen',
         (WidgetTester tester) async {
       debugPrint('🧪 STARTING: Sign Up Flow Test');
 
@@ -103,30 +107,41 @@ void main() {
         name: 'Sign Up User',
       );
       expect(success, true, reason: 'Registration should succeed');
-      expect(authProvider.isAuthenticated, true, reason: 'User should be authenticated');
-      expect(authProvider.justRegistered, true, reason: 'Just registered flag should be true');
-      expect(authProvider.showSignUpScreen, false, reason: 'SignUp screen should be cleared');
+      expect(authProvider.isAuthenticated, true,
+          reason: 'User should be authenticated');
+      expect(authProvider.justRegistered, true,
+          reason: 'Just registered flag should be true');
+      expect(authProvider.showSignUpScreen, false,
+          reason: 'SignUp screen should be cleared');
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('new_user_welcome_screen')), findsOneWidget,
+      expect(
+          find.byKey(const ValueKey('new_user_welcome_screen')), findsOneWidget,
           reason: 'Should show NewUserWelcomeScreen for just registered users');
       _printRouterState(authProvider);
-      debugPrint('✅ Step 3: Registration successful, NewUserWelcomeScreen displayed');
+      debugPrint(
+          '✅ Step 3: Registration successful, NewUserWelcomeScreen displayed');
 
       // Step 4: Continue from welcome screen (clears justRegistered flag)
       final continueButton = find.text('Continue');
-      expect(continueButton, findsOneWidget, reason: 'Continue button should be visible');
+      expect(continueButton, findsOneWidget,
+          reason: 'Continue button should be visible');
       await tester.tap(continueButton);
       await tester.pumpAndSettle();
 
-      expect(authProvider.justRegistered, false, reason: 'Just registered flag should be cleared');
-      expect(find.byKey(const ValueKey('onboarding_fitness_screen')), findsOneWidget,
-          reason: 'Should show OnboardingFitnessLevelScreen after clearing justRegistered flag');
+      expect(authProvider.justRegistered, false,
+          reason: 'Just registered flag should be cleared');
+      expect(find.byKey(const ValueKey('onboarding_fitness_screen')),
+          findsOneWidget,
+          reason:
+              'Should show OnboardingFitnessLevelScreen after clearing justRegistered flag');
       _printRouterState(authProvider);
-      debugPrint('✅ Step 4: Just registered flag cleared, OnboardingFitnessLevelScreen displayed');
+      debugPrint(
+          '✅ Step 4: Just registered flag cleared, OnboardingFitnessLevelScreen displayed');
 
       // Step 5: Complete onboarding
-      await _authProviderCall(tester, () => authProvider.completeOnboardingFlowForTest());
+      await _authProviderCall(
+          tester, () => authProvider.completeOnboardingFlowForTest());
 
       expect(find.byKey(const ValueKey('home_screen')), findsOneWidget,
           reason: 'Should show HomeScreen after completing onboarding');
@@ -136,7 +151,8 @@ void main() {
       debugPrint('🎉 Sign Up Flow Test PASSED ✅');
     });
 
-    testWidgets('Sign In Flow: WelcomeScreen → SignInScreen → login() → isAuthenticated=true → OnboardingFitnessLevelScreen → HomeScreen',
+    testWidgets(
+        'Sign In Flow: WelcomeScreen → SignInScreen → login() → isAuthenticated=true → OnboardingFitnessLevelScreen → HomeScreen',
         (WidgetTester tester) async {
       debugPrint('🧪 STARTING: Sign In Flow Test');
 
@@ -163,19 +179,27 @@ void main() {
         password: 'password123',
       );
       expect(loginSuccess, true, reason: 'Login should succeed');
-      expect(authProvider.isAuthenticated, true, reason: 'User should be authenticated');
-      expect(authProvider.justRegistered, false, reason: 'Should NOT be just registered');
-      expect(authProvider.isOnboardingCompleted, false, reason: 'Onboarding should be incomplete');
-      expect(authProvider.showSignInScreen, false, reason: 'SignIn screen should be cleared');
+      expect(authProvider.isAuthenticated, true,
+          reason: 'User should be authenticated');
+      expect(authProvider.justRegistered, false,
+          reason: 'Should NOT be just registered');
+      expect(authProvider.isOnboardingCompleted, false,
+          reason: 'Onboarding should be incomplete');
+      expect(authProvider.showSignInScreen, false,
+          reason: 'SignIn screen should be cleared');
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('onboarding_fitness_screen')), findsOneWidget,
-          reason: 'Should show OnboardingFitnessLevelScreen for authenticated user with incomplete onboarding');
+      expect(find.byKey(const ValueKey('onboarding_fitness_screen')),
+          findsOneWidget,
+          reason:
+              'Should show OnboardingFitnessLevelScreen for authenticated user with incomplete onboarding');
       _printRouterState(authProvider);
-      debugPrint('✅ Step 3: Login successful, OnboardingFitnessLevelScreen displayed');
+      debugPrint(
+          '✅ Step 3: Login successful, OnboardingFitnessLevelScreen displayed');
 
       // Step 4: Complete onboarding
-      await _authProviderCall(tester, () => authProvider.completeOnboardingFlowForTest());
+      await _authProviderCall(
+          tester, () => authProvider.completeOnboardingFlowForTest());
 
       expect(find.byKey(const ValueKey('home_screen')), findsOneWidget,
           reason: 'Should show HomeScreen after completing onboarding');
@@ -185,7 +209,8 @@ void main() {
       debugPrint('🎉 Sign In Flow Test PASSED ✅');
     });
 
-    testWidgets('Guest Flow: WelcomeScreen → "Continue as Guest" → enterGuestMode() → SkipBlockAppsScreen → SkipExerciseScreen → SkipPushUpTestScreen → SkipEmergencyUnlockScreen → setGuestCompletedSetup() → HomeScreen',
+    testWidgets(
+        'Guest Flow: WelcomeScreen → "Continue as Guest" → enterGuestMode() → SkipBlockAppsScreen → SkipExerciseScreen → SkipPushUpTestScreen → SkipEmergencyUnlockScreen → setGuestCompletedSetup() → HomeScreen',
         (WidgetTester tester) async {
       debugPrint('🧪 STARTING: Guest Flow Test');
 
@@ -198,12 +223,14 @@ void main() {
 
       // Step 2: Enter guest mode (state-driven navigation via button tap)
       final guestButton = find.byKey(const ValueKey('guest_start_button'));
-      expect(guestButton, findsOneWidget, reason: 'Continue as Guest button should be visible');
+      expect(guestButton, findsOneWidget,
+          reason: 'Continue as Guest button should be visible');
       await tester.tap(guestButton);
       await tester.pumpAndSettle();
 
       expect(authProvider.isGuestMode, true, reason: 'Should be in guest mode');
-      expect(authProvider.guestCompletedSetup, false, reason: 'Guest setup should not be completed');
+      expect(authProvider.guestCompletedSetup, false,
+          reason: 'Guest setup should not be completed');
       expect(find.byKey(const ValueKey('guest_apps_screen')), findsOneWidget,
           reason: 'Should show SkipBlockAppsScreen for guest setup');
       _printRouterState(authProvider);
@@ -212,31 +239,38 @@ void main() {
       // Step 3: Advance through all guest setup screens
       authProvider.advanceGuestSetupStep();
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('guest_exercise_screen')), findsOneWidget,
+      expect(
+          find.byKey(const ValueKey('guest_exercise_screen')), findsOneWidget,
           reason: 'Should show SkipExerciseScreen after advancing guest setup');
       debugPrint('✅ Step 3: Advanced to SkipExerciseScreen');
 
       authProvider.advanceGuestSetupStep();
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('guest_pushup_test_screen')), findsOneWidget,
-          reason: 'Should show SkipPushUpTestScreen after advancing guest setup');
+      expect(find.byKey(const ValueKey('guest_pushup_test_screen')),
+          findsOneWidget,
+          reason:
+              'Should show SkipPushUpTestScreen after advancing guest setup');
       debugPrint('✅ Step 4: Advanced to SkipPushUpTestScreen');
 
       authProvider.advanceGuestSetupStep();
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('guest_emergency_screen')), findsOneWidget,
-          reason: 'Should show SkipEmergencyUnlockScreen after advancing guest setup');
+      expect(
+          find.byKey(const ValueKey('guest_emergency_screen')), findsOneWidget,
+          reason:
+              'Should show SkipEmergencyUnlockScreen after advancing guest setup');
       debugPrint('✅ Step 6: Advanced to SkipEmergencyUnlockScreen');
 
       // Step 7: Complete guest setup
       authProvider.setGuestCompletedSetup();
       await tester.pumpAndSettle();
 
-      expect(authProvider.guestCompletedSetup, true, reason: 'Guest setup should be completed');
+      expect(authProvider.guestCompletedSetup, true,
+          reason: 'Guest setup should be completed');
       expect(find.byKey(const ValueKey('home_screen')), findsOneWidget,
           reason: 'Should show HomeScreen after completing guest setup');
       _printRouterState(authProvider);
-      debugPrint('✅ Step 7: Guest setup completed, HomeScreen displayed - Guest Flow Complete');
+      debugPrint(
+          '✅ Step 7: Guest setup completed, HomeScreen displayed - Guest Flow Complete');
 
       debugPrint('🎉 Guest Flow Test PASSED ✅');
     });
@@ -247,26 +281,39 @@ void main() {
       // Test initial state
       await pumpAppRouter(tester);
       expect(authProvider.isInitialized, true, reason: 'Should be initialized');
-      expect(authProvider.isAuthenticated, false, reason: 'Should not be authenticated initially');
-      expect(authProvider.justRegistered, false, reason: 'Should not be just registered initially');
-      expect(authProvider.isOnboardingCompleted, false, reason: 'Onboarding should not be completed initially');
-      expect(authProvider.isGuestMode, false, reason: 'Should not be in guest mode initially');
-      expect(authProvider.guestCompletedSetup, false, reason: 'Guest setup should not be completed initially');
-      expect(authProvider.showSignUpScreen, false, reason: 'Should not show sign up screen initially');
-      expect(authProvider.showSignInScreen, false, reason: 'Should not show sign in screen initially');
+      expect(authProvider.isAuthenticated, false,
+          reason: 'Should not be authenticated initially');
+      expect(authProvider.justRegistered, false,
+          reason: 'Should not be just registered initially');
+      expect(authProvider.isOnboardingCompleted, false,
+          reason: 'Onboarding should not be completed initially');
+      expect(authProvider.isGuestMode, false,
+          reason: 'Should not be in guest mode initially');
+      expect(authProvider.guestCompletedSetup, false,
+          reason: 'Guest setup should not be completed initially');
+      expect(authProvider.showSignUpScreen, false,
+          reason: 'Should not show sign up screen initially');
+      expect(authProvider.showSignInScreen, false,
+          reason: 'Should not show sign in screen initially');
       _printRouterState(authProvider);
       debugPrint('✅ Initial state flags verified');
 
       // Test sign up flow state changes
       authProvider.triggerSignUpFlow();
-      expect(authProvider.showSignUpScreen, true, reason: 'Should show sign up screen after trigger');
-      expect(authProvider.showSignInScreen, false, reason: 'Should clear sign in screen when showing sign up');
+      expect(authProvider.showSignUpScreen, true,
+          reason: 'Should show sign up screen after trigger');
+      expect(authProvider.showSignInScreen, false,
+          reason: 'Should clear sign in screen when showing sign up');
       debugPrint('✅ Sign up flow state changes verified');
 
-      await authProvider.register(email: 'test@example.com', password: 'test', name: 'Test');
-      expect(authProvider.isAuthenticated, true, reason: 'Should be authenticated after registration');
-      expect(authProvider.justRegistered, true, reason: 'Should be just registered after registration');
-      expect(authProvider.showSignUpScreen, false, reason: 'Should clear sign up screen after registration');
+      await authProvider.register(
+          email: 'test@example.com', password: 'test', name: 'Test');
+      expect(authProvider.isAuthenticated, true,
+          reason: 'Should be authenticated after registration');
+      expect(authProvider.justRegistered, true,
+          reason: 'Should be just registered after registration');
+      expect(authProvider.showSignUpScreen, false,
+          reason: 'Should clear sign up screen after registration');
       debugPrint('✅ Registration state changes verified');
 
       debugPrint('🎉 State Flags Verification Test PASSED ✅');
@@ -278,19 +325,23 @@ void main() {
       await pumpAppRouter(tester);
 
       // Verify no Navigator usage in auth flows
-      expect(find.byKey(const ValueKey('welcome_screen')), findsOneWidget, reason: 'Should use WelcomeScreen');
+      expect(find.byKey(const ValueKey('welcome_screen')), findsOneWidget,
+          reason: 'Should use WelcomeScreen');
 
       // Test state-driven navigation to SignUpScreen
       authProvider.triggerSignUpFlow();
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('signup_screen')), findsOneWidget, reason: 'Should navigate to SignUpScreen via state');
+      expect(find.byKey(const ValueKey('signup_screen')), findsOneWidget,
+          reason: 'Should navigate to SignUpScreen via state');
 
       // Test state-driven navigation to SignInScreen
       authProvider.triggerSignInFlow();
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('signin_screen')), findsOneWidget, reason: 'Should navigate to SignInScreen via state');
+      expect(find.byKey(const ValueKey('signin_screen')), findsOneWidget,
+          reason: 'Should navigate to SignInScreen via state');
 
-      debugPrint('✅ BMAD v6 state-driven navigation verified (no Navigator.push/pop used)');
+      debugPrint(
+          '✅ BMAD v6 state-driven navigation verified (no Navigator.push/pop used)');
       debugPrint('🎉 BMAD v6 Compliance Verification Test PASSED ✅');
     });
   });
@@ -298,7 +349,8 @@ void main() {
 
 /// Test helper that enforces pumpAndSettle() after every state change
 /// ✅ Prevents flaky tests by ensuring UI rebuilds after notifyListeners()
-Future<void> _authProviderCall(WidgetTester tester, void Function() action) async {
+Future<void> _authProviderCall(
+    WidgetTester tester, void Function() action) async {
   action();
   await tester.pumpAndSettle();
 }

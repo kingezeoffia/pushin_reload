@@ -1,0 +1,182 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter build ios --no-codesign
+
+## exception
+
+ProcessException: ProcessException: Process exited abnormally with exit code -6:
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -list
+
+
+2026-02-01 04:08:01.437 xcodebuild[23438:56415993] [MT] DVTAssertions: ASSERTION FAILURE in DevToolsCore/LegacyProjects/Frameworks/DevToolsCore/DevToolsCore/RuntimeSupport/MacroExpansion/XCMacroExpansionExtensions.mm:90
+Details:  Assertion failed: [value isKindOfClass:[NSString class]] || [value isKindOfClass:[NSArray class]]
+Object:   <DVTMacroDefinitionTable: 0x9ac8a68e0>
+Method:   -_xc_setValue:forMacroName:conditionSet:errorHandler:
+Thread:   <_NSMainThread: 0x101465850>{number = 1, name = main}
+Hints: 
+
+Backtrace:
+  0   -[DVTAssertionHandler handleFailureInMethod:object:fileName:lineNumber:assertionSignature:messageFormat:arguments:] (in DVTFoundation)
+  1   _DVTAssertionHandler (in DVTFoundation)
+  2   _DVTAssertionFailureHandler (in DVTFoundation)
+  3   _DVTAssertionWarningHandler (in DVTFoundation)
+  4   -[DVTMacroDefinitionTable(XCMacroExpansionExtensions) _xc_setValue:forMacroName:conditionSet:errorHandler:] (in DevToolsCore)
+  5   -[DVTMacroDefinitionTable(XCMacroExpansionExtensions) _xc_setValue:forMacroName:errorHandler:] (in DevToolsCore)
+  6   __NSDICTIONARY_IS_CALLING_OUT_TO_A_BLOCK__ (in CoreFoundation)
+  7   -[__NSDictionaryM enumerateKeysAndObjectsWithOptions:usingBlock:] (in CoreFoundation)
+  8   -[DVTMacroDefinitionTable(XCMacroExpansionExtensions) xc_setMacroNamesAndValuesFromDictionary:errorHandler:] (in DevToolsCore)
+  9   +[DVTMacroDefinitionTable(XCProjectArchivingExtensions) xc_macroDefinitionTableFromDictionaryRepresentationForProjectArchiving:usingPropertyDefinitionsFromSpecificationDomain:] (in DevToolsCore)
+ 10   -[PBXBuildStyle _setBuildSettings:] (in DevToolsCore)
+ 11   -[PBXUnarchivingBinding readValueForObject:fromPListUnarchiver:] (in DevToolsCore)
+ 12   -[PBXObject _unarchiveValuesForArchiveMask:fromPListUnarchiver:] (in DevToolsCore)
+ 13   -[PBXObject readFromPListUnarchiver:] (in DevToolsCore)
+ 14   -[PBXBuildStyle readFromPListUnarchiver:] (in DevToolsCore)
+ 15   -[XCBuildConfiguration readFromPListUnarchiver:] (in DevToolsCore)
+ 16   -[PBXPListUnarchiver _unarchiveObjectWithGlobalIDHexString:] (in DevToolsCore)
+ 17   -[PBXPListUnarchiver _decodeMutableObjectArrayFromPListArray:] (in DevToolsCore)
+ 18   -[PBXPListUnarchiver decodeMutableObjectArrayForKey:] (in DevToolsCore)
+ 19   -[PBXUnarchivingBinding readValueForObject:fromPListUnarchiver:] (in DevToolsCore)
+ 20   -[PBXObject _unarchiveValuesForArchiveMask:fromPListUnarchiver:] (in DevToolsCore)
+ 21   -[PBXObject readFromPListUnarchiver:] (in DevToolsCore)
+ 22   -[PBXPListUnarchiver _unarchiveObjectWithGlobalIDHexString:] (in DevToolsCore)
+ 23   -[PBXPListUnarchiver decodeObjectForKey:] (in DevToolsCore)
+ 24   -[PBXUnarchivingBinding readValueForObject:fromPListUnarchiver:] (in DevToolsCore)
+ 25   -[PBXObject _unarchiveValuesForArchiveMask:fromPListUnarchiver:] (in DevToolsCore)
+ 26   -[PBXObject readFromPListUnarchiver:] (in DevToolsCore)
+ 27   -[PBXTarget readFromPListUnarchiver:] (in DevToolsCore)
+ 28   -[PBXPListUnarchiver _unarchiveObjectWithGlobalIDHexString:] (in DevToolsCore)
+ 29   -[PBXPListUnarchiver decodeObjectForKey:] (in DevToolsCore)
+ 30   -[PBXUnarchivingBinding readValueForObject:fromPListUnarchiver:] (in DevToolsCore)
+ 31   -[PBXObject _unarchiveValuesForArchiveMask:fromPListUnarchiver:] (in DevToolsCore)
+ 32   -[PBXObject readFromPListUnarchiver:] (in DevToolsCore)
+ 33   -[PBXPListUnarchiver _unarchiveObjectWithGlobalIDHexString:] (in DevToolsCore)
+ 34   -[PBXPListUnarchiver _decodeMutableObjectArrayFromPListArray:] (in DevToolsCore)
+ 35   -[PBXPListUnarchiver decodeMutableObjectArrayForKey:] (in DevToolsCore)
+ 36   -[PBXUnarchivingBinding readValueForObject:fromPListUnarchiver:] (in DevToolsCore)
+ 37   -[PBXObject _unarchiveValuesForArchiveMask:fromPListUnarchiver:] (in DevToolsCore)
+ 38   -[PBXObject readFromPListUnarchiver:] (in DevToolsCore)
+ 39   -[PBXTarget readFromPListUnarchiver:] (in DevToolsCore)
+ 40   -[PBXPListUnarchiver _unarchiveObjectWithGlobalIDHexString:] (in DevToolsCore)
+ 41   -[PBXPListUnarchiver _decodeMutableObjectArrayFromPListArray:] (in DevToolsCore)
+ 42   -[PBXPListUnarchiver decodeMutableObjectArrayForKey:] (in DevToolsCore)
+ 43   -[PBXUnarchivingBinding readValueForObject:fromPListUnarchiver:] (in DevToolsCore)
+ 44   -[PBXObject _unarchiveValuesForArchiveMask:fromPListUnarchiver:] (in DevToolsCore)
+ 45   -[PBXObject readFromPListUnarchiver:] (in DevToolsCore)
+ 46   -[PBXContainer readFromPListUnarchiver:] (in DevToolsCore)
+ 47   -[PBXProject readFromPListUnarchiver:] (in DevToolsCore)
+ 48   -[PBXPListUnarchiver _unarchiveObjectWithGlobalIDHexString:] (in DevToolsCore)
+ 49   -[PBXPListUnarchiver decodeRootObject] (in DevToolsCore)
+ 50   +[PBXProject projectWithFile:errorHandler:readOnly:] (in DevToolsCore)
+ 51   -[Xcode3Project initWithFilePath:extension:workspace:options:error:] (in DevToolsCore)
+ 52   __82+[IDEContainer _retainedContainerAtFilePath:fileDataType:workspace:options:error:]_block_invoke_2 (in IDEFoundation)
+ 53   _dispatch_client_callout (in libdispatch.dylib)
+ 54   _dispatch_lane_barrier_sync_invoke_and_complete (in libdispatch.dylib)
+ 55   DVTDispatchBarrierSync (in DVTFoundation)
+ 56   -[DVTDispatchLock performLockedBlock:] (in DVTFoundation)
+ 57   __82+[IDEContainer _retainedContainerAtFilePath:fileDataType:workspace:options:error:]_block_invoke (in IDEFoundation)
+ 58   __58-[DVTModelObjectGraph performBlockCoalescingModelChanges:]_block_invoke (in DVTFoundation)
+ 59   -[DVTModelGraphTransactionScope performTransaction:] (in DVTFoundation)
+ 60   -[DVTModelObjectGraph performBlockCoalescingModelChanges:] (in DVTFoundation)
+ 61   +[IDEContainer _retainedContainerAtFilePath:fileDataType:workspace:options:error:] (in IDEFoundation)
+ 62   -[IDEWorkspace _configureWrappedWorkspaceWithError:] (in IDEFoundation)
+ 63   __82+[IDEContainer _retainedContainerAtFilePath:fileDataType:workspace:options:error:]_block_invoke (in IDEFoundation)
+ 64   +[IDEContainer _retainedContainerAtFilePath:fileDataType:workspace:options:error:] (in IDEFoundation)
+ 65   +[IDEContainer retainedWrappedWorkspaceForContainerAtFilePath:fileDataType:error:] (in IDEFoundation)
+ 66   -[Xcode3CommandLineBuildTool _resolveInputOptionsWithTimingSection:] (in Xcode3Core)
+ 67   -[Xcode3CommandLineBuildTool run] (in Xcode3Core)
+ 68   XcodeBuildMain (in libxcodebuildLoader.dylib)
+ 69   -[XcodebuildPreIDEHandler loadXcode3ProjectSupportAndRunXcode3CommandLineBuildToolWithArguments:] (in xcodebuild)
+ 70   -[XcodebuildPreIDEHandler runWithArguments:] (in xcodebuild)
+ 71   main (in xcodebuild)
+ 72   start (in dyld)
+  Command: /usr/bin/arch -arm64e xcrun xcodebuild -list
+
+```
+#0      RunResult.throwException (package:flutter_tools/src/base/process.dart:153:5)
+#1      _DefaultProcessUtils.run (package:flutter_tools/src/base/process.dart:379:19)
+<asynchronous suspension>
+#2      XcodeProjectInterpreter.getInfo (package:flutter_tools/src/ios/xcodeproj.dart:328:30)
+<asynchronous suspension>
+#3      XcodeBasedProject.projectInfo (package:flutter_tools/src/xcode_project.dart:204:29)
+<asynchronous suspension>
+#4      XcodeBasedProject.buildSettingsForBuildInfo (package:flutter_tools/src/xcode_project.dart:240:36)
+<asynchronous suspension>
+#5      IosProject._parseProductName (package:flutter_tools/src/xcode_project.dart:670:55)
+<asynchronous suspension>
+#6      IosProject.productName (package:flutter_tools/src/xcode_project.dart:658:29)
+<asynchronous suspension>
+#7      BuildableIOSApp.fromProject (package:flutter_tools/src/ios/application_package.dart:118:33)
+<asynchronous suspension>
+#8      FlutterApplicationPackageFactory.getPackageForPlatform (package:flutter_tools/src/flutter_application_package.dart:79:15)
+<asynchronous suspension>
+#9      _BuildIOSSubCommand.buildableIOSApp.<anonymous closure> (package:flutter_tools/src/commands/build_ios.dart:710:9)
+<asynchronous suspension>
+#10     _BuildIOSSubCommand.runCommand (package:flutter_tools/src/commands/build_ios.dart:750:33)
+<asynchronous suspension>
+#11     FlutterCommand.run.<anonymous closure> (package:flutter_tools/src/runner/flutter_command.dart:1559:27)
+<asynchronous suspension>
+#12     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+<asynchronous suspension>
+#13     CommandRunner.runCommand (package:args/command_runner.dart:212:13)
+<asynchronous suspension>
+#14     FlutterCommandRunner.runCommand.<anonymous closure> (package:flutter_tools/src/runner/flutter_command_runner.dart:487:9)
+<asynchronous suspension>
+#15     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+<asynchronous suspension>
+#16     FlutterCommandRunner.runCommand (package:flutter_tools/src/runner/flutter_command_runner.dart:422:5)
+<asynchronous suspension>
+#17     run.<anonymous closure>.<anonymous closure> (package:flutter_tools/runner.dart:104:11)
+<asynchronous suspension>
+#18     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+<asynchronous suspension>
+#19     main (package:flutter_tools/executable.dart:103:3)
+<asynchronous suspension>
+```
+
+## flutter doctor
+
+```
+[✓] Flutter (Channel stable, 3.38.8, on macOS 26.1 25B78 darwin-arm64, locale de-DE) [217ms]
+    • Flutter version 3.38.8 on channel stable at /Users/kingezeoffia/development/flutter
+    • Upstream repository https://github.com/flutter/flutter.git
+    • Framework revision bd7a4a6b55 (5 days ago), 2026-01-26 15:21:03 -0800
+    • Engine revision db373eb85a
+    • Dart version 3.10.7
+    • DevTools version 2.51.1
+    • Feature flags: enable-web, enable-linux-desktop, enable-macos-desktop, enable-windows-desktop, enable-android, enable-ios, cli-animations, enable-native-assets, omit-legacy-version-file, enable-lldb-debugging
+
+[!] Android toolchain - develop for Android devices (Android SDK version 36.1.0) [773ms]
+    • Android SDK at /Users/kingezeoffia/Library/Android/sdk
+    • Emulator version 36.3.10.0 (build_id 14472402) (CL:N/A)
+    ✗ cmdline-tools component is missing.
+      Try installing or updating Android Studio.
+      Alternatively, download the tools from https://developer.android.com/studio#command-line-tools-only and make sure to set the ANDROID_HOME environment variable.
+      See https://developer.android.com/studio/command-line for more details.
+    ✗ Android license status unknown.
+      Run `flutter doctor --android-licenses` to accept the SDK licenses.
+      See https://flutter.dev/to/macos-android-setup for more details.
+
+[✓] Xcode - develop for iOS and macOS (Xcode 26.2) [590ms]
+    • Xcode at /Applications/Xcode.app/Contents/Developer
+    • Build 17C52
+    • CocoaPods version 1.16.2
+
+[✓] Chrome - develop for the web [7ms]
+    • Chrome at /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+
+[✓] Connected device (3 available) [6,8s]
+    • iPhone von King (mobile) • 00008130-000E3D80213A001C • ios            • iOS 26.2 23C55
+    • macOS (desktop)          • macos                     • darwin-arm64   • macOS 26.1 25B78 darwin-arm64
+    • Chrome (web)             • chrome                    • web-javascript • Google Chrome 144.0.7559.110
+    ! Error: Browsing on the local area network for iPhone v. Ensure the device is unlocked and attached with a cable or associated with the same local area network as this Mac.
+      The device must be opted into Developer Mode to connect wirelessly. (code -27)
+
+[✓] Network resources [352ms]
+    • All expected network resources are available.
+
+! Doctor found issues in 1 category.
+```

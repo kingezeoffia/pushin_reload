@@ -1,25 +1,34 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../services/StripeCheckoutService.dart';
 import '../../../state/auth_state_provider.dart';
 import '../../../state/pushin_app_controller.dart';
+import '../../widgets/ErrorPopup.dart';
 import '../../widgets/GOStepsBackground.dart';
+import '../../widgets/RestorePurchasesPopup.dart';
+import '../../navigation/main_tab_navigation.dart';
+import '../auth/SubscriptionSuccessScreen.dart';
+import '../auth/AdvancedUpgradeWelcomeScreen.dart';
 import '../auth/SignUpScreen.dart';
 
 /// Paywall Screen - Free Trial with Pro or Advanced plan
 ///
 /// BMAD V6 Spec:
-/// - 5-Day Free Trial (Monthly) / 5-Day Free Trial (Yearly)
-/// - Pro — 9.99 €: 3 App Blockages, 3 Workouts
-/// - Advanced — 14.99 €: Unlimited App Blockages, Unlimited Workouts
+/// - 3-Day Free Trial (Monthly) / 3-Day Free Trial (Yearly)
+/// - Pro — 9.99 €: Unlimited Hours of App Blocking, Unlimited App Blockages, 3 Workouts, Emergency Unlock
+/// - Advanced — 14.99 €: Unlimited Hours of App Blocking, Unlimited App Blockages, Unlimited Workouts*, Steps and kcal counter, Emergency Unlock
 /// - GO Steps style design
 class PaywallScreen extends StatefulWidget {
   final Map<String, dynamic>? onboardingData;
+  final String?
+      preSelectedPlan; // 'pro', 'advanced', or null for auto-selection
 
   const PaywallScreen({
     super.key,
     this.onboardingData,
+    this.preSelectedPlan,
   });
 
   @override
@@ -28,9 +37,27 @@ class PaywallScreen extends StatefulWidget {
 
 class _PaywallScreenState extends State<PaywallScreen>
     with SingleTickerProviderStateMixin {
-  String _selectedPlan = 'pro'; // 'pro' or 'advanced'
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _proPlanKey = GlobalKey();
+  final GlobalKey _advancedPlanKey = GlobalKey();
+  String _selectedPlan =
+      'pro'; // 'pro' or 'advanced' - will be updated dynamically
   String _billingPeriod = 'monthly'; // 'monthly' or 'yearly'
   bool _isLoading = false;
+  bool _isInitializingPlan = true;
+  bool _shouldScrollToSelectedPlan =
+      false; // Flag to trigger scroll after layout
+  String? _currentSubscriptionPlan; // Track user's current active plan
+  bool _hasPreSelectedPlan = false; // Track if plan was explicitly pre-selected
+  bool _hasUserManuallySelectedPlan =
+      false; // Track if user manually selected a plan
+  bool _pendingPurchaseAfterAuth =
+      false; // Track if user was trying to purchase before auth
+
+  // Listen for plan tier changes from PushinAppController
+  late VoidCallback _planTierListener;
+  late VoidCallback _paymentSuccessListener;
+  late VoidCallback _authStateListener;
 
   void _onBillingPeriodChanged(String newPeriod) {
     if (newPeriod == _billingPeriod) return;
@@ -39,8 +66,427 @@ class _PaywallScreenState extends State<PaywallScreen>
   }
 
   @override
+  void initState() {
+    super.initState();
+    _initializeSelectedPlan();
+
+    // Listen for plan tier changes from PushinAppController
+    // This ensures the paywall updates when subscription status changes after payment
+    final pushinController = context.read<PushinAppController>();
+    _planTierListener = _onPlanTierChanged;
+    pushinController.addListener(_planTierListener);
+
+    // CRITICAL: Listen for payment success to automatically dismiss paywall
+    _paymentSuccessListener = _onPaymentSuccess;
+    pushinController.paymentSuccessState.addListener(_paymentSuccessListener);
+    pushinController.upgradeWelcomeState.addListener(_paymentSuccessListener);
+
+    // Listen for auth state changes to reset loading state when user signs in
+    final authProvider = context.read<AuthStateProvider>();
+    _authStateListener = _onAuthStateChanged;
+    authProvider.addListener(_authStateListener);
+  }
+
+  /// Called when auth state changes - reset loading state if user just signed in
+  void _onAuthStateChanged() {
+    final authProvider = context.read<AuthStateProvider>();
+    // If user just became authenticated and was trying to purchase, continue with purchase
+    if (authProvider.isAuthenticated && _pendingPurchaseAfterAuth && mounted) {
+      debugPrint(
+          '🎉 User authenticated after pending purchase - continuing purchase flow');
+      setState(() {
+        _pendingPurchaseAfterAuth = false;
+        _isLoading = true;
+      });
+      // Continue with the purchase flow
+      _continuePurchaseAfterAuth();
+    }
+    // Reset loading state when user becomes authenticated (just signed in)
+    else if (authProvider.isAuthenticated && _isLoading && mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  /// Continue purchase flow after user authentication
+  Future<void> _continuePurchaseAfterAuth() async {
+    print('🔄 Continuing purchase after authentication...');
+
+    try {
+      print('🟡 Creating StripeCheckoutService...');
+      final stripeService = StripeCheckoutService(
+        baseUrl: 'https://pushin-production.up.railway.app/api',
+        isTestMode: true,
+      );
+
+      // Get current user info
+      final authProvider = context.read<AuthStateProvider>();
+      final currentUser = authProvider.currentUser;
+      final isAuthenticated = authProvider.isAuthenticated;
+
+      // At this point user should be authenticated
+      if (!isAuthenticated || currentUser == null) {
+        print('❌ User not authenticated after auth flow - aborting');
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Generate user info for authenticated user
+      String userId = currentUser.id.toString();
+      String userEmail = currentUser.email ?? 'user@example.com';
+
+      print('🛒 Continuing checkout for authenticated user');
+      print('   - userId: $userId');
+      print('   - userEmail: $userEmail');
+      print('   - planId: $_selectedPlan');
+      print('   - billingPeriod: $_billingPeriod');
+
+      // Set the pending checkout userId so DeepLinkHandler can verify the payment
+      final pushinController = context.read<PushinAppController>();
+      pushinController.setPendingCheckoutUserId(userId);
+
+      // Set the planId for fallback subscription status creation
+      await pushinController.setPendingCheckoutPlanId(_selectedPlan);
+
+      final success = await stripeService.launchCheckout(
+        userId: userId,
+        planId: _selectedPlan,
+        billingPeriod: _billingPeriod,
+        userEmail: userEmail,
+      );
+
+      if (!context.mounted) return;
+
+      if (success) {
+        // For real mode, plan tier will be updated via deep link handler
+        // For test mode, simulate payment success immediately since no deep link is triggered
+        if (stripeService.isTestMode) {
+          print(
+              'TEST MODE: Checkout simulated successfully - triggering payment success flow');
+          // Simulate payment success by creating a subscription status and triggering the callback
+          final simulatedStatus = SubscriptionStatus(
+            isActive: true,
+            planId: _selectedPlan,
+            customerId: 'cus_test_${currentUser.id}',
+            subscriptionId:
+                'sub_test_${currentUser.id}_${DateTime.now().millisecondsSinceEpoch}',
+            currentPeriodEnd: DateTime.now().add(const Duration(days: 30)),
+            cachedUserId: currentUser.id.toString(),
+          );
+
+          // Save the simulated subscription status
+          await stripeService.saveSubscriptionStatus(simulatedStatus);
+
+          // Trigger the payment success callback to update UI state
+          pushinController.paymentSuccessState.value = simulatedStatus;
+          print(
+              'TEST MODE: Payment success state updated, UI should reflect new plan tier');
+        }
+      } else {
+        _showErrorDialog('Unable to start checkout. Please try again.');
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      _showErrorDialog('An error occurred: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  /// Called when payment succeeds - navigate to success screen
+  void _onPaymentSuccess() {
+    final pushinController = context.read<PushinAppController>();
+    final paymentStatus = pushinController.paymentSuccessState.value;
+    final hasUpgradeWelcome = pushinController.upgradeWelcomeState.value;
+
+    if ((paymentStatus != null || hasUpgradeWelcome) && mounted) {
+      print('🎉 PaywallScreen: Payment success detected');
+      print('   - hasUpgradeWelcome: $hasUpgradeWelcome');
+      print('   - hasPaymentSuccess: ${paymentStatus != null}');
+
+      // Navigate to the appropriate success screen
+      if (hasUpgradeWelcome) {
+        print('🎉 PaywallScreen: Showing AdvancedUpgradeWelcomeScreen');
+        // Clear the upgrade welcome state immediately
+        final pushinController = context.read<PushinAppController>();
+        pushinController.upgradeWelcomeState.value = false;
+
+        // Show upgrade welcome screen for PRO → ADVANCED upgrades
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => const AdvancedUpgradeWelcomeScreen(),
+          ),
+        );
+      } else if (paymentStatus != null) {
+        print(
+            '🎉 PaywallScreen: Showing SubscriptionSuccessScreen for ${paymentStatus.planId}');
+        // Clear the payment success state immediately
+        final pushinController = context.read<PushinAppController>();
+        pushinController.paymentSuccessState.value = null;
+
+        // Show regular success screen for new subscriptions
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => SubscriptionSuccessScreen(
+              subscriptionStatus: paymentStatus,
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _initializeSelectedPlan() async {
+    try {
+      // First check cached subscription status to get current plan
+      final stripeService = StripeCheckoutService(
+        baseUrl: 'https://pushin-production.up.railway.app/api',
+        isTestMode: true,
+      );
+
+      final cachedStatus = await stripeService.getCachedSubscriptionStatus();
+      String? currentPlan;
+
+      if (cachedStatus != null && cachedStatus.isActive) {
+        currentPlan = cachedStatus.planId;
+        print(
+            '📦 PaywallScreen: Found cached subscription - plan: $currentPlan');
+      }
+
+      // If preSelectedPlan is provided, use it directly but still set currentPlan
+      if (widget.preSelectedPlan != null) {
+        if (mounted) {
+          setState(() {
+            _currentSubscriptionPlan = currentPlan;
+            _selectedPlan = widget.preSelectedPlan!;
+            _hasPreSelectedPlan = true; // Mark that this was pre-selected
+            _isInitializingPlan = false;
+            _shouldScrollToSelectedPlan =
+                true; // Set flag to scroll after layout
+          });
+
+          print('📦 PaywallScreen: Pre-selected plan');
+          print('   - Current plan: $_currentSubscriptionPlan');
+          print('   - Selected plan: $_selectedPlan');
+        }
+        return;
+      }
+
+      // Also try to get from backend (but don't block on it)
+      final nextBestPlan = await _getNextBestPlan();
+
+      if (mounted) {
+        setState(() {
+          _currentSubscriptionPlan = currentPlan;
+          _selectedPlan = nextBestPlan;
+          _isInitializingPlan = false;
+        });
+
+        print('📦 PaywallScreen: Initialized');
+        print('   - Current plan: $_currentSubscriptionPlan');
+        print('   - Selected plan: $_selectedPlan');
+      }
+    } catch (e) {
+      print('Error initializing selected plan: $e');
+      // Default to 'pro' on error
+      if (mounted) {
+        setState(() {
+          _selectedPlan = 'pro';
+          _isInitializingPlan = false;
+        });
+      }
+    }
+  }
+
+  /// Called when the plan tier changes in PushinAppController
+  /// This ensures the paywall updates immediately after successful payment
+  void _onPlanTierChanged() {
+    final pushinController = context.read<PushinAppController>();
+    final newPlanTier = pushinController.planTier;
+
+    // Only update if the plan tier actually changed from what we know
+    if (_currentSubscriptionPlan != newPlanTier && mounted) {
+      print(
+          '🔄 Paywall: Plan tier changed from $_currentSubscriptionPlan to $newPlanTier');
+
+      // If a plan was pre-selected (e.g., from dashboard) or manually selected by user,
+      // only override it if the user's subscription actually upgraded (not just initialized)
+      if (_hasPreSelectedPlan || _hasUserManuallySelectedPlan) {
+        // Only refresh if the user actually became a paid subscriber
+        // Don't override pre-selected or manually selected plans with "next best plan" logic
+        final wasFree = _currentSubscriptionPlan == null ||
+            _currentSubscriptionPlan == 'free';
+
+        if (wasFree && newPlanTier != 'free') {
+          // User became a paid subscriber - refresh to show current plan
+          _refreshSubscriptionStatus();
+        }
+        // If user was already paid or still free, keep the selected plan
+      } else {
+        // No pre-selected or manual plan - normal refresh behavior
+        _refreshSubscriptionStatus();
+      }
+    }
+  }
+
+  /// Refresh the subscription status and update UI accordingly
+  Future<void> _refreshSubscriptionStatus() async {
+    if (!mounted) return;
+
+    try {
+      // Re-check subscription status
+      final stripeService = StripeCheckoutService(
+        baseUrl: 'https://pushin-production.up.railway.app/api',
+        isTestMode: true,
+      );
+
+      final cachedStatus = await stripeService.getCachedSubscriptionStatus();
+      String? updatedPlan;
+
+      if (cachedStatus != null && cachedStatus.isActive) {
+        updatedPlan = cachedStatus.planId;
+        print('🔄 Paywall: Refreshed subscription status - plan: $updatedPlan');
+      }
+
+      // Update state
+      if (mounted) {
+        setState(() {
+          _currentSubscriptionPlan = updatedPlan;
+          // Only update selected plan if user hasn't manually selected one AND no plan was pre-selected
+          if (!_hasUserManuallySelectedPlan && !_hasPreSelectedPlan) {
+            _selectedPlan = _getNextBestPlanSync(updatedPlan);
+          }
+        });
+      }
+    } catch (e) {
+      print('Error refreshing subscription status: $e');
+    }
+  }
+
+  /// Synchronous version of _getNextBestPlan for immediate UI updates
+  String _getNextBestPlanSync(String? currentPlan) {
+    switch (currentPlan) {
+      case 'free':
+        return 'pro';
+      case 'pro':
+        return 'advanced'; // Pro users should see Advanced as upgrade option
+      case 'advanced':
+        return 'advanced'; // Already on highest plan
+      default:
+        return 'pro';
+    }
+  }
+
+  void _scrollToSelectedPlan() {
+    print('🔄 _scrollToSelectedPlan called for plan: $_selectedPlan');
+    if (!mounted) {
+      print('❌ Scroll cancelled: not mounted');
+      return;
+    }
+
+    GlobalKey? targetKey;
+    if (_selectedPlan == 'pro') {
+      targetKey = _proPlanKey;
+    } else if (_selectedPlan == 'advanced') {
+      targetKey = _advancedPlanKey;
+    }
+
+    print(
+        '🎯 Target key: $targetKey, currentContext: ${targetKey?.currentContext}');
+
+    if (targetKey?.currentContext != null) {
+      print('✅ Found context, scheduling scroll');
+
+      // Use Scrollable.ensureVisible which handles all the coordinate transformations
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          try {
+            Scrollable.ensureVisible(
+              targetKey!.currentContext!,
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeOutCubic,
+              alignment: 0.1, // Position 10% from top of viewport
+            );
+            print('📜 Scrollable.ensureVisible called');
+          } catch (e) {
+            print('❌ Error during scroll: $e');
+          }
+        }
+      });
+    } else {
+      print('❌ No context found for target key');
+    }
+  }
+
+  Future<String> _getNextBestPlan() async {
+    try {
+      // First check cached subscription (most reliable since backend may fail)
+      final stripeService = StripeCheckoutService(
+        baseUrl: 'https://pushin-production.up.railway.app/api',
+        isTestMode: true,
+      );
+
+      final cachedStatus = await stripeService.getCachedSubscriptionStatus();
+      if (cachedStatus != null && cachedStatus.isActive) {
+        switch (cachedStatus.planId) {
+          case 'free':
+            return 'pro';
+          case 'pro':
+            return 'advanced'; // Pro users should see Advanced as upgrade option
+          case 'advanced':
+            return 'advanced'; // Already on highest plan
+          default:
+            return 'pro';
+        }
+      }
+
+      // Try backend as fallback (may fail with 500)
+      final authProvider = context.read<AuthStateProvider>();
+      final currentUser = authProvider.currentUser;
+      final isAuthenticated = authProvider.isAuthenticated;
+
+      if (currentUser != null) {
+        final subscriptionStatus = await stripeService.checkSubscriptionStatus(
+          userId: currentUser.id,
+        );
+
+        if (subscriptionStatus != null && subscriptionStatus.isActive) {
+          switch (subscriptionStatus.planId) {
+            case 'free':
+              return 'pro';
+            case 'pro':
+              return 'advanced';
+            case 'advanced':
+              return 'advanced';
+            default:
+              return 'pro';
+          }
+        }
+      } else if (!isAuthenticated) {
+        // Unauthenticated users are always on free tier
+        // They need to sign up to purchase a subscription
+      }
+
+      // Default for unauthenticated users or no active subscription
+      return 'pro';
+    } catch (e) {
+      print('Error checking subscription status for plan selection: $e');
+      return 'pro'; // Default fallback on error
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
+
+    // Trigger scroll to selected plan after layout is complete
+    if (_shouldScrollToSelectedPlan && !_isInitializingPlan) {
+      _shouldScrollToSelectedPlan = false; // Reset flag
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToSelectedPlan();
+      });
+    }
 
     return Scaffold(
       body: Stack(
@@ -57,22 +503,25 @@ class _PaywallScreenState extends State<PaywallScreen>
                       height: 44, // Fixed height to prevent overflow
                       child: Stack(
                         children: [
-                          // Left side: Back button
-                          Positioned(
-                            left: 0,
-                            top: 0,
-                            bottom: 0,
-                            child: Center(
-                              child: _BackButton(
-                                  onTap: () => Navigator.pop(context)),
+                          // Left side: Back button (only show when not in onboarding)
+                          if (widget.onboardingData == null)
+                            Positioned(
+                              left: 0,
+                              top: 0,
+                              bottom: 0,
+                              child: Center(
+                                child: _BackButton(
+                                    onTap: () => Navigator.pop(context)),
+                              ),
                             ),
-                          ),
 
                           // Center: Billing toggle (perfectly centered)
                           Center(
                             child: _BillingPeriodToggle(
                               selectedPeriod: _billingPeriod,
-                              onPeriodChanged: _onBillingPeriodChanged,
+                              onPeriodChanged: _isInitializingPlan
+                                  ? (_) {}
+                                  : _onBillingPeriodChanged,
                             ),
                           ),
 
@@ -103,6 +552,7 @@ class _PaywallScreenState extends State<PaywallScreen>
                   // Scrollable Content
                   Expanded(
                     child: SingleChildScrollView(
+                      controller: _scrollController,
                       padding: const EdgeInsets.symmetric(horizontal: 32),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -177,7 +627,7 @@ class _PaywallScreenState extends State<PaywallScreen>
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    '5-Day Free Trial',
+                                    '3-Day Free Trial',
                                     style: const TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w700,
@@ -192,99 +642,106 @@ class _PaywallScreenState extends State<PaywallScreen>
 
                           SizedBox(height: screenHeight * 0.03),
 
-                          // Plan Cards
+                          // Free Version Card
                           _PlanCard(
-                            planName: 'Pro',
-                            monthlyPrice: '9.99 €',
-                            yearlyPrice: '49.99 €',
+                            planName: 'Free',
+                            monthlyPrice: '0 €',
+                            yearlyPrice: '0 €',
                             isYearly: _billingPeriod == 'yearly',
                             features: const [
-                              '3 App Blockages',
-                              '3 Workouts',
+                              '3 hours of app blocking per day',
+                              '1 workout',
                               'Basic Progress Tracking',
                             ],
+                            isSelected: _selectedPlan == 'free',
+                            isPopular: false,
+                            isCurrentPlan:
+                                false, // Free plan doesn't show as "current"
+                            onTap: _isInitializingPlan
+                                ? null
+                                : () {
+                                    HapticFeedback.lightImpact();
+                                    setState(() {
+                                      _selectedPlan = 'free';
+                                      _hasUserManuallySelectedPlan = true;
+                                    });
+                                  },
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Plan Cards
+                          _PlanCard(
+                            key: _proPlanKey,
+                            planName: 'Pro',
+                            monthlyPrice: '6.99 €',
+                            yearlyPrice: '49.99 €',
+                            oldMonthlyPrice:
+                                '9.99 €', // Show original monthly price crossed out
+                            oldYearlyPrice:
+                                '119.99 €', // Show full yearly price crossed out (60% off)
+                            isYearly: _billingPeriod == 'yearly',
+                            features: const [
+                              'Unlimited Hours of App Blocking',
+                              'Unlimited App Blockages',
+                              '3 Workouts',
+                              'Basic Progress Tracking',
+                              'Emergency Unlock',
+                            ],
                             isSelected: _selectedPlan == 'pro',
-                            isPopular: true,
-                            onTap: () {
-                              HapticFeedback.lightImpact();
-                              setState(() => _selectedPlan = 'pro');
-                            },
+                            isPopular: _currentSubscriptionPlan !=
+                                'pro', // Only show POPULAR if not current plan
+                            isCurrentPlan: _currentSubscriptionPlan == 'pro',
+                            onTap: _isInitializingPlan ||
+                                    _currentSubscriptionPlan == 'pro'
+                                ? null
+                                : () {
+                                    HapticFeedback.lightImpact();
+                                    setState(() {
+                                      _selectedPlan = 'pro';
+                                      _hasUserManuallySelectedPlan = true;
+                                    });
+                                  },
                           ),
 
                           const SizedBox(height: 16),
 
                           _PlanCard(
+                            key: _advancedPlanKey,
                             planName: 'Advanced',
-                            monthlyPrice: '14.99 €',
+                            monthlyPrice: '9.99 €',
                             yearlyPrice: '79.99 €',
+                            oldMonthlyPrice:
+                                '14.99 €', // Show original monthly price crossed out
+                            oldYearlyPrice:
+                                '179.99 €', // Show full yearly price crossed out (60% off)
                             isYearly: _billingPeriod == 'yearly',
+                            isCurrentPlan:
+                                _currentSubscriptionPlan == 'advanced',
                             features: const [
+                              'Unlimited Hours of App Blocking',
                               'Unlimited App Blockages',
-                              'Unlimited Workouts',
+                              'Unlimited Workouts*',
                               'Advanced Analytics',
                               'Water intake tracking',
+                              'Steps and kcal counter',
+                              'Emergency Unlock',
                             ],
                             isSelected: _selectedPlan == 'advanced',
                             isPopular: false,
-                            onTap: () {
-                              HapticFeedback.lightImpact();
-                              setState(() => _selectedPlan = 'advanced');
-                            },
+                            onTap: _isInitializingPlan ||
+                                    _currentSubscriptionPlan == 'advanced'
+                                ? null
+                                : () {
+                                    HapticFeedback.lightImpact();
+                                    setState(() {
+                                      _selectedPlan = 'advanced';
+                                      _hasUserManuallySelectedPlan = true;
+                                    });
+                                  },
                           ),
 
-                          const SizedBox(height: 24),
-
-                          // What You Get
-                          Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.08),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.1),
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.info_outline,
-                                      color: Color(0xFF9090FF),
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'How the trial works',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.white.withOpacity(0.9),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                _TrialStep(
-                                  step: '1',
-                                  text: 'Start your free 5-day trial today',
-                                ),
-                                const SizedBox(height: 8),
-                                _TrialStep(
-                                  step: '2',
-                                  text: "Get a reminder before the trial ends",
-                                ),
-                                const SizedBox(height: 8),
-                                _TrialStep(
-                                  step: '3',
-                                  text: 'Cancel anytime before trial ends',
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(height: 100), // Space for fixed button
+                          const SizedBox(height: 150), // Space for fixed button
                         ],
                       ),
                     ),
@@ -321,9 +778,11 @@ class _PaywallScreenState extends State<PaywallScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _StartTrialButton(
-                    isLoading: _isLoading,
-                    planName: _selectedPlan == 'pro' ? 'Pro' : 'Advanced',
-                    onTap: () => _handleSubscribe(context),
+                    isLoading: _isLoading || _isInitializingPlan,
+                    planName: _selectedPlan,
+                    onTap: _isInitializingPlan
+                        ? null
+                        : () => _handleSubscribe(context),
                   ),
                   const SizedBox(height: 12),
                   GestureDetector(
@@ -331,9 +790,13 @@ class _PaywallScreenState extends State<PaywallScreen>
                     child: FutureBuilder<String>(
                       future: _getCurrentPlanDisplayName(),
                       builder: (context, snapshot) {
+                        final authProvider = context.read<AuthStateProvider>();
+                        final isAuthenticated = authProvider.isAuthenticated;
                         final displayText = snapshot.data ?? 'Free Plan';
                         return Text(
-                          'Continue with $displayText',
+                          isAuthenticated
+                              ? 'Continue with $displayText'
+                              : 'Continue as Guest',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.white.withOpacity(0.5),
@@ -355,19 +818,6 @@ class _PaywallScreenState extends State<PaywallScreen>
                 ],
               ),
             ),
-          ),
-
-          // Payment success overlay
-          ValueListenableBuilder<SubscriptionStatus?>(
-            valueListenable:
-                context.watch<PushinAppController>().paymentSuccessState,
-            builder: (context, paymentStatus, _) {
-              if (paymentStatus != null) {
-                return _PaymentSuccessOverlay(
-                    subscriptionStatus: paymentStatus);
-              }
-              return const SizedBox.shrink();
-            },
           ),
 
           // Payment cancel notification
@@ -400,22 +850,17 @@ class _PaywallScreenState extends State<PaywallScreen>
   void _skipTrial() async {
     final authProvider = context.read<AuthStateProvider>();
 
-    // Check if user is logged in
-    if (!authProvider.isAuthenticated) {
-      // NOT logged in → Navigate to SignUp screen
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => const SignUpScreen(),
-          ),
-        );
-      }
-    } else {
-      // Logged in → Complete onboarding and go to home (original behavior)
-      await authProvider.completeOnboardingFlow();
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
+    // Complete onboarding flow for all users (free plan)
+    await authProvider.completeOnboardingFlow();
+
+    // Replace entire navigation stack with main app to prevent flash of intermediate screens
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => const MainTabNavigation(),
+        ),
+        (route) => false, // Remove all previous routes
+      );
     }
   }
 
@@ -449,7 +894,7 @@ class _PaywallScreenState extends State<PaywallScreen>
         }
       }
 
-      // Default to Free Plan if no user or no active subscription
+      // Unauthenticated users are on Free Plan (must sign up to purchase)
       return 'Free Plan';
     } catch (e) {
       print('Error checking subscription status: $e');
@@ -461,6 +906,18 @@ class _PaywallScreenState extends State<PaywallScreen>
   void _handleSubscribe(BuildContext context) async {
     print('🔴🔴🔴 _handleSubscribe CALLED! 🔴🔴🔴');
 
+    // Handle free plan selection - skip trial
+    if (_selectedPlan == 'free') {
+      _skipTrial();
+      return;
+    }
+
+    // Safety check: Prevent purchasing the current plan
+    if (_selectedPlan == _currentSubscriptionPlan) {
+      print('⚠️ Attempted to purchase current plan - blocked');
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -470,22 +927,67 @@ class _PaywallScreenState extends State<PaywallScreen>
         isTestMode: true,
       );
 
-      // Get current user info (fallback to test values if not authenticated)
+      // Get current user info
       final authProvider = context.read<AuthStateProvider>();
       final currentUser = authProvider.currentUser;
-      final userId = currentUser?.id.toString() ?? 'test_user_123';
-      final userEmail = currentUser?.email ?? 'test@example.com';
+      final isAuthenticated = authProvider.isAuthenticated;
+
+      // Check if user is authenticated - if not, prompt to sign up first
+      if (!authProvider.isAuthenticated) {
+        print(
+            '🚫 Unauthenticated user attempting purchase - navigating to sign up screen');
+        // Mark that user was trying to purchase, so we can continue after auth
+        setState(() => _pendingPurchaseAfterAuth = true);
+        // Keep loading state active during navigation to prevent button spam
+        // Use direct navigation instead of state-driven routing for immediate effect
+        Navigator.of(context)
+            .push(
+          MaterialPageRoute(
+            builder: (context) => const SignUpScreen(),
+          ),
+        )
+            .then((_) {
+          // Reset loading state when user returns from sign up screen
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+              // If purchase didn't auto-continue, reset the pending flag
+              if (_pendingPurchaseAfterAuth) {
+                _pendingPurchaseAfterAuth = false;
+              }
+            });
+          }
+        });
+        return;
+      }
+
+      // Require authenticated user for checkout
+      if (!isAuthenticated || currentUser == null) {
+        _showErrorDialog('Please sign in to continue with your purchase.');
+        return;
+      }
+
+      final userId = currentUser.id.toString();
+      final userEmail = currentUser.email ?? 'user@example.com';
 
       print('🛒 PaywallScreen: Starting checkout');
       print('   - userId: $userId');
       print('   - userEmail: $userEmail');
       print('   - planId: $_selectedPlan');
       print('   - billingPeriod: $_billingPeriod');
-      print('   - isAuthenticated: ${authProvider.isAuthenticated}');
-      print('   - isGuestMode: ${authProvider.isGuestMode}');
+
+      // Set the pending checkout userId so DeepLinkHandler can verify the payment
+      final pushinController = context.read<PushinAppController>();
+      pushinController.setPendingCheckoutUserId(userId);
 
       // Launch checkout with plan ID ('pro' or 'advanced') and billing period ('monthly' or 'yearly')
       final backendPlanId = _selectedPlan; // 'pro' or 'advanced'
+
+      // Set the planId for fallback subscription status creation (CRITICAL for fallback)
+      // MUST await this to ensure it's persisted before launching checkout
+      await pushinController.setPendingCheckoutPlanId(backendPlanId);
+      print(
+          '💳 PaywallScreen: Set and persisted pending checkout plan: $backendPlanId');
 
       final success = await stripeService.launchCheckout(
         userId: userId,
@@ -496,7 +998,33 @@ class _PaywallScreenState extends State<PaywallScreen>
 
       if (!context.mounted) return;
 
-      if (!success) {
+      if (success) {
+        // For real mode, plan tier will be updated via deep link handler
+        // For test mode, simulate payment success immediately since no deep link is triggered
+        if (stripeService.isTestMode) {
+          print(
+              'TEST MODE: Checkout simulated successfully - triggering payment success flow');
+          // Simulate payment success by creating a subscription status and triggering the callback
+          final simulatedStatus = SubscriptionStatus(
+            isActive: true,
+            planId: _selectedPlan,
+            customerId: 'cus_test_${currentUser.id}',
+            subscriptionId:
+                'sub_test_${currentUser.id}_${DateTime.now().millisecondsSinceEpoch}',
+            currentPeriodEnd: DateTime.now().add(const Duration(days: 30)),
+            cachedUserId: currentUser.id.toString(),
+          );
+
+          // Save the simulated subscription status
+          await stripeService.saveSubscriptionStatus(simulatedStatus);
+
+          // Trigger the payment success callback to update UI state
+          final pushinController = context.read<PushinAppController>();
+          pushinController.paymentSuccessState.value = simulatedStatus;
+          print(
+              'TEST MODE: Payment success state updated, UI should reflect new plan tier');
+        }
+      } else {
         _showErrorDialog('Unable to start checkout. Please try again.');
       }
     } catch (e) {
@@ -512,133 +1040,74 @@ class _PaywallScreenState extends State<PaywallScreen>
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: const Color(0xFF1E1E45),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                size: 56,
-                color: Color(0xFFFF6060),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Something Went Wrong',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                message,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Colors.white.withOpacity(0.7),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  width: double.infinity,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'OK',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF2A2A6A),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+      barrierDismissible: false,
+      builder: (context) => ErrorPopup(
+        title: 'Something Went Wrong',
+        message: message,
+        onDismiss: () => Navigator.pop(context),
       ),
     );
   }
 
-  void _showRestorePurchasesDialog() {
+  void _showRestorePurchasesDialog() async {
+    // Create payment service
+    final stripeService = StripeCheckoutService(
+      baseUrl: 'https://pushin-production.up.railway.app/api',
+      isTestMode: true,
+    );
+
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: const Color(0xFF1E1E45),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.refresh,
-                size: 56,
-                color: Color(0xFF6060FF),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Restore Purchases',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+      barrierDismissible: false,
+      builder: (context) => RestorePurchasesPopup(
+        paymentService: stripeService,
+        onDismiss: () => Navigator.pop(context),
+        onRestoreComplete: (result) async {
+          // Close dialog
+          Navigator.pop(context);
+
+          if (result.hasActiveSubscription) {
+            // Update app state with restored subscription
+            final pushinController = context.read<PushinAppController>();
+
+            // Update plan tier
+            pushinController.updatePlanTier(
+              result.subscription!.planId,
+              0, // No grace period
+            );
+
+            // Show success and navigate away from paywall
+            await Future.delayed(const Duration(milliseconds: 500));
+
+            if (mounted) {
+              // Navigate to main app
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(
+                  builder: (context) => const MainTabNavigation(),
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Checking for previous purchases...',
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Colors.white.withOpacity(0.7),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  width: double.infinity,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'OK',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF2A2A6A),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+                (route) => false,
+              );
+            }
+          }
+        },
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    final pushinController = context.read<PushinAppController>();
+    final authProvider = context.read<AuthStateProvider>();
+
+    pushinController.removeListener(_planTierListener);
+    pushinController.paymentSuccessState
+        .removeListener(_paymentSuccessListener);
+    pushinController.upgradeWelcomeState
+        .removeListener(_paymentSuccessListener);
+    authProvider.removeListener(_authStateListener);
+
+    _scrollController.dispose();
+    super.dispose();
   }
 }
 
@@ -674,20 +1143,27 @@ class _PlanCard extends StatefulWidget {
   final String planName;
   final String monthlyPrice;
   final String yearlyPrice;
+  final String? oldMonthlyPrice; // For showing discounted monthly pricing
+  final String? oldYearlyPrice; // For showing discounted yearly pricing
   final bool isYearly;
   final List<String> features;
   final bool isSelected;
   final bool isPopular;
-  final VoidCallback onTap;
+  final bool isCurrentPlan; // Whether this is the user's currently active plan
+  final VoidCallback? onTap;
 
   const _PlanCard({
+    super.key,
     required this.planName,
     required this.monthlyPrice,
     required this.yearlyPrice,
+    this.oldMonthlyPrice,
+    this.oldYearlyPrice,
     required this.isYearly,
     required this.features,
     required this.isSelected,
     required this.isPopular,
+    this.isCurrentPlan = false,
     required this.onTap,
   });
 
@@ -698,38 +1174,20 @@ class _PlanCard extends StatefulWidget {
 class _PlanCardState extends State<_PlanCard>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _slideAnimation;
-  late Animation<double> _fadeOutAnimation;
-  late Animation<double> _fadeInAnimation;
-
-  bool _showYearly = false;
+  late Animation<double> _animation;
 
   @override
   void initState() {
     super.initState();
-    _showYearly = widget.isYearly;
-
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 350),
+      duration: const Duration(milliseconds: 300),
       vsync: this,
+      value: widget.isYearly ? 1.0 : 0.0,
     );
 
-    _slideAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
-
-    _fadeOutAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
-      ),
-    );
-
-    _fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.4, 1.0, curve: Curves.easeOut),
-      ),
+    _animation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOutCubic,
     );
   }
 
@@ -737,11 +1195,11 @@ class _PlanCardState extends State<_PlanCard>
   void didUpdateWidget(_PlanCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isYearly != widget.isYearly) {
-      _controller.forward(from: 0.0).then((_) {
-        if (mounted) {
-          setState(() => _showYearly = widget.isYearly);
-        }
-      });
+      if (widget.isYearly) {
+        _controller.forward();
+      } else {
+        _controller.reverse();
+      }
     }
   }
 
@@ -753,12 +1211,6 @@ class _PlanCardState extends State<_PlanCard>
 
   @override
   Widget build(BuildContext context) {
-    final currentPrice = _showYearly ? widget.yearlyPrice : widget.monthlyPrice;
-    final targetPrice =
-        widget.isYearly ? widget.yearlyPrice : widget.monthlyPrice;
-    final currentPeriod = _showYearly ? '/year' : '/month';
-    final targetPeriod = widget.isYearly ? '/year' : '/month';
-
     return GestureDetector(
       onTap: widget.onTap,
       child: AnimatedContainer(
@@ -766,8 +1218,9 @@ class _PlanCardState extends State<_PlanCard>
         curve: Curves.easeOutCubic,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color:
-              widget.isSelected ? Colors.white : Colors.white.withOpacity(0.1),
+          color: widget.isSelected
+              ? Colors.white
+              : Colors.white.withOpacity(widget.onTap == null ? 0.05 : 0.1),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
             color: widget.isSelected
@@ -785,75 +1238,48 @@ class _PlanCardState extends State<_PlanCard>
                 ]
               : null,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Stack(
           children: [
-            // Plan Name & Price Row
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            // Main content
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Plan name with badges
-                      Row(
+                // Plan Name & Price Row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            widget.planName,
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              color: widget.isSelected
-                                  ? const Color(0xFF2A2A6A)
-                                  : Colors.white,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          if (widget.isPopular) ...[
-                            const SizedBox(width: 10),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF10B981),
-                                borderRadius: BorderRadius.circular(100),
-                              ),
-                              child: const Text(
-                                'POPULAR',
+                          // Plan name with badges
+                          Row(
+                            children: [
+                              Text(
+                                widget.planName,
                                 style: TextStyle(
-                                  fontSize: 9,
+                                  fontSize: 22,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                  letterSpacing: 0.5,
+                                  color: widget.isSelected
+                                      ? const Color(0xFF2A2A6A)
+                                      : Colors.white,
+                                  letterSpacing: -0.5,
                                 ),
                               ),
-                            ),
-                          ],
-                          // Animated savings badge - smooth transition both ways
-                          AnimatedScale(
-                            duration: const Duration(milliseconds: 250),
-                            curve: Curves.easeOutCubic,
-                            scale: widget.isYearly ? 1.0 : 0.0,
-                            child: AnimatedOpacity(
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeOutCubic,
-                              opacity: widget.isYearly ? 1.0 : 0.0,
-                              child: Padding(
-                                padding: const EdgeInsets.only(left: 10),
-                                child: Container(
+                              // Current Plan badge (takes priority over Popular)
+                              if (widget.isCurrentPlan) ...[
+                                const SizedBox(width: 10),
+                                Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 8,
                                     vertical: 3,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFF59E0B),
+                                    color: const Color(0xFF6060FF),
                                     borderRadius: BorderRadius.circular(100),
                                   ),
                                   child: const Text(
-                                    '-60%',
+                                    'CURRENT PLAN',
                                     style: TextStyle(
                                       fontSize: 9,
                                       fontWeight: FontWeight.w700,
@@ -862,123 +1288,197 @@ class _PlanCardState extends State<_PlanCard>
                                     ),
                                   ),
                                 ),
+                              ] else if (widget.isPopular) ...[
+                                const SizedBox(width: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981),
+                                    borderRadius: BorderRadius.circular(100),
+                                  ),
+                                  child: const Text(
+                                    'POPULAR',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              // Animated savings badge with smooth crossfade
+                              if (widget.planName != 'Free')
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 10),
+                                  child: AnimatedBuilder(
+                                    animation: _animation,
+                                    builder: (context, child) {
+                                      final monthlyDiscount =
+                                          _getDiscountPercentageFor(
+                                              isYearly: false);
+                                      final yearlyDiscount =
+                                          _getDiscountPercentageFor(
+                                              isYearly: true);
+
+                                      return ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(100),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 3,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF59E0B),
+                                            borderRadius:
+                                                BorderRadius.circular(100),
+                                          ),
+                                          child: Stack(
+                                            children: [
+                                              // Monthly discount
+                                              Opacity(
+                                                opacity: 1.0 - _animation.value,
+                                                child: Text(
+                                                  monthlyDiscount,
+                                                  style: const TextStyle(
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: Colors.white,
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                                ),
+                                              ),
+                                              // Yearly discount
+                                              Opacity(
+                                                opacity: _animation.value,
+                                                child: Text(
+                                                  yearlyDiscount,
+                                                  style: const TextStyle(
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: Colors.white,
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          // Animated price display with smooth crossfade
+                          ClipRect(
+                            child: SizedBox(
+                              height: 40,
+                              child: AnimatedBuilder(
+                                animation: _animation,
+                                builder: (context, child) {
+                                  return Stack(
+                                    children: [
+                                      // Monthly price (fades out and slides left when going to yearly)
+                                      Opacity(
+                                        opacity: 1.0 - _animation.value,
+                                        child: Transform.translate(
+                                          offset:
+                                              Offset(-20 * _animation.value, 0),
+                                          child:
+                                              _buildPriceRow(isYearly: false),
+                                        ),
+                                      ),
+                                      // Yearly price (fades in and slides in from right)
+                                      Opacity(
+                                        opacity: _animation.value,
+                                        child: Transform.translate(
+                                          offset: Offset(
+                                              20 * (1 - _animation.value), 0),
+                                          child: _buildPriceRow(isYearly: true),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      // Animated price display
-                      SizedBox(
-                        height: 36,
-                        child: AnimatedBuilder(
-                          animation: _controller,
-                          builder: (context, child) {
-                            final isAnimating = _controller.isAnimating;
-                            final slideOffset = _slideAnimation.value;
-
-                            return Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                // Outgoing price (current)
-                                if (isAnimating)
-                                  Opacity(
-                                    opacity: _fadeOutAnimation.value,
-                                    child: Transform.translate(
-                                      offset: Offset(
-                                        widget.isYearly
-                                            ? -30 * slideOffset
-                                            : 30 * slideOffset,
-                                        0,
-                                      ),
-                                      child: _buildPriceRow(
-                                          currentPrice, currentPeriod),
-                                    ),
-                                  ),
-                                // Incoming price (target)
-                                if (isAnimating)
-                                  Opacity(
-                                    opacity: _fadeInAnimation.value,
-                                    child: Transform.translate(
-                                      offset: Offset(
-                                        widget.isYearly
-                                            ? 30 * (1 - slideOffset)
-                                            : -30 * (1 - slideOffset),
-                                        0,
-                                      ),
-                                      child: _buildPriceRow(
-                                          targetPrice, targetPeriod),
-                                    ),
-                                  ),
-                                // Static price when not animating
-                                if (!isAnimating)
-                                  _buildPriceRow(currentPrice, currentPeriod),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Selection indicator
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: widget.isSelected
-                        ? const Color(0xFF3535A0)
-                        : Colors.transparent,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: widget.isSelected
-                          ? const Color(0xFF3535A0)
-                          : Colors.white.withOpacity(0.3),
-                      width: 2,
                     ),
-                  ),
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    child: widget.isSelected
-                        ? const Icon(
-                            Icons.check,
-                            key: ValueKey('check'),
-                            color: Colors.white,
-                            size: 18,
-                          )
-                        : const SizedBox.shrink(key: ValueKey('empty')),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                // Features
+                ...widget.features.map(
+                  (feature) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.check_circle,
+                          size: 18,
+                          color: widget.isSelected
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFF10B981).withOpacity(0.8),
+                        ),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            feature,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: widget.isSelected
+                                  ? const Color(0xFF2A2A6A).withOpacity(0.8)
+                                  : Colors.white.withOpacity(0.8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
 
-            const SizedBox(height: 16),
-
-            // Features
-            ...widget.features.map(
-              (feature) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.check_circle,
-                      size: 18,
-                      color: widget.isSelected
-                          ? const Color(0xFF10B981)
-                          : const Color(0xFF10B981).withOpacity(0.8),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      feature,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: widget.isSelected
-                            ? const Color(0xFF2A2A6A).withOpacity(0.8)
-                            : Colors.white.withOpacity(0.8),
-                      ),
-                    ),
-                  ],
+            // Selection indicator positioned at top right
+            Positioned(
+              top: 0,
+              right: 0,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: widget.isSelected
+                      ? const Color(0xFF3535A0)
+                      : Colors.transparent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: widget.isSelected
+                        ? const Color(0xFF3535A0)
+                        : Colors.white.withOpacity(0.3),
+                    width: 2,
+                  ),
+                ),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: widget.isSelected
+                      ? const Icon(
+                          Icons.check,
+                          key: ValueKey('check'),
+                          color: Colors.white,
+                          size: 18,
+                        )
+                      : const SizedBox.shrink(key: ValueKey('empty')),
                 ),
               ),
             ),
@@ -988,15 +1488,41 @@ class _PlanCardState extends State<_PlanCard>
     );
   }
 
-  Widget _buildPriceRow(String price, String period) {
+  Widget _buildPriceRow({required bool isYearly}) {
+    final price = isYearly ? widget.yearlyPrice : widget.monthlyPrice;
+    final period = isYearly ? '/year' : '/month';
+    final oldPrice = isYearly ? widget.oldYearlyPrice : widget.oldMonthlyPrice;
+    final hasOldPrice = oldPrice != null;
+    final priceFontSize = hasOldPrice ? 28.0 : 28.0;
+
     return Row(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.baseline,
       textBaseline: TextBaseline.alphabetic,
       children: [
+        // Old price (crossed out)
+        if (hasOldPrice) ...[
+          Text(
+            oldPrice,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: widget.isSelected
+                  ? const Color(0xFF3535A0).withOpacity(0.5)
+                  : Colors.white.withOpacity(0.4),
+              decoration: TextDecoration.lineThrough,
+              decorationColor: widget.isSelected
+                  ? const Color(0xFF3535A0).withOpacity(0.3)
+                  : Colors.white.withOpacity(0.3),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+        // Current price
         Text(
           price,
           style: TextStyle(
-            fontSize: 28,
+            fontSize: priceFontSize,
             fontWeight: FontWeight.w800,
             color: widget.isSelected ? const Color(0xFF3535A0) : Colors.white,
           ),
@@ -1014,52 +1540,26 @@ class _PlanCardState extends State<_PlanCard>
       ],
     );
   }
-}
 
-/// Trial step widget
-class _TrialStep extends StatelessWidget {
-  final String step;
-  final String text;
+  String _getDiscountPercentageFor({required bool isYearly}) {
+    final oldPriceStr =
+        isYearly ? widget.oldYearlyPrice : widget.oldMonthlyPrice;
+    final newPriceStr = isYearly ? widget.yearlyPrice : widget.monthlyPrice;
 
-  const _TrialStep({
-    required this.step,
-    required this.text,
-  });
+    if (oldPriceStr == null) return '';
 
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 24,
-          height: 24,
-          decoration: BoxDecoration(
-            color: const Color(0xFF6060FF).withOpacity(0.2),
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: Text(
-              step,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF9090FF),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.white.withOpacity(0.7),
-            ),
-          ),
-        ),
-      ],
-    );
+    // Parse prices (remove € and convert to double)
+    final oldPrice = double.tryParse(
+            oldPriceStr.replaceAll(' €', '').replaceAll(',', '.')) ??
+        0;
+    final newPrice = double.tryParse(
+            newPriceStr.replaceAll(' €', '').replaceAll(',', '.')) ??
+        0;
+
+    if (oldPrice == 0) return '';
+
+    final discount = ((oldPrice - newPrice) / oldPrice * 100).round();
+    return '-$discount%';
   }
 }
 
@@ -1067,7 +1567,7 @@ class _TrialStep extends StatelessWidget {
 class _StartTrialButton extends StatelessWidget {
   final bool isLoading;
   final String planName;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _StartTrialButton({
     required this.isLoading,
@@ -1083,7 +1583,7 @@ class _StartTrialButton extends StatelessWidget {
         width: double.infinity,
         height: 60,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isLoading ? Colors.white.withOpacity(0.7) : Colors.white,
           borderRadius: BorderRadius.circular(100),
           boxShadow: [
             BoxShadow(
@@ -1094,108 +1594,26 @@ class _StartTrialButton extends StatelessWidget {
           ],
         ),
         child: Center(
-          child: Text(
-            'Start Free Trial — $planName',
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF2A2A6A),
-              letterSpacing: -0.3,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Payment success overlay
-class _PaymentSuccessOverlay extends StatelessWidget {
-  final SubscriptionStatus subscriptionStatus;
-
-  const _PaymentSuccessOverlay({
-    required this.subscriptionStatus,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFF10B981).withOpacity(0.98),
-      child: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(32),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    shape: BoxShape.circle,
+          child: isLoading
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    color: Color(0xFF2A2A6A),
+                    strokeWidth: 2,
                   ),
-                  child: const Icon(
-                    Icons.check_circle,
-                    size: 80,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                const Text(
-                  'Welcome to PUSHIN\'!',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Your ${subscriptionStatus.displayName} is now active.',
+                )
+              : Text(
+                  planName == 'free'
+                      ? 'Continue for Free'
+                      : 'Start Free Trial — ${planName.toUpperCase()}',
                   style: const TextStyle(
-                    fontSize: 18,
-                    color: Colors.white,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 48),
-                GestureDetector(
-                  onTap: () async {
-                    context
-                        .read<PushinAppController>()
-                        .paymentSuccessState
-                        .value = null;
-
-                    // Complete onboarding flow before transitioning to main app (BMAD v6 canonical method)
-                    await context
-                        .read<AuthStateProvider>()
-                        .completeOnboardingFlow();
-                    // Pop the paywall screen to let AppRouter handle navigation
-                    Navigator.of(context).pop();
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(100),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'Get Started',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF10B981),
-                        ),
-                      ),
-                    ),
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF2A2A6A),
+                    letterSpacing: -0.3,
                   ),
                 ),
-              ],
-            ),
-          ),
         ),
       ),
     );

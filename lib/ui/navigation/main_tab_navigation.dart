@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../state/pushin_app_controller.dart';
+import '../../state/auth_state_provider.dart';
 import '../screens/enhanced_dashboard_screen.dart';
 import '../screens/enhanced_workouts_screen.dart';
 import '../screens/enhanced_settings_screen.dart';
-import '../widgets/DevTools.dart'; // TEMPORARY: Remove before production
 import '../widgets/pill_navigation_bar.dart';
 
 /// Main tab navigation with bottom 3-tab bar
@@ -19,16 +19,58 @@ class MainTabNavigation extends StatefulWidget {
 }
 
 class _MainTabNavigationState extends State<MainTabNavigation> {
-  int _selectedIndex = 1; // Default to Home/Dashboard (center tab)
+  late int _selectedIndex;
+  bool _hasInitializedForAuthUser = false;
 
   @override
   void initState() {
     super.initState();
-    // Check for pending workout navigation from iOS shield action
+
+    // Start on Home/Dashboard tab
+    _selectedIndex = 1; // Home/Dashboard tab
+
+    // Check if we need to reset to home tab for newly authenticated users
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkForNewUserReset();
       _checkPendingWorkoutNavigation();
       _setupWorkoutIntentCallback();
     });
+  }
+
+  void _checkForNewUserReset() {
+    final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
+
+    print('🏠 MainTabNavigation: Checking for new user reset');
+    print('   - isAuthenticated: ${authProvider.isAuthenticated}');
+    print('   - _hasInitializedForAuthUser: $_hasInitializedForAuthUser');
+    print('   - current _selectedIndex: $_selectedIndex');
+
+    // If user is authenticated and we haven't initialized for auth user yet,
+    // and we're not already on the home tab, reset to home
+    if (authProvider.isAuthenticated &&
+        !_hasInitializedForAuthUser &&
+        _selectedIndex != 1) {
+      print(
+          '🏠 MainTabNavigation: Resetting to home tab for new authenticated user');
+      _hasInitializedForAuthUser = true;
+      if (mounted) {
+        setState(() {
+          _selectedIndex = 1; // Home/Dashboard tab
+        });
+      }
+    } else if (authProvider.isAuthenticated) {
+      print(
+          '🏠 MainTabNavigation: User is authenticated, marking as initialized');
+      _hasInitializedForAuthUser =
+          true; // Mark as initialized even if already on home
+    } else {
+      print('🏠 MainTabNavigation: User not authenticated, no reset needed');
+    }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 
   void _setupWorkoutIntentCallback() {
@@ -58,7 +100,8 @@ class _MainTabNavigationState extends State<MainTabNavigation> {
   List<Widget> _getScreens() {
     return [
       EnhancedWorkoutsScreen(key: ValueKey('workouts_${_selectedIndex == 0}')),
-      EnhancedDashboardScreen(key: ValueKey('dashboard_${_selectedIndex == 1}')),
+      EnhancedDashboardScreen(
+          key: ValueKey('dashboard_${_selectedIndex == 1}')),
       EnhancedSettingsScreen(key: ValueKey('settings_${_selectedIndex == 2}')),
     ];
   }
@@ -80,8 +123,6 @@ class _MainTabNavigationState extends State<MainTabNavigation> {
             index: _selectedIndex,
             children: _getScreens(),
           ),
-          // TEMPORARY: Development tools - REMOVE BEFORE PRODUCTION
-          DevTools(),
           // Pill navigation at the bottom - now self-positioned
           PillNavigationBar(
             selectedIndex: _selectedIndex,

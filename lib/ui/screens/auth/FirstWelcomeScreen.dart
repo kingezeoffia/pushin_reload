@@ -38,31 +38,21 @@ class FirstWelcomeScreen extends StatelessWidget {
 
                       // App Logo
                       Center(
-                        child: Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(28),
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Color(0xFF4040C0),
-                                Color(0xFF3535A0),
-                              ],
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF4040C0).withOpacity(0.4),
-                                blurRadius: 24,
-                                offset: const Offset(0, 8),
-                              ),
-                            ],
+                        child: ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ).createShader(
+                            Rect.fromLTWH(
+                                0, 0, bounds.width, bounds.height * 1.3),
                           ),
-                          child: const Icon(
-                            Icons.fitness_center,
-                            size: 48,
-                            color: Colors.white,
+                          blendMode: BlendMode.srcIn,
+                          child: Image.asset(
+                            'assets/icons/pushin_logo_2.png',
+                            width: 200,
+                            height: 200,
+                            fit: BoxFit.contain,
                           ),
                         ),
                       ),

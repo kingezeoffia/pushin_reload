@@ -124,7 +124,7 @@ class EmergencyUnlockSettingsScreen extends StatelessWidget {
                       children: [
                         // Enable Toggle
                         _SettingToggle(
-                          icon: Icons.flash_on_rounded,
+                          icon: Icons.emergency,
                           title: 'Enable Emergency Unlock',
                           description: 'Allow bypassing workouts',
                           value: controller.emergencyUnlockEnabled,
@@ -217,7 +217,7 @@ class _UsageCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
-              hasUnlocks ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+              hasUnlocks ? Icons.emergency : Icons.emergency_outlined,
               color: const Color(0xFFFF9090),
               size: 28,
             ),
@@ -290,10 +290,6 @@ class _SettingToggle extends StatelessWidget {
             height: 48,
             decoration: BoxDecoration(
               color: const Color(0xFFFF6060).withOpacity(0.15),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.06),
-                width: 1,
-              ),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(

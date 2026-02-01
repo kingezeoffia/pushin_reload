@@ -139,7 +139,8 @@ void main() {
     test('should get workout reward description', () async {
       await controller.initialize();
 
-      final description = controller.getWorkoutRewardDescription('push-ups', 20);
+      final description =
+          controller.getWorkoutRewardDescription('push-ups', 20);
 
       expect(description, isNotNull);
       expect(description, isNotEmpty);

@@ -160,9 +160,6 @@ class _EditNameScreenState extends State<EditNameScreen> {
       if (success) {
         if (mounted) {
           Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Display name updated successfully')),
-          );
         }
       } else {
         setState(() {

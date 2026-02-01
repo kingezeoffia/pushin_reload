@@ -314,8 +314,14 @@ class ScreenTimeService {
       } else {
         throw ScreenTimeException.fromPlatformResponse(result);
       }
-    } on PlatformException catch (e) {
-      throw ScreenTimeException.fromPlatformException(e);
+    } on PlatformException {
+      // Return default response when platform method is not implemented
+      // This prevents the app from hanging on startup
+      return PendingNotificationResponse(
+        hasPendingNotification: false,
+        expired: false,
+        alreadyShown: false,
+      );
     }
   }
 

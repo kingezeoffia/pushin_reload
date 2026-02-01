@@ -1,6 +1,12 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/AuthenticationService.dart';
+import '../services/StripeCheckoutService.dart';
 
 /// Guest setup steps for state-driven navigation
 enum GuestSetupStep {
@@ -21,6 +27,7 @@ enum OnboardingStep {
   exercise,
   pushUpTest,
   emergencyUnlock,
+  paywall,
   completed,
 }
 
@@ -29,11 +36,13 @@ class AuthUser {
   final String id;
   final String? email;
   final String? name;
+  final String? profileImagePath;
 
   const AuthUser({
     required this.id,
     this.email,
     this.name,
+    this.profileImagePath,
   });
 }
 
@@ -59,9 +68,14 @@ class AuthStateProvider extends ChangeNotifier {
   static const String _onboardingStepKey = 'onboarding_step';
   static const String _showSignUpScreenKey = 'show_sign_up_screen';
   static const String _showSignInScreenKey = 'show_sign_in_screen';
+  static const String _profileImagePathKey = 'profile_image_path';
+  static const String _hasUsedAppBeforeKey = 'has_used_app_before';
 
   final SharedPreferences _prefs;
   final AuthenticationService _authService = AuthenticationService();
+
+  // Callback to refresh plan tier after auth state changes
+  Future<void> Function()? onAuthStateChanged;
 
   // State
   bool _isInitialized = false;
@@ -76,6 +90,14 @@ class AuthStateProvider extends ChangeNotifier {
   bool _isOnboardingCompleted = false;
   String? _errorMessage;
   AuthUser? _currentUser;
+
+  // Guest mode state
+
+  // Profile image state
+  String? _profileImagePath;
+
+  // Returning user state
+  bool _hasUsedAppBefore = false;
 
   // Onboarding data storage
   String? _fitnessLevel;
@@ -93,7 +115,13 @@ class AuthStateProvider extends ChangeNotifier {
   // Getters
   bool get isInitialized => _isInitialized;
   bool get isLoading => _isLoading;
-  bool get isAuthenticated => _currentUser != null;
+  bool get isAuthenticated {
+    final result = _currentUser != null;
+    debugPrint(
+        '🔐 AuthStateProvider.isAuthenticated: $result (_currentUser: ${_currentUser?.email ?? 'null'})');
+    return result;
+  }
+
   bool get justRegistered => _justRegistered;
   bool get isGuestMode => _isGuestMode;
   bool get guestCompletedSetup => _guestCompletedSetup;
@@ -115,30 +143,120 @@ class AuthStateProvider extends ChangeNotifier {
   String? get selectedWorkout => _selectedWorkout;
   int? get unlockDuration => _unlockDuration;
 
+  // Guest mode getters
+
+  // Profile image getters
+  String? get profileImagePath => _profileImagePath;
+
+  // Returning user getter
+  bool get hasUsedAppBefore => _hasUsedAppBefore;
+
   /// Initialize provider and restore persistent state
   Future<void> initialize() async {
     if (_isInitialized) return;
 
     debugPrint('🚀 AuthStateProvider.initialize() starting...');
 
-    // Restore persistent state
-    _isOnboardingCompleted = _prefs.getBool(_onboardingCompletedKey) ?? false;
-    _isGuestMode = _prefs.getBool(_guestModeKey) ?? false;
-    _guestCompletedSetup = _prefs.getBool(_guestSetupCompletedKey) ?? false;
-    final guestStepIndex = _prefs.getInt(_guestSetupStepKey) ?? 0;
-    _guestSetupStep = GuestSetupStep.values[guestStepIndex];
+    // FIRST: Restore profile image path before any user authentication logic
+    _profileImagePath = _prefs.getString(_profileImagePathKey);
+    debugPrint('🖼️ Restored profile image path: $_profileImagePath');
+
+    // Then check if user is authenticated
+    bool isUserAuthenticated = false;
+    try {
+      isUserAuthenticated = await _authService.isAuthenticated();
+      debugPrint('🔐 Authentication check result: $isUserAuthenticated');
+    } catch (e) {
+      debugPrint('⚠️ Authentication check failed (likely in test environment): $e');
+      isUserAuthenticated = false;
+    }
+
+    if (isUserAuthenticated) {
+      // User is authenticated - restore their user data and onboarding state
+      debugPrint('✅ User is authenticated - restoring user data and onboarding state');
+      try {
+        final user = await _authService.getCurrentUser();
+        if (user != null) {
+          _currentUser = AuthUser(
+            id: user.id.toString(),
+            email: user.email,
+            name: user.firstname,
+            profileImagePath: _profileImagePath, // Now properly restored before this point
+          );
+          debugPrint('✅ Restored authenticated user: ${_currentUser!.email}');
+
+          // For authenticated users, restore onboarding completion
+          _isOnboardingCompleted = _prefs.getBool(_onboardingCompletedKey) ?? false;
+          _onboardingStep = OnboardingStep.values[_prefs.getInt(_onboardingStepKey) ?? 0];
+          debugPrint('✅ Restored onboarding state: completed=$_isOnboardingCompleted, step=$_onboardingStep');
+        } else {
+          // getCurrentUser returned null, treat as not authenticated
+          debugPrint('⚠️ getCurrentUser returned null, treating as not authenticated');
+          isUserAuthenticated = false;
+          _currentUser = null;
+        }
+      } catch (e) {
+        debugPrint('❌ Error restoring authenticated user: $e');
+        // If error, treat as not authenticated
+        isUserAuthenticated = false;
+        _currentUser = null;
+      }
+    }
+
+    if (!isUserAuthenticated || _currentUser == null) {
+      // User is not authenticated - clear guest mode and onboarding state
+      debugPrint('👤 User is not authenticated - clearing guest mode and onboarding state');
+
+      // CRITICAL: Do NOT restore guest mode on app launch
+      // Guest users must authenticate when reopening the app
+      _isGuestMode = false; // Always start as false to force authentication
+      _guestCompletedSetup = false; // Clear guest setup completion
+      _guestSetupStep = GuestSetupStep.appsSelection; // Reset to first step
+      _isOnboardingCompleted = false; // Clear onboarding completion for guests
+      _onboardingStep = OnboardingStep.fitnessLevel; // Reset onboarding step
+
+      // Clear persistent guest mode data and onboarding data to prevent stale state
+      await _prefs.setBool(_guestModeKey, false);
+      await _prefs.setBool(_guestSetupCompletedKey, false);
+      await _prefs.setInt(_guestSetupStepKey, GuestSetupStep.appsSelection.index);
+      await _prefs.setBool(_onboardingCompletedKey, false);
+      await _prefs.setInt(_onboardingStepKey, OnboardingStep.fitnessLevel.index);
+
+      // IMPORTANT: Clear profile image path for non-authenticated users
+      // This prevents showing profile images when no user is logged in
+      _profileImagePath = null;
+      debugPrint('🧹 Cleared profile image path for non-authenticated user');
+    }
     final onboardingStepIndex = _prefs.getInt(_onboardingStepKey) ?? 0;
     _onboardingStep = OnboardingStep.values[onboardingStepIndex];
+
+    // Restore guest mode state
+
+    // Restore returning user state
+    _hasUsedAppBefore = _prefs.getBool(_hasUsedAppBeforeKey) ?? false;
+
+    // Clean up stale transient navigation flags that should never be persisted
+    // These are in-memory only and should always start as false on app launch
+    await _prefs.remove(_showSignUpScreenKey);
+    await _prefs.remove(_showSignInScreenKey);
+    _showSignUpScreen = false;
+    _showSignInScreen = false;
 
     _isInitialized = true;
     _isLoading = false;
 
     debugPrint('✅ AuthStateProvider initialized:');
+    debugPrint('   - isAuthenticated: $isAuthenticated');
+    debugPrint('   - currentUser: ${_currentUser?.email ?? 'null'}');
     debugPrint('   - onboardingCompleted: $_isOnboardingCompleted');
     debugPrint('   - guestMode: $_isGuestMode');
     debugPrint('   - guestSetupCompleted: $_guestCompletedSetup');
     debugPrint('   - guestSetupStep: $_guestSetupStep');
     debugPrint('   - onboardingStep: $_onboardingStep');
+    debugPrint('   - profileImagePath: $_profileImagePath');
+    debugPrint('   - hasUsedAppBefore: $_hasUsedAppBefore');
+    debugPrint('   - showSignUpScreen: $_showSignUpScreen (transient)');
+    debugPrint('   - showSignInScreen: $_showSignInScreen (transient)');
 
     notifyListeners();
   }
@@ -173,8 +291,19 @@ class AuthStateProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Enter guest mode and persist
-  void enterGuestMode() {
+  /// Mark that the user has used the app before
+  Future<void> _markAppAsUsed() async {
+    if (!_hasUsedAppBefore) {
+      _hasUsedAppBefore = true;
+      await _prefs.setBool(_hasUsedAppBeforeKey, true);
+      debugPrint('✅ Marked app as used - user is now a returning user');
+    }
+  }
+
+  /// Enter guest mode for current session only
+  /// Note: Guest mode does NOT persist across app sessions
+  /// Users must authenticate when reopening the app
+  Future<void> enterGuestMode() async {
     _isGuestMode = true;
     _guestCompletedSetup = false;
     _guestSetupStep = GuestSetupStep.appsSelection; // Start from first step
@@ -185,15 +314,22 @@ class AuthStateProvider extends ChangeNotifier {
     _showSignUpScreen = false;
     _showSignInScreen = false;
 
-    _prefs.setBool(_guestModeKey, true);
-    _prefs.setBool(_guestSetupCompletedKey, false);
-    _prefs.setInt(_guestSetupStepKey, GuestSetupStep.appsSelection.index);
-    _prefs.setBool(_onboardingCompletedKey, true);
-    _prefs.setBool(_showSignUpScreenKey, false);
-    _prefs.setBool(_showSignInScreenKey, false);
+    // Note: Guest mode persistence is intentionally disabled
+    // Guest mode only lasts for the current app session
+    await _prefs.setBool(
+        _guestModeKey, false); // Explicitly set to false for clarity
+    await _prefs.setBool(_guestSetupCompletedKey, false);
+    await _prefs.setInt(_guestSetupStepKey, GuestSetupStep.appsSelection.index);
+    await _prefs.setBool(_onboardingCompletedKey, true);
+
+    // Don't persist transient navigation flags - they should always start as false
+    // _showSignUpScreen and _showSignInScreen are transient state for navigation
+
+    // Mark that user has used the app
+    await _markAppAsUsed();
 
     debugPrint(
-        '👤 AuthStateProvider.enterGuestMode() - guest mode enabled (onboarding skipped), step: $_guestSetupStep');
+        '👤 AuthStateProvider.enterGuestMode() - guest mode enabled for current session only (onboarding skipped), step: $_guestSetupStep');
     notifyListeners();
   }
 
@@ -253,11 +389,13 @@ class AuthStateProvider extends ChangeNotifier {
       if (result.success && result.data != null) {
         // Update local user data
         final updatedUser = result.data!.user;
-        debugPrint('🔄 AuthStateProvider.updateProfile() - updating user data: name=${updatedUser.firstname}');
+        debugPrint(
+            '🔄 AuthStateProvider.updateProfile() - updating user data: name=${updatedUser.firstname}');
         _currentUser = AuthUser(
           id: updatedUser.id.toString(),
           email: updatedUser.email,
           name: updatedUser.firstname,
+          profileImagePath: _profileImagePath,
         );
 
         _isLoading = false;
@@ -368,11 +506,21 @@ class AuthStateProvider extends ChangeNotifier {
   /// BMAD v6 State Contract:
   /// State-driven navigation: replaces Navigator.push calls in auth screens
   void triggerSignUpFlow() {
+    debugPrint('🔄 AuthStateProvider.triggerSignUpFlow() CALLED');
+    debugPrint(
+        '   - Before: showSignUpScreen=$_showSignUpScreen, showSignInScreen=$_showSignInScreen');
+
     _showSignUpScreen = true;
     _showSignInScreen = false; // Clear sign in screen when showing sign up
+
     debugPrint(
-        '🔄 AuthStateProvider.triggerSignUpFlow(): true - showing SignUpScreen');
+        '   - After: showSignUpScreen=$_showSignUpScreen, showSignInScreen=$_showSignInScreen');
+    debugPrint('   - Calling notifyListeners() to trigger router rebuild...');
+
     notifyListeners();
+
+    debugPrint(
+        '   - ✅ notifyListeners() completed - router should show SignUpScreen');
   }
 
   /// Trigger sign in flow - shows SignInScreen via state-driven routing
@@ -380,11 +528,33 @@ class AuthStateProvider extends ChangeNotifier {
   /// BMAD v6 State Contract:
   /// State-driven navigation: replaces Navigator.push calls in auth screens
   void triggerSignInFlow() {
+    debugPrint('🔄 AuthStateProvider.triggerSignInFlow() CALLED');
+    debugPrint(
+        '   - Before: showSignUpScreen=$_showSignUpScreen, showSignInScreen=$_showSignInScreen');
+
+    // Always trigger a rebuild by temporarily clearing and re-setting flags
+    // This ensures navigation happens even if flags were already set
+    final wasSignInScreen = _showSignInScreen;
+    final wasSignUpScreen = _showSignUpScreen;
+
+    // Temporarily clear both flags to force a state change
+    _showSignInScreen = false;
+    _showSignUpScreen = false;
+
+    // Then set the desired state
     _showSignInScreen = true;
     _showSignUpScreen = false; // Clear sign up screen when showing sign in
+
     debugPrint(
-        '🔄 AuthStateProvider.triggerSignInFlow(): true - showing SignInScreen');
+        '   - After: showSignUpScreen=$_showSignUpScreen, showSignInScreen=$_showSignInScreen');
+    debugPrint(
+        '   - Was already set: signIn=$wasSignInScreen, signUp=$wasSignUpScreen');
+    debugPrint('   - Calling notifyListeners() to trigger router rebuild...');
+
     notifyListeners();
+
+    debugPrint(
+        '   - ✅ notifyListeners() completed - router should show SignInScreen');
   }
 
   /// Clear sign up flow - hides SignUpScreen
@@ -392,9 +562,9 @@ class AuthStateProvider extends ChangeNotifier {
   /// BMAD v6 State Contract:
   /// Called when user navigates away from SignUpScreen or completes flow
   void clearSignUpFlow() {
+    debugPrint('🔄 AuthStateProvider.clearSignUpFlow() CALLED');
     _showSignUpScreen = false;
-    debugPrint(
-        '🔄 AuthStateProvider.clearSignUpFlow(): false - hiding SignUpScreen');
+    debugPrint('   - showSignUpScreen set to: $_showSignUpScreen');
     notifyListeners();
   }
 
@@ -403,9 +573,9 @@ class AuthStateProvider extends ChangeNotifier {
   /// BMAD v6 State Contract:
   /// Called when user navigates away from SignInScreen or completes flow
   void clearSignInFlow() {
+    debugPrint('🔄 AuthStateProvider.clearSignInFlow() CALLED');
     _showSignInScreen = false;
-    debugPrint(
-        '🔄 AuthStateProvider.clearSignInFlow(): false - hiding SignInScreen');
+    debugPrint('   - showSignInScreen set to: $_showSignInScreen');
     notifyListeners();
   }
 
@@ -529,23 +699,49 @@ class AuthStateProvider extends ChangeNotifier {
           id: user.id.toString(),
           email: user.email,
           name: user.firstname,
+          profileImagePath: _profileImagePath,
         );
+
+        // Exit guest mode if user was previously a guest
+        if (_isGuestMode) {
+          exitGuestMode();
+        }
+
+        // CRITICAL FIX: Fetch fresh subscription status from server
+        // This ensures the new user's actual subscription status is loaded
+        await _fetchFreshSubscriptionStatus();
 
         // Clear sign-in screen flags since login is complete
         _showSignUpScreen = false;
         _showSignInScreen = false;
 
-        // For sign-in users who haven't completed onboarding, proceed to onboarding flow
-        if (!_isOnboardingCompleted) {
-          debugPrint(
-              '✅ AuthStateProvider.login() - login successful, proceeding to onboarding flow');
-        } else {
-          debugPrint(
-              '✅ AuthStateProvider.login() - login successful, onboarding already completed');
-        }
+        // For returning users who sign in, assume onboarding is completed
+        // This prevents first-time app downloads from showing onboarding for existing users
+        _isOnboardingCompleted = true;
+        _onboardingStep = OnboardingStep.completed;
+        await _prefs.setBool(_onboardingCompletedKey, true);
+        await _prefs.setInt(_onboardingStepKey, OnboardingStep.completed.index);
+
+        debugPrint(
+            '✅ AuthStateProvider.login() - login successful, marking onboarding as completed for returning user');
+
+        // Mark that user has used the app
+        await _markAppAsUsed();
 
         _isLoading = false;
         notifyListeners();
+
+        // CRITICAL FIX: Notify that auth state changed so plan tier can be refreshed
+        // This must happen after notifyListeners() above to ensure auth state is updated
+        try {
+          await onAuthStateChanged?.call();
+          debugPrint(
+              '✅ AuthStateProvider.login() - plan tier refresh callback completed');
+        } catch (e) {
+          debugPrint(
+              '❌ AuthStateProvider.login() - Error in plan tier refresh callback: $e');
+        }
+
         return true;
       } else {
         _isLoading = false;
@@ -593,23 +789,52 @@ class AuthStateProvider extends ChangeNotifier {
           id: user.id.toString(),
           email: user.email,
           name: user.firstname,
+          profileImagePath: _profileImagePath,
         );
+
+        // Exit guest mode if user was previously a guest
+        if (_isGuestMode) {
+          exitGuestMode();
+        }
+
+        // CRITICAL FIX: Fetch fresh subscription status from server
+        // This ensures the new user's actual subscription status is loaded
+        await _fetchFreshSubscriptionStatus();
 
         // BMAD v6: Explicit state transition - ONLY set here
         _justRegistered = true;
-        // CRITICAL FIX: Reset onboarding state for new users
-        _isOnboardingCompleted = false;
-        _onboardingStep = OnboardingStep.fitnessLevel;
-        // Clear any persisted onboarding state that might interfere
-        await _prefs.remove(_onboardingStepKey);
-        await _prefs.remove(_onboardingCompletedKey);
+
+        // If user was previously in guest mode, they already completed onboarding
+        // Preserve their onboarding completion and current step
+        final wasGuestMode = _isGuestMode;
+        if (wasGuestMode) {
+          debugPrint(
+              '🔄 User was previously in guest mode - preserving onboarding completion');
+          // Don't reset onboarding state for users who sign up after being guests
+          // Keep their current onboarding state (should already be completed)
+        } else {
+          // Reset onboarding state for completely new users
+          _isOnboardingCompleted = false;
+          _onboardingStep = OnboardingStep.fitnessLevel;
+          // Clear any persisted onboarding state that might interfere
+          await _prefs.remove(_onboardingStepKey);
+          await _prefs.remove(_onboardingCompletedKey);
+        }
         // Clear auth screen flags since user completed registration
         _showSignUpScreen = false;
         _showSignInScreen = false;
+
+        // Mark that user has used the app
+        await _markAppAsUsed();
+
         _isLoading = false;
         debugPrint(
             '✅ AuthStateProvider.register() - registration successful, justRegistered=true, onboarding reset');
         notifyListeners();
+
+        // Notify that auth state changed so plan tier can be refreshed
+        await onAuthStateChanged?.call();
+
         return true;
       } else {
         _isLoading = false;
@@ -651,7 +876,17 @@ class AuthStateProvider extends ChangeNotifier {
           id: user.id.toString(),
           email: user.email,
           name: user.firstname,
+          profileImagePath: _profileImagePath,
         );
+
+        // Exit guest mode if user was previously a guest
+        if (_isGuestMode) {
+          exitGuestMode();
+        }
+
+        // CRITICAL FIX: Fetch fresh subscription status from server
+        // This ensures the user's actual subscription status is loaded
+        await _fetchFreshSubscriptionStatus();
 
         if (result.data!.isNewUser) {
           // New user - show welcome screen and start onboarding
@@ -661,17 +896,30 @@ class AuthStateProvider extends ChangeNotifier {
           debugPrint(
               '✅ AuthStateProvider.signInWithGoogle() - new user, justRegistered=true, starting onboarding');
         } else {
-          // Returning user - don't show welcome screen, respect existing onboarding status
+          // Returning user - don't show welcome screen, mark onboarding as completed
           _justRegistered = false;
+          _isOnboardingCompleted = true;
+          _onboardingStep = OnboardingStep.completed;
+          await _prefs.setBool(_onboardingCompletedKey, true);
+          await _prefs.setInt(
+              _onboardingStepKey, OnboardingStep.completed.index);
           debugPrint(
-              '✅ AuthStateProvider.signInWithGoogle() - returning user, onboarding status preserved');
+              '✅ AuthStateProvider.signInWithGoogle() - returning user, onboarding marked as completed');
         }
 
         // Clear auth screen flags since sign-in is complete
         _showSignUpScreen = false;
         _showSignInScreen = false;
+
+        // Mark that user has used the app
+        await _markAppAsUsed();
+
         _isLoading = false;
         notifyListeners();
+
+        // Notify that auth state changed so plan tier can be refreshed
+        await onAuthStateChanged?.call();
+
         return true;
       } else {
         _isLoading = false;
@@ -713,7 +961,17 @@ class AuthStateProvider extends ChangeNotifier {
           id: user.id.toString(),
           email: user.email,
           name: user.firstname,
+          profileImagePath: _profileImagePath,
         );
+
+        // Exit guest mode if user was previously a guest
+        if (_isGuestMode) {
+          exitGuestMode();
+        }
+
+        // CRITICAL FIX: Fetch fresh subscription status from server
+        // This ensures the user's actual subscription status is loaded
+        await _fetchFreshSubscriptionStatus();
 
         if (result.data!.isNewUser) {
           // New user - show welcome screen and start onboarding
@@ -723,17 +981,30 @@ class AuthStateProvider extends ChangeNotifier {
           debugPrint(
               '✅ AuthStateProvider.signInWithApple() - new user, justRegistered=true, starting onboarding');
         } else {
-          // Returning user - don't show welcome screen, respect existing onboarding status
+          // Returning user - don't show welcome screen, mark onboarding as completed
           _justRegistered = false;
+          _isOnboardingCompleted = true;
+          _onboardingStep = OnboardingStep.completed;
+          await _prefs.setBool(_onboardingCompletedKey, true);
+          await _prefs.setInt(
+              _onboardingStepKey, OnboardingStep.completed.index);
           debugPrint(
-              '✅ AuthStateProvider.signInWithApple() - returning user, onboarding status preserved');
+              '✅ AuthStateProvider.signInWithApple() - returning user, onboarding marked as completed');
         }
 
         // Clear auth screen flags since sign-in is complete
         _showSignUpScreen = false;
         _showSignInScreen = false;
+
+        // Mark that user has used the app
+        await _markAppAsUsed();
+
         _isLoading = false;
         notifyListeners();
+
+        // Notify that auth state changed so plan tier can be refreshed
+        await onAuthStateChanged?.call();
+
         return true;
       } else {
         _isLoading = false;
@@ -756,16 +1027,86 @@ class AuthStateProvider extends ChangeNotifier {
 
   /// MVP logout implementation - replace with real auth service
   Future<void> logout() async {
+    debugPrint('🧹🧹🧹 ═══════════════════════════════════════════════');
+    debugPrint('🧹🧹🧹 AuthStateProvider.logout() CALLED');
+    debugPrint('🧹 Current state BEFORE logout:');
+    debugPrint('   - isAuthenticated: $isAuthenticated');
+    debugPrint('   - currentUser: ${_currentUser?.email ?? 'null'}');
+    debugPrint('   - isGuestMode: $isGuestMode');
+    debugPrint('   - isOnboardingCompleted: $isOnboardingCompleted');
+    debugPrint('🧹 ═══════════════════════════════════════════════');
+
     _isLoading = true;
     notifyListeners();
 
     try {
+      debugPrint('🧹 Calling _authService.logout()...');
       final success = await _authService.logout();
+      debugPrint('🧹 _authService.logout() returned: $success');
 
+      // Clear user state
+      debugPrint('🧹 Clearing user state...');
       _currentUser = null;
       _justRegistered = false;
       _errorMessage = null;
       _isLoading = false;
+      debugPrint('🧹 User state cleared: _currentUser = $_currentUser');
+
+      // CRITICAL: Clear all subscription-related cached data
+      // This prevents subscription data from persisting across different user accounts
+
+      // 1. Clear subscription cache completely using the service
+      // This removes ID, plan, status - everything.
+      final stripeService = StripeCheckoutService(
+        baseUrl: 'https://pushin-production.up.railway.app/api',
+        isTestMode: true,
+      );
+      await stripeService.clearSubscriptionCache();
+
+      // 3. Clear profile image
+      await removeProfileImage();
+
+      // 4. CRITICAL FIX: Reset onboarding state to force user back to auth screens
+      // This ensures the router shows WelcomeScreen instead of MainTabNavigation
+      _isOnboardingCompleted = false;
+      _onboardingStep = OnboardingStep.fitnessLevel;
+      await _prefs.setBool(_onboardingCompletedKey, false);
+      await _prefs.setInt(
+          _onboardingStepKey, OnboardingStep.fitnessLevel.index);
+
+      // 5. Clear guest mode state
+      _isGuestMode = false;
+      _guestCompletedSetup = false;
+      _guestSetupStep = GuestSetupStep.appsSelection;
+      await _prefs.setBool(_guestModeKey, false);
+      await _prefs.setBool(_guestSetupCompletedKey, false);
+      await _prefs.setInt(
+          _guestSetupStepKey, GuestSetupStep.appsSelection.index);
+
+      // 6. Clear any sign-up/sign-in screen flags
+      _showSignUpScreen = false;
+      _showSignInScreen = false;
+
+      debugPrint(
+          '🧹 AuthStateProvider.logout() - cleared all subscription, profile, onboarding, and guest mode data');
+      debugPrint('🧹 Logout state check:');
+      debugPrint('   - isAuthenticated: $isAuthenticated');
+      debugPrint('   - isGuestMode: $isGuestMode');
+      debugPrint('   - isOnboardingCompleted: $isOnboardingCompleted');
+      debugPrint('   - guestCompletedSetup: $guestCompletedSetup');
+      debugPrint('   - showSignUpScreen: $showSignUpScreen');
+      debugPrint('   - showSignInScreen: $showSignInScreen');
+      debugPrint('   - justRegistered: $justRegistered');
+
+      // Verify state is correct for showing WelcomeScreen
+      assert(!isAuthenticated, 'After logout, isAuthenticated should be false');
+      assert(!isGuestMode, 'After logout, isGuestMode should be false');
+      assert(!isOnboardingCompleted,
+          'After logout, isOnboardingCompleted should be false');
+      assert(
+          !showSignUpScreen, 'After logout, showSignUpScreen should be false');
+      assert(
+          !showSignInScreen, 'After logout, showSignInScreen should be false');
 
       if (success) {
         debugPrint('✅ AuthStateProvider.logout() - logout successful');
@@ -774,13 +1115,265 @@ class AuthStateProvider extends ChangeNotifier {
             '⚠️ AuthStateProvider.logout() - logout completed with warnings');
       }
 
+      debugPrint(
+          '🔔 Calling notifyListeners() to trigger router rebuild to WelcomeScreen...');
       notifyListeners();
+
+      // 7. Notify that auth state changed so plan tier can be refreshed to 'free'
+      // This is called ONCE after all state is cleared
+      debugPrint(
+          '🔄 Notifying PushinAppController to refresh plan tier to free...');
+      try {
+        await onAuthStateChanged?.call();
+        debugPrint('✅ Plan tier refresh callback completed');
+      } catch (e) {
+        debugPrint('❌ Error in plan tier refresh callback: $e');
+      }
     } catch (e) {
       _isLoading = false;
       _errorMessage = 'Logout failed';
       debugPrint('❌ AuthStateProvider.logout() - exception: $e');
       notifyListeners();
     }
+  }
+
+  /// Forgot password - send reset email
+  Future<bool> forgotPassword({required String email}) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final result = await _authService.forgotPassword(email: email);
+
+      if (result.success) {
+        debugPrint('✅ Forgot password email sent to: $email');
+        return true;
+      } else {
+        _errorMessage = result.error ?? 'Failed to send reset email';
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      debugPrint('💥 Forgot password error: $e');
+      _errorMessage = 'Network error occurred';
+      notifyListeners();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Reset password using token
+  Future<bool> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final result = await _authService.resetPassword(
+        token: token,
+        newPassword: newPassword,
+      );
+
+      if (result.success) {
+        debugPrint('✅ Password reset successful');
+        return true;
+      } else {
+        _errorMessage = result.error ?? 'Failed to reset password';
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      debugPrint('💥 Reset password error: $e');
+      _errorMessage = 'Network error occurred';
+      notifyListeners();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Fetch fresh subscription status from server and update cache
+  Future<void> _fetchFreshSubscriptionStatus() async {
+    if (_currentUser == null) {
+      debugPrint('⚠️ _fetchFreshSubscriptionStatus called but no current user');
+      return;
+    }
+
+    debugPrint('🔄 ═══════════════════════════════════════════════');
+    debugPrint('🔄 _fetchFreshSubscriptionStatus() called');
+    debugPrint('   - User ID: ${_currentUser!.id}');
+    debugPrint('   - User Email: ${_currentUser!.email}');
+    debugPrint('🔄 ═══════════════════════════════════════════════');
+
+    try {
+      final stripeService = StripeCheckoutService(
+        baseUrl: 'https://pushin-production.up.railway.app/api',
+        isTestMode: true,
+      );
+
+      // Fetch fresh subscription status from server
+      final subscriptionStatus = await stripeService.checkSubscriptionStatus(
+        userId: _currentUser!.id,
+      );
+
+      if (subscriptionStatus != null && subscriptionStatus.isActive) {
+        debugPrint('✅ Fresh subscription status fetched:');
+        debugPrint('   - planId: ${subscriptionStatus.planId}');
+        debugPrint('   - isActive: ${subscriptionStatus.isActive}');
+        debugPrint('   - customerId: ${subscriptionStatus.customerId}');
+        debugPrint('   - subscriptionId: ${subscriptionStatus.subscriptionId}');
+        debugPrint(
+            '   - currentPeriodEnd: ${subscriptionStatus.currentPeriodEnd}');
+
+        // CRITICAL: Save with the correct user ID to ensure persistence
+        final statusWithUserId = SubscriptionStatus(
+          isActive: subscriptionStatus.isActive,
+          planId: subscriptionStatus.planId,
+          customerId: subscriptionStatus.customerId,
+          subscriptionId: subscriptionStatus.subscriptionId,
+          currentPeriodEnd: subscriptionStatus.currentPeriodEnd,
+          cachedUserId: _currentUser!.id, // Associate with authenticated user
+        );
+        await stripeService.saveSubscriptionStatus(statusWithUserId);
+        debugPrint(
+            '✅ Subscription cache updated with userId: ${_currentUser!.id}');
+      } else {
+        debugPrint(
+            'ℹ️ No active subscription found on server for user: ${_currentUser!.id}');
+        // Don't cache 'free' status here - let refreshPlanTier handle it
+        // This prevents race conditions between different caching points
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Error fetching fresh subscription status: $e');
+      debugPrint('   Stack trace: $stackTrace');
+    }
+  }
+
+  /// Crop selected image
+  Future<File?> cropImage(File imageFile) async {
+    try {
+      CroppedFile? croppedFile = await ImageCropper().cropImage(
+        sourcePath: imageFile.path,
+        aspectRatio: const CropAspectRatio(
+            ratioX: 1, ratioY: 1), // Square aspect ratio for profile pictures
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Adjust Profile Picture',
+            toolbarColor: const Color(0xFF1A1A1A),
+            toolbarWidgetColor: Colors.white,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+            hideBottomControls: false,
+          ),
+          IOSUiSettings(
+            title: 'Adjust Profile Picture',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+            aspectRatioPickerButtonHidden: true,
+            rotateClockwiseButtonHidden: false,
+            rotateButtonsHidden: false,
+          ),
+        ],
+      );
+
+      if (croppedFile != null) {
+        return File(croppedFile.path);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('❌ Error cropping image: $e');
+      return null;
+    }
+  }
+
+  /// Pick profile image from gallery or camera with cropping
+  Future<bool> pickProfileImage(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? pickedFile = await picker.pickImage(
+        source: source,
+        maxWidth: 1024, // Higher resolution for better cropping
+        maxHeight: 1024,
+        imageQuality: 90, // Better quality for cropping
+      );
+
+      if (pickedFile != null) {
+        File imageFile = File(pickedFile.path);
+
+        // Allow user to crop the image
+        File? croppedImage = await cropImage(imageFile);
+
+        if (croppedImage != null) {
+          // Get app documents directory
+          final directory = await getApplicationDocumentsDirectory();
+          final imageName =
+              'profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          final savedImage = File('${directory.path}/$imageName');
+
+          // Copy the cropped file to app directory
+          await croppedImage.copy(savedImage.path);
+
+          // Store the path
+          await setProfileImagePath(savedImage.path);
+
+          debugPrint('✅ Profile image cropped and saved: ${savedImage.path}');
+          return true;
+        } else {
+          // User cancelled cropping
+          debugPrint('ℹ️ User cancelled image cropping');
+          return false;
+        }
+      }
+      return false;
+    } catch (e) {
+      debugPrint('❌ Error picking/cropping profile image: $e');
+      return false;
+    }
+  }
+
+  /// Set profile image path and persist
+  Future<void> setProfileImagePath(String? path) async {
+    _profileImagePath = path;
+    if (path != null) {
+      await _prefs.setString(_profileImagePathKey, path);
+    } else {
+      await _prefs.remove(_profileImagePathKey);
+    }
+
+    // Update current user with new profile image path
+    if (_currentUser != null) {
+      _currentUser = AuthUser(
+        id: _currentUser!.id,
+        email: _currentUser!.email,
+        name: _currentUser!.name,
+        profileImagePath: path,
+      );
+    }
+
+    debugPrint('🔄 Profile image path updated: $path');
+    notifyListeners();
+  }
+
+  /// Remove profile image
+  Future<void> removeProfileImage() async {
+    if (_profileImagePath != null) {
+      try {
+        final imageFile = File(_profileImagePath!);
+        if (await imageFile.exists()) {
+          await imageFile.delete();
+        }
+      } catch (e) {
+        debugPrint('⚠️ Error deleting profile image file: $e');
+      }
+    }
+    await setProfileImagePath(null);
   }
 
   @override

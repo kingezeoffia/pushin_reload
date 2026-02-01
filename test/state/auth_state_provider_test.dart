@@ -31,19 +31,22 @@ void main() {
       expect(authProvider.errorMessage, null);
     });
 
-    test('should restore persisted onboarding status', () async {
-      // Set persisted values
+    test(
+        'should NOT restore guest mode or onboarding on app restart (forces authentication)',
+        () async {
+      // Set persisted values as if user was previously in guest mode
       await prefs.setBool('onboarding_completed', true);
       await prefs.setBool('guest_mode', true);
       await prefs.setBool('guest_setup_completed', true);
 
-      // Reinitialize provider
+      // Reinitialize provider (simulates app restart)
       final newProvider = AuthStateProvider(prefs);
       await newProvider.initialize();
 
-      expect(newProvider.isOnboardingCompleted, true);
-      expect(newProvider.isGuestMode, true);
-      expect(newProvider.guestCompletedSetup, true);
+      // Guest mode should be cleared on app restart to force authentication
+      expect(newProvider.isOnboardingCompleted, false);
+      expect(newProvider.isGuestMode, false);
+      expect(newProvider.guestCompletedSetup, false);
     });
   });
 
@@ -67,13 +70,15 @@ void main() {
   });
 
   group('Guest Mode Management', () {
-    test('should enter guest mode and persist', () async {
+    test('should enter guest mode for current session only (no persistence)',
+        () async {
       await authProvider.initialize();
       authProvider.enterGuestMode();
 
       expect(authProvider.isGuestMode, true);
       expect(authProvider.guestCompletedSetup, false);
-      expect(prefs.getBool('guest_mode'), true);
+      // Guest mode should NOT persist across app sessions
+      expect(prefs.getBool('guest_mode'), false);
       expect(prefs.getBool('guest_setup_completed'), false);
     });
 
@@ -106,7 +111,7 @@ void main() {
       // register() should set justRegistered = true
       final success = await authProvider.register(
         email: 'test@example.com',
-        password: 'password123',
+        password: 'Password123!',
         name: 'Test User',
       );
       expect(success, true);
@@ -140,6 +145,81 @@ void main() {
     });
   });
 
+  group('Auth Screen Navigation', () {
+    test(
+        'triggerSignUpFlow should set showSignUpScreen to true and clear showSignInScreen',
+        () async {
+      await authProvider.initialize();
+
+      // Initially both should be false
+      expect(authProvider.showSignUpScreen, false);
+      expect(authProvider.showSignInScreen, false);
+
+      // Trigger sign up flow
+      authProvider.triggerSignUpFlow();
+
+      // Should set showSignUpScreen to true and showSignInScreen to false
+      expect(authProvider.showSignUpScreen, true);
+      expect(authProvider.showSignInScreen, false);
+    });
+
+    test(
+        'triggerSignInFlow should set showSignInScreen to true and clear showSignUpScreen',
+        () async {
+      await authProvider.initialize();
+
+      // Initially both should be false
+      expect(authProvider.showSignUpScreen, false);
+      expect(authProvider.showSignInScreen, false);
+
+      // Trigger sign in flow
+      authProvider.triggerSignInFlow();
+
+      // Should set showSignInScreen to true and showSignUpScreen to false
+      expect(authProvider.showSignInScreen, true);
+      expect(authProvider.showSignUpScreen, false);
+    });
+
+    test('triggerSignInFlow should force state change even when already set',
+        () async {
+      await authProvider.initialize();
+
+      // First trigger
+      authProvider.triggerSignInFlow();
+      expect(authProvider.showSignInScreen, true);
+      expect(authProvider.showSignUpScreen, false);
+
+      // Trigger again (should still work)
+      authProvider.triggerSignInFlow();
+      expect(authProvider.showSignInScreen, true);
+      expect(authProvider.showSignUpScreen, false);
+    });
+
+    test('clearSignUpFlow should set showSignUpScreen to false', () async {
+      await authProvider.initialize();
+
+      // Set sign up screen
+      authProvider.triggerSignUpFlow();
+      expect(authProvider.showSignUpScreen, true);
+
+      // Clear sign up flow
+      authProvider.clearSignUpFlow();
+      expect(authProvider.showSignUpScreen, false);
+    });
+
+    test('clearSignInFlow should set showSignInScreen to false', () async {
+      await authProvider.initialize();
+
+      // Set sign in screen
+      authProvider.triggerSignInFlow();
+      expect(authProvider.showSignInScreen, true);
+
+      // Clear sign in flow
+      authProvider.clearSignInFlow();
+      expect(authProvider.showSignInScreen, false);
+    });
+  });
+
   group('Guest Completion Flow - Onboarding Integration', () {
     late AuthStateProvider testProvider;
     late SharedPreferences testPrefs;
@@ -157,7 +237,8 @@ void main() {
     test('Guest completion should mark onboarding as completed', () {
       // Enter guest mode (should skip onboarding)
       testProvider.enterGuestMode();
-      expect(testProvider.isOnboardingCompleted, true); // Guests skip onboarding
+      expect(
+          testProvider.isOnboardingCompleted, true); // Guests skip onboarding
       expect(testProvider.isGuestMode, true);
       expect(testProvider.guestCompletedSetup, false);
 
@@ -170,7 +251,9 @@ void main() {
       expect(testProvider.isGuestMode, true);
     });
 
-    test('Guest completion should persist onboarding status', () async {
+    test(
+        'Guest completion should NOT persist across app sessions (forces authentication)',
+        () async {
       await testProvider.initialize();
 
       // Enter guest mode
@@ -179,14 +262,14 @@ void main() {
       // Complete guest setup
       testProvider.setGuestCompletedSetup();
 
-      // Create new provider to test persistence
+      // Create new provider to test app restart behavior
       final provider2 = AuthStateProvider(testPrefs);
       await provider2.initialize();
 
-      // Should restore both guest and onboarding completion
-      expect(provider2.guestCompletedSetup, true);
-      expect(provider2.isOnboardingCompleted, true);
-      expect(provider2.isGuestMode, true);
+      // Guest state should be cleared on app restart to force authentication
+      expect(provider2.guestCompletedSetup, false);
+      expect(provider2.isOnboardingCompleted, false);
+      expect(provider2.isGuestMode, false);
 
       provider2.dispose();
     });

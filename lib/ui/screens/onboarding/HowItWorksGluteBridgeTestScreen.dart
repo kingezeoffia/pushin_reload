@@ -4,9 +4,7 @@ import 'package:camera/camera.dart';
 import 'dart:async';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import '../../theme/pushin_theme.dart';
 import '../../../services/CameraWorkoutService.dart';
-import '../../../services/PoseDetectionService.dart' show GluteBridgeState;
 import 'HowItWorksWorkoutSuccessScreen.dart';
 
 /// Custom route that disables swipe back gesture on iOS
@@ -72,18 +70,13 @@ class _HowItWorksGluteBridgeTestScreenState extends State<HowItWorksGluteBridgeT
   // Track current camera lens direction for switching
   CameraLensDirection _currentCameraLens = CameraLensDirection.front;
 
-  // NEW: Workout initialization state (like main workout screen)
+  // Workout initialization state
   bool _isFullBodyDetected = false;
-  bool _isReadyToStart = false;
   bool _userPressedStart = false; // User intent - pressed START button
-  bool _isPositioning = false; // In positioning state after START pressed
   bool _workoutActive = false; // Workout is actively counting
   int _countdownValue = 3;
   bool _isCountingDown = false;
   Timer? _countdownTimer;
-  Timer? _stabilityTimer; // Timer to track stable pose before auto-countdown
-  DateTime? _readyStateStartTime; // When pose became ready
-  static const Duration _stabilityDuration = Duration(milliseconds: 1500); // 1.5 seconds stable
 
   // Mock glute bridge detection for demo
   static const int _targetReps = 3;
@@ -98,6 +91,7 @@ class _HowItWorksGluteBridgeTestScreenState extends State<HowItWorksGluteBridgeT
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _countdownTimer?.cancel();
     _cameraService?.dispose();
     super.dispose();
   }
@@ -134,33 +128,16 @@ class _HowItWorksGluteBridgeTestScreenState extends State<HowItWorksGluteBridgeT
 
     _cameraService!.onPoseUpdate = (result) {
       if (mounted) {
-        final wasReady = _isReadyToStart;
         setState(() {
           _feedbackMessage = result.feedbackMessage ?? 'Keep going!';
           _isFullBodyDetected = result.isFullBodyDetected;
-          _isReadyToStart = result.isReadyToStart;
         });
 
-        // Auto-countdown logic when in positioning state
-        if (_isPositioning && !_isCountingDown) {
-          if (_isReadyToStart) {
-            // Pose is ready - track stability
-            if (!wasReady) {
-              // Just became ready - start tracking
-              _readyStateStartTime = DateTime.now();
-            } else {
-              // Check if stable long enough
-              final now = DateTime.now();
-              if (_readyStateStartTime != null &&
-                  now.difference(_readyStateStartTime!) >= _stabilityDuration) {
-                // Stable for required duration - trigger countdown!
-                _triggerAutoCountdown();
-              }
-            }
-          } else {
-            // Not ready - reset stability timer
-            _readyStateStartTime = null;
-          }
+        // Auto-start detection when full body detected (during initial instructions)
+        if (_showInstructions && _isFullBodyDetected && !_userPressedStart) {
+          debugPrint('🎯 Full body detected! Auto-starting detection...');
+          _startDetection();
+          return;
         }
       }
     };
@@ -241,18 +218,20 @@ class _HowItWorksGluteBridgeTestScreenState extends State<HowItWorksGluteBridgeT
     await _initializeCameraService();
   }
 
-  /// User pressed START - enter positioning state (always allowed)
+  /// User pressed START - skip positioning state and check for full body immediately
   void _startDetection() {
     if (_userPressedStart || _isCountingDown) return;
 
     setState(() {
       _userPressedStart = true;
-      _isPositioning = true;
-      _showInstructions = false; // Hide instructions when positioning starts
+      _showInstructions = false; // Hide instructions when detection starts
     });
 
     // Notify pose detection service to enter positioning state
     _cameraService!.poseDetectionService?.enterPositioningState();
+
+    // Always start countdown immediately when detection starts
+    _triggerAutoCountdown();
 
     HapticFeedback.mediumImpact();
   }
@@ -263,7 +242,6 @@ class _HowItWorksGluteBridgeTestScreenState extends State<HowItWorksGluteBridgeT
 
     setState(() {
       _isCountingDown = true;
-      _isPositioning = false; // Exit positioning state
       _countdownValue = 3;
     });
 
@@ -362,9 +340,6 @@ class _HowItWorksGluteBridgeTestScreenState extends State<HowItWorksGluteBridgeT
                 child: Stack(
                   children: [
                     CameraPreview(controller),
-                    // Pose skeleton overlay
-                    if (_cameraService?.lastResult.isPoseDetected ?? false)
-                      _buildPoseSkeletonOverlay(),
                   ],
                 ),
               ),
@@ -383,9 +358,11 @@ class _HowItWorksGluteBridgeTestScreenState extends State<HowItWorksGluteBridgeT
     }
 
     return CustomPaint(
+      size: MediaQuery.of(context).size,
       painter: _PoseSkeletonPainter(
         keyPoints: result.keyPoints,
         phase: result.phase,
+        cameraController: _cameraService?.cameraController,
       ),
     );
   }
@@ -503,6 +480,10 @@ class _HowItWorksGluteBridgeTestScreenState extends State<HowItWorksGluteBridgeT
                                     ),
                                   ),
 
+                                // Pose skeleton overlay - moved outside camera preview for visibility
+                                if (_isInitialized && !_cameraFailed)
+                                  _buildPoseSkeletonOverlay(),
+
                                 // Instructions Overlay (initial state - before start pressed)
                                 if (_showInstructions)
                                   Positioned.fill(
@@ -547,42 +528,6 @@ class _HowItWorksGluteBridgeTestScreenState extends State<HowItWorksGluteBridgeT
                                             textAlign: TextAlign.center,
                                           ),
                                         ],
-                                      ),
-                                    ),
-                                  ),
-
-                                // Positioning Overlay (after start pressed, waiting for pose)
-                                if (!_showInstructions && _isPositioning && !_isCountingDown)
-                                  Positioned.fill(
-                                    child: Container(
-                                      color: Colors.black.withOpacity(0.3),
-                                      child: Center(
-                                        child: Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Text(
-                                              'Position yourself in frame',
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w600,
-                                                color: Colors.white.withOpacity(0.9),
-                                                letterSpacing: -0.2,
-                                              ),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              'Show full body from the side',
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                color: Colors.white.withOpacity(0.8),
-                                                fontWeight: FontWeight.w400,
-                                              ),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ],
-                                        ),
                                       ),
                                     ),
                                   ),
@@ -748,7 +693,7 @@ class _HowItWorksGluteBridgeTestScreenState extends State<HowItWorksGluteBridgeT
                             ),
                           ],
                         )
-                      else if (_isPositioning || _isCountingDown || _workoutActive)
+                      else if (_isCountingDown || _workoutActive)
                         // Button that changes based on state
                         Container(
                           padding: const EdgeInsets.only(top: 8, bottom: 8),
@@ -973,10 +918,12 @@ class _SkipWorkoutButtonState extends State<_SkipWorkoutButton> {
 class _PoseSkeletonPainter extends CustomPainter {
   final Map<String, Offset> keyPoints;
   final dynamic phase;
+  final CameraController? cameraController;
 
   _PoseSkeletonPainter({
     required this.keyPoints,
     required this.phase,
+    this.cameraController,
   });
 
   @override
@@ -984,70 +931,84 @@ class _PoseSkeletonPainter extends CustomPainter {
     if (keyPoints.isEmpty) return;
 
     final paint = Paint()
-      ..color = _getPhaseColor(phase)
+      ..color = const Color(0xFF6060FF).withOpacity(0.8)
       ..strokeWidth = 3
+      ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
-    // Draw pose connections (simplified skeleton)
-    _drawConnection(canvas, paint, 'nose', 'left_eye');
-    _drawConnection(canvas, paint, 'nose', 'right_eye');
-    _drawConnection(canvas, paint, 'left_eye', 'left_ear');
-    _drawConnection(canvas, paint, 'right_eye', 'right_ear');
-
-    // Shoulders
-    _drawConnection(canvas, paint, 'left_shoulder', 'right_shoulder');
-
-    // Arms
-    _drawConnection(canvas, paint, 'left_shoulder', 'left_elbow');
-    _drawConnection(canvas, paint, 'left_elbow', 'left_wrist');
-    _drawConnection(canvas, paint, 'right_shoulder', 'right_elbow');
-    _drawConnection(canvas, paint, 'right_elbow', 'right_wrist');
-
-    // Torso
-    _drawConnection(canvas, paint, 'left_shoulder', 'left_hip');
-    _drawConnection(canvas, paint, 'right_shoulder', 'right_hip');
-    _drawConnection(canvas, paint, 'left_hip', 'right_hip');
-
-    // Legs
-    _drawConnection(canvas, paint, 'left_hip', 'left_knee');
-    _drawConnection(canvas, paint, 'left_knee', 'left_ankle');
-    _drawConnection(canvas, paint, 'right_hip', 'right_knee');
-    _drawConnection(canvas, paint, 'right_knee', 'right_ankle');
-
-    // Draw keypoints as circles
-    final keyPointPaint = Paint()
-      ..color = _getPhaseColor(phase)
+    final pointPaint = Paint()
+      ..color = Colors.white
       ..style = PaintingStyle.fill;
 
-    keyPoints.forEach((key, point) {
-      canvas.drawCircle(point, 4, keyPointPaint);
-    });
-  }
+    // Scale factor for converting pose coordinates to screen coordinates
+    double scaleX = size.width;
+    double scaleY = size.height;
 
-  void _drawConnection(
-      Canvas canvas, Paint paint, String point1, String point2) {
-    final p1 = keyPoints[point1];
-    final p2 = keyPoints[point2];
-
-    if (p1 != null && p2 != null) {
-      canvas.drawLine(p1, p2, paint);
+    if (cameraController != null && cameraController!.value.isInitialized) {
+      final previewSize = cameraController!.value.previewSize!;
+      scaleX = size.width / previewSize.height;
+      scaleY = size.height / previewSize.width;
     }
-  }
 
-  Color _getPhaseColor(dynamic phase) {
-    if (phase is GluteBridgeState) {
-      switch (phase) {
-        case GluteBridgeState.up:
-          return Colors.green;
-        case GluteBridgeState.goingUp:
-          return Colors.yellow;
-        case GluteBridgeState.goingDown:
-          return Colors.orange;
-        case GluteBridgeState.down:
-          return Colors.blue;
+    // Check if we should mirror coordinates (only for back camera)
+    final shouldMirror =
+        cameraController?.description.lensDirection == CameraLensDirection.back;
+
+    // Define connections for upper body (relevant for push-ups)
+    final connections = [
+      ['leftShoulder', 'rightShoulder'],
+      ['leftShoulder', 'leftElbow'],
+      ['leftElbow', 'leftWrist'],
+      ['rightShoulder', 'rightElbow'],
+      ['rightElbow', 'rightWrist'],
+      ['leftShoulder', 'leftHip'],
+      ['rightShoulder', 'rightHip'],
+      ['leftHip', 'rightHip'],
+    ];
+
+    // Draw connections
+    for (final connection in connections) {
+      final point1Name = connection[0];
+      final point2Name = connection[1];
+
+      final point1 = keyPoints[point1Name];
+      final point2 = keyPoints[point2Name];
+
+      if (point1 != null && point2 != null) {
+        // Apply mirroring only for back camera (front camera preview is already mirrored)
+        final p1 = Offset(
+          shouldMirror ? size.width - (point1.dx * scaleX) : point1.dx * scaleX,
+          point1.dy * scaleY,
+        );
+        final p2 = Offset(
+          shouldMirror ? size.width - (point2.dx * scaleX) : point2.dx * scaleX,
+          point2.dy * scaleY,
+        );
+
+        canvas.drawLine(p1, p2, paint);
       }
     }
-    return Colors.white.withOpacity(0.7);
+
+    // Draw key points
+    for (final entry in keyPoints.entries) {
+      final point = entry.value;
+      final scaledPoint = Offset(
+        shouldMirror ? size.width - (point.dx * scaleX) : point.dx * scaleX,
+        point.dy * scaleY,
+      );
+
+      // Draw outer glow
+      canvas.drawCircle(
+        scaledPoint,
+        8,
+        Paint()
+          ..color = const Color(0xFF6060FF).withOpacity(0.3)
+          ..style = PaintingStyle.fill,
+      );
+
+      // Draw inner point
+      canvas.drawCircle(scaledPoint, 5, pointPaint);
+    }
   }
 
   @override

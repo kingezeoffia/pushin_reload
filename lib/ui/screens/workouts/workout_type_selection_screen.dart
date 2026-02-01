@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../../domain/models/workout_mode.dart';
 import '../../../services/WorkoutRewardCalculator.dart';
+import '../../../state/pushin_app_controller.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../workout/CameraRepCounterScreen.dart';
+import '../paywall/PaywallScreen.dart';
 
 /// Workout Type Selection Screen
 ///
@@ -31,42 +34,133 @@ class _WorkoutTypeSelectionScreenState
     extends State<WorkoutTypeSelectionScreen> {
   String? _selectedWorkout;
 
-  // Workouts list - all unlocked
-  final List<_WorkoutInfo> _workouts = [
-    _WorkoutInfo(
-      name: 'Push-Ups',
-      iconPath: 'assets/icons/pushup_icon.png',
-      fallbackIcon: Icons.fitness_center,
-      isLocked: false,
-    ),
-    _WorkoutInfo(
-      name: 'Squats',
-      iconPath: 'assets/icons/squats_icon.png',
-      fallbackIcon: Icons.airline_seat_legroom_normal,
-      isLocked: false,
-    ),
-    _WorkoutInfo(
-      name: 'Glute Bridge',
-      iconPath: 'assets/icons/glutebridge_icon.png',
-      fallbackIcon: Icons.accessibility_new,
-      isLocked: false,
-    ),
-    _WorkoutInfo(
-      name: 'Plank',
-      iconPath: 'assets/icons/plank_icon.png',
-      fallbackIcon: Icons.self_improvement,
-      isLocked: false,
-    ),
-    _WorkoutInfo(
-      name: 'Jumping Jacks',
-      iconPath: 'assets/icons/jumping_jacks_icon.png',
-      fallbackIcon: Icons.sports_gymnastics,
-      isLocked: false,
-    ),
-  ];
+  // Workouts list - dynamically locked based on subscription plan
+  List<_WorkoutInfo> get _workouts {
+    // Determine which workouts are unlocked based on plan
+    // Free: 1 workout (push-ups only)
+    // Pro: 3 workouts (push-ups, squats, jumping jacks)
+    // Advanced: All 5 workouts
+
+    // Get plan tier directly from PushinAppController for real-time updates
+    final pushinController = context.watch<PushinAppController>();
+    final userPlan = pushinController.planTier;
+
+    final isPro = userPlan == 'pro';
+    final isAdvanced = userPlan == 'advanced';
+
+    print(
+        '🔍 WorkoutSelection: Current plan: $userPlan, isPro: $isPro, isAdvanced: $isAdvanced');
+
+    return [
+      _WorkoutInfo(
+        name: 'Push-Ups',
+        iconPath: 'assets/icons/pushup_icon.png',
+        fallbackIcon: Icons.fitness_center,
+        isLocked: false, // Always available for all plans
+        availableInPlan: null,
+      ),
+      _WorkoutInfo(
+        name: 'Squats',
+        iconPath: 'assets/icons/squats_icon.png',
+        fallbackIcon: Icons.airline_seat_legroom_normal,
+        isLocked: !isPro && !isAdvanced,
+        availableInPlan: 'PRO',
+      ),
+      _WorkoutInfo(
+        name: 'Jumping Jacks',
+        iconPath: 'assets/icons/jumping_jacks_icon.png',
+        fallbackIcon: Icons.sports_gymnastics,
+        isLocked: !isPro && !isAdvanced,
+        availableInPlan: 'PRO',
+      ),
+      _WorkoutInfo(
+        name: 'Plank',
+        iconPath: 'assets/icons/plank_icon.png',
+        fallbackIcon: Icons.self_improvement,
+        isLocked: !isAdvanced,
+        availableInPlan: 'ADVANCED',
+      ),
+      _WorkoutInfo(
+        name: 'Glute Bridge',
+        iconPath: 'assets/icons/glutebridge_icon.png',
+        fallbackIcon: Icons.accessibility_new,
+        isLocked: !isAdvanced,
+        availableInPlan: 'ADVANCED',
+      ),
+    ];
+  }
 
   void _startWorkout() {
     if (_selectedWorkout == null) return;
+
+    // Get current plan tier using read() for method callbacks
+    final pushinController = context.read<PushinAppController>();
+    final userPlan = pushinController.planTier;
+    final isPro = userPlan == 'pro';
+    final isAdvanced = userPlan == 'advanced';
+
+    print('🎯 _startWorkout: Selected workout: $_selectedWorkout, Plan: $userPlan');
+
+    // Build workout list with current lock states
+    final workouts = [
+      _WorkoutInfo(
+        name: 'Push-Ups',
+        iconPath: 'assets/icons/pushup_icon.png',
+        fallbackIcon: Icons.fitness_center,
+        isLocked: false,
+        availableInPlan: null,
+      ),
+      _WorkoutInfo(
+        name: 'Squats',
+        iconPath: 'assets/icons/squats_icon.png',
+        fallbackIcon: Icons.airline_seat_legroom_normal,
+        isLocked: !isPro && !isAdvanced,
+        availableInPlan: 'PRO',
+      ),
+      _WorkoutInfo(
+        name: 'Jumping Jacks',
+        iconPath: 'assets/icons/jumping_jacks_icon.png',
+        fallbackIcon: Icons.sports_gymnastics,
+        isLocked: !isPro && !isAdvanced,
+        availableInPlan: 'PRO',
+      ),
+      _WorkoutInfo(
+        name: 'Plank',
+        iconPath: 'assets/icons/plank_icon.png',
+        fallbackIcon: Icons.self_improvement,
+        isLocked: !isAdvanced,
+        availableInPlan: 'ADVANCED',
+      ),
+      _WorkoutInfo(
+        name: 'Glute Bridge',
+        iconPath: 'assets/icons/glutebridge_icon.png',
+        fallbackIcon: Icons.accessibility_new,
+        isLocked: !isAdvanced,
+        availableInPlan: 'ADVANCED',
+      ),
+    ];
+
+    // Check if the selected workout is locked
+    final selectedWorkoutInfo = workouts.firstWhere(
+      (workout) => workout.name == _selectedWorkout,
+    );
+
+    print('🎯 _startWorkout: isLocked=${selectedWorkoutInfo.isLocked}, availableInPlan=${selectedWorkoutInfo.availableInPlan}');
+
+    if (selectedWorkoutInfo.isLocked) {
+      // Navigate to paywall for locked workouts with pre-selected plan
+      print('🎯 _startWorkout: Navigating to paywall with plan: ${selectedWorkoutInfo.availableInPlan?.toLowerCase()}');
+      HapticFeedback.mediumImpact();
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PaywallScreen(
+            preSelectedPlan: selectedWorkoutInfo.availableInPlan?.toLowerCase(),
+          ),
+        ),
+      );
+      return;
+    }
 
     HapticFeedback.mediumImpact();
 
@@ -175,10 +269,12 @@ class _WorkoutTypeSelectionScreenState
                     ),
                     ShaderMask(
                       shaderCallback: (bounds) => LinearGradient(
-                        colors: [
-                          widget.selectedMode.color,
-                          widget.selectedMode.color.withOpacity(0.7),
-                        ],
+                        colors: widget.selectedMode == WorkoutMode.normal
+                            ? const [Color(0xFF6060FF), Color(0xFF9090FF)]
+                            : [
+                                widget.selectedMode.color,
+                                widget.selectedMode.color.withOpacity(0.7),
+                              ],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ).createShader(
@@ -236,13 +332,10 @@ class _WorkoutTypeSelectionScreenState
                             workout: workout,
                             isSelected: isSelected,
                             modeColor: widget.selectedMode.color,
-                            onTap: workout.isLocked
-                                ? null
-                                : () {
-                                    HapticFeedback.lightImpact();
-                                    setState(
-                                        () => _selectedWorkout = workout.name);
-                                  },
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              setState(() => _selectedWorkout = workout.name);
+                            },
                           );
                         },
                       ),
@@ -280,6 +373,9 @@ class _WorkoutTypeSelectionScreenState
                 child: _StartButton(
                   enabled: _selectedWorkout != null,
                   modeColor: widget.selectedMode.color,
+                  selectedWorkout: _selectedWorkout != null
+                      ? _workouts.firstWhere((w) => w.name == _selectedWorkout)
+                      : null,
                   onTap: _startWorkout,
                 ),
               ),
@@ -297,12 +393,15 @@ class _WorkoutInfo {
   final String iconPath;
   final IconData fallbackIcon;
   final bool isLocked;
+  final String?
+      availableInPlan; // 'PRO' or 'ADVANCED', null if always available
 
   const _WorkoutInfo({
     required this.name,
     required this.iconPath,
     required this.fallbackIcon,
     required this.isLocked,
+    this.availableInPlan,
   });
 }
 
@@ -329,11 +428,7 @@ class _WorkoutCard extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
-          color: isSelected
-              ? Colors.white
-              : isLocked
-                  ? Colors.white.withOpacity(0.04)
-                  : Colors.white.withOpacity(0.10),
+          color: isSelected ? Colors.white : Colors.white.withOpacity(0.10),
           borderRadius: BorderRadius.circular(24),
           boxShadow: isSelected
               ? [
@@ -363,18 +458,14 @@ class _WorkoutCard extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: isSelected
                             ? modeColor.withOpacity(0.12)
-                            : isLocked
-                                ? Colors.white.withOpacity(0.05)
-                                : Colors.white.withOpacity(0.12),
+                            : Colors.white.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(24),
                       ),
                       child: Image.asset(
                         workout.iconPath,
                         color: isSelected
                             ? modeColor
-                            : isLocked
-                                ? Colors.white.withOpacity(0.25)
-                                : Colors.white.withOpacity(0.9),
+                            : Colors.white.withOpacity(0.9),
                         width: 40,
                         height: 40,
                         errorBuilder: (context, error, stackTrace) {
@@ -382,9 +473,7 @@ class _WorkoutCard extends StatelessWidget {
                             workout.fallbackIcon,
                             color: isSelected
                                 ? modeColor
-                                : isLocked
-                                    ? Colors.white.withOpacity(0.25)
-                                    : Colors.white.withOpacity(0.9),
+                                : Colors.white.withOpacity(0.9),
                             size: 40,
                           );
                         },
@@ -400,9 +489,7 @@ class _WorkoutCard extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                       color: isSelected
                           ? modeColor
-                          : isLocked
-                              ? Colors.white.withOpacity(0.25)
-                              : Colors.white,
+                          : Colors.white, // Same brightness for all workouts
                       letterSpacing: -0.3,
                     ),
                     textAlign: TextAlign.center,
@@ -411,22 +498,29 @@ class _WorkoutCard extends StatelessWidget {
                   // Premium label for locked items
                   SizedBox(
                     height: 20,
-                    child: isLocked
+                    child: isLocked && workout.availableInPlan != null
                         ? Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.08),
+                              color: isSelected
+                                  ? modeColor.withOpacity(
+                                      0.12) // Match selected icon background
+                                  : Colors.white.withOpacity(0.08),
                               borderRadius: BorderRadius.circular(100),
                             ),
                             child: Text(
-                              'Coming soon',
+                              workout.availableInPlan!,
                               style: TextStyle(
                                 fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.white.withOpacity(0.35),
+                                fontWeight: FontWeight.w700,
+                                color: isSelected
+                                    ? modeColor // Match selected workout mode color
+                                    : const Color(
+                                        0xFFFFB347), // Advanced orange color for both PRO and ADVANCED
+                                letterSpacing: 0.5,
                               ),
                             ),
                           )
@@ -436,18 +530,6 @@ class _WorkoutCard extends StatelessWidget {
                 ],
               ),
             ),
-
-            // Lock icon
-            if (isLocked)
-              Positioned(
-                top: 12,
-                right: 12,
-                child: Icon(
-                  Icons.lock_rounded,
-                  color: Colors.white.withOpacity(0.2),
-                  size: 16,
-                ),
-              ),
           ],
         ),
       ),
@@ -459,13 +541,24 @@ class _WorkoutCard extends StatelessWidget {
 class _StartButton extends StatelessWidget {
   final bool enabled;
   final Color modeColor;
+  final _WorkoutInfo? selectedWorkout;
   final VoidCallback onTap;
 
   const _StartButton({
     required this.enabled,
     required this.modeColor,
+    required this.selectedWorkout,
     required this.onTap,
   });
+
+  String _getButtonText() {
+    if (!enabled || selectedWorkout == null) {
+      return "LET'S GO!";
+    }
+
+    // Show "Start Free Trial" if the selected workout is locked
+    return selectedWorkout!.isLocked ? 'Start Free Trial' : "LET'S GO!";
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -498,7 +591,7 @@ class _StartButton extends StatelessWidget {
               color: enabled ? Colors.black : Colors.white.withOpacity(0.4),
               letterSpacing: -0.3,
             ),
-            child: const Text("LET'S GO!"),
+            child: Text(_getButtonText()),
           ),
         ),
       ),

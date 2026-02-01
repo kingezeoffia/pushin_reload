@@ -7,10 +7,10 @@ import '../../state/auth_state_provider.dart';
 import '../../services/StripeCheckoutService.dart';
 import '../widgets/AppBlockOverlay.dart';
 import '../widgets/EmergencyUnlockDialog.dart';
-import '../widgets/DevTools.dart'; // TEMPORARY: Remove before production
 import '../widgets/GOStepsBackground.dart';
 import '../widgets/PressAnimationButton.dart';
-import 'pushin_settings_screen.dart';
+import 'enhanced_settings_screen.dart';
+import 'paywall/PaywallScreen.dart';
 import 'workout/RepCounterScreen.dart';
 import 'workout/WorkoutSelectionScreen.dart';
 
@@ -30,10 +30,11 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, TickerProviderStateMixin {
-  late AnimationController _headerController;
-  late Animation<double> _headerSlideAnimation;
-  late Animation<double> _headerFadeAnimation;
+class _HomeScreenState extends State<HomeScreen>
+    with WidgetsBindingObserver, TickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _slideAnimation;
+  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
@@ -48,39 +49,39 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
       controller.onStartWorkoutFromIntent = (blockedApp) {
         print('HomeScreen: Navigating to workout from intent');
         // Navigate to workout selection screen
-        _navigateWithSlideAnimation(const WorkoutSelectionScreen());
+        _navigateWithSlideAnimation(context, const WorkoutSelectionScreen());
       };
     });
   }
 
   void _initializeAnimations() {
-    _headerController = AnimationController(
+    _animationController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
 
-    _headerSlideAnimation = Tween<double>(
-      begin: -50.0,
+    _slideAnimation = Tween<double>(
+      begin: 30.0,
       end: 0.0,
     ).animate(CurvedAnimation(
-      parent: _headerController,
+      parent: _animationController,
       curve: Curves.easeOutCubic,
     ));
 
-    _headerFadeAnimation = Tween<double>(
+    _fadeAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
     ).animate(CurvedAnimation(
-      parent: _headerController,
+      parent: _animationController,
       curve: Curves.easeOut,
     ));
 
-    _headerController.forward();
+    _animationController.forward();
   }
 
   @override
   void dispose() {
-    _headerController.dispose();
+    _animationController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -117,32 +118,68 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
             ),
 
             // Block overlay (shown when blocked app launched or daily cap hit)
-            ValueListenableBuilder<BlockOverlayState?>(
-              valueListenable:
-                  context.watch<PushinAppController>().blockOverlayState,
-              builder: (context, overlayState, _) {
+            Consumer<PushinAppController>(
+              builder: (context, controller, _) {
+                final overlayState = controller.blockOverlayState.value;
                 if (overlayState != null) {
-                  final controller = context.read<PushinAppController>();
                   final isSuccessOverlay =
                       overlayState.reason == BlockReason.workoutCompleted;
 
+                  final emergencyEnabled = isSuccessOverlay
+                      ? false
+                      : controller.emergencyUnlockEnabled;
                   return AppBlockOverlay(
+                    key: ValueKey(
+                        'overlay_${overlayState.reason}_${emergencyEnabled}'),
                     reason: overlayState.reason,
                     blockedAppName: overlayState.appName,
-                    emergencyUnlockEnabled:
-                        isSuccessOverlay ? false : controller.emergencyUnlockEnabled,
-                    emergencyUnlocksRemaining: controller.emergencyUnlocksRemaining,
+                    emergencyUnlockEnabled: emergencyEnabled,
+                    emergencyUnlocksRemaining:
+                        controller.emergencyUnlocksRemaining,
                     onStartWorkout: () {
                       // For success overlay, just dismiss without navigation
                       if (isSuccessOverlay) {
                         controller.dismissBlockOverlay();
                       } else {
                         controller.dismissBlockOverlay();
-                        _navigateWithSlideAnimation(const WorkoutSelectionScreen());
+                        _navigateWithSlideAnimation(
+                            context, const WorkoutSelectionScreen());
+                      }
                     },
                     onEmergencyUnlock: isSuccessOverlay
                         ? null
                         : () async {
+                            // Check if user has paid subscription for emergency unlock
+                            final authProvider =
+                                context.read<AuthStateProvider>();
+                            final stripeService = StripeCheckoutService(
+                              baseUrl:
+                                  'https://pushin-production.up.railway.app/api',
+                              isTestMode: true,
+                            );
+
+                            final subscriptionStatus =
+                                await stripeService.checkSubscriptionStatus(
+                              userId: authProvider.currentUser?.id,
+                            );
+
+                            final isPaidUser =
+                                subscriptionStatus?.isPaid ?? false;
+
+                            if (!isPaidUser) {
+                              // Show paywall for free users trying to use emergency unlock
+                              HapticFeedback.mediumImpact();
+                              if (context.mounted) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const PaywallScreen(),
+                                  ),
+                                );
+                              }
+                              return;
+                            }
+
                             HapticFeedback.mediumImpact();
                             final confirmed = await EmergencyUnlockDialog.show(
                               context: context,
@@ -152,7 +189,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
                                   controller.emergencyUnlocksRemaining,
                             );
                             if (confirmed) {
-                              final success = await controller.useEmergencyUnlock(
+                              final success =
+                                  await controller.useEmergencyUnlock(
                                 overlayState.appName ?? 'App',
                               );
                               if (success && context.mounted) {
@@ -176,7 +214,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
                     onGoToSettings: isSuccessOverlay
                         ? null
                         : () {
-                            _navigateWithSlideAnimation(const PushinSettingsScreen());
+                            _navigateWithSlideAnimation(
+                                context, const EnhancedSettingsScreen());
+                          },
                   );
                 }
                 return const SizedBox.shrink();
@@ -194,16 +234,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
                   size: 28,
                 ),
                 onPressed: () {
-                  _navigateWithSlideAnimation(const PushinSettingsScreen());
+                  _navigateWithSlideAnimation(
+                      context, const EnhancedSettingsScreen());
+                },
                 style: IconButton.styleFrom(
                   backgroundColor: Colors.white.withOpacity(0.1),
                   padding: const EdgeInsets.all(12),
                 ),
               ),
             ),
-
-            // TEMPORARY: Development tools - REMOVE BEFORE PRODUCTION
-            DevTools(),
 
             // Payment success overlay
             ValueListenableBuilder<SubscriptionStatus?>(
@@ -253,36 +292,66 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, Ti
         return _ExpiredStateView(controller: controller, now: now);
     }
   }
+
+  void _navigateWithSlideAnimation(BuildContext context, Widget screen) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => screen,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          const curve = Curves.easeOutCubic;
+
+          var tween =
+              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          );
+        },
+      ),
+    );
+  }
 }
 
 /// LOCKED state view - Onboarding-style design
-class _LockedStateView extends StatelessWidget {
+class _LockedStateView extends StatefulWidget {
   final PushinAppController controller;
 
   const _LockedStateView({required this.controller});
 
   @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Spacer for top
-          SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+  State<_LockedStateView> createState() => _LockedStateViewState();
+}
 
-          // Main headline
-          AnimatedBuilder(
-            animation: _headerController,
-            builder: (context, child) {
-              return Transform.translate(
-                offset: Offset(0, _headerSlideAnimation.value),
-                child: Opacity(
-                  opacity: _headerFadeAnimation.value,
-                  child: child,
-                ),
-              );
-            },
-            child: Padding(
+class _LockedStateViewState extends State<_LockedStateView> {
+  @override
+  Widget build(BuildContext context) {
+    final homeState = context.findAncestorStateOfType<_HomeScreenState>()!;
+
+    return AnimatedBuilder(
+      animation: homeState._animationController,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, homeState._slideAnimation.value),
+          child: Opacity(
+            opacity: homeState._fadeAnimation.value,
+            child: child,
+          ),
+        );
+      },
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Spacer for top
+            SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+
+            // Main headline
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -329,79 +398,107 @@ class _LockedStateView extends StatelessWidget {
                 ],
               ),
             ),
-          ),
 
-          const SizedBox(height: 40),
+            const SizedBox(height: 40),
 
-          // Workout option card
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: _OnboardingStyleWorkoutCard(
-              icon: Icons.fitness_center,
-              title: 'Push-Ups',
-              subtitle: controller.getWorkoutRewardDescription('push-ups', 20),
-              onTap: () {
-                _navigateWithSlideAnimation(const RepCounterScreen( 
-                  workoutType: 'push-ups', 
-                  targetReps: 20, 
-                  desiredScreenTimeMinutes: 10, 
-                ));
-                );
-              },
+            // Workout option card
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: _OnboardingStyleWorkoutCard(
+                icon: Icons.fitness_center,
+                title: 'Push-Ups',
+                subtitle: widget.controller
+                    .getWorkoutRewardDescription('push-ups', 20),
+                onTap: () {
+                  _navigateWithSlideAnimation(
+                      context,
+                      const RepCounterScreen(
+                        workoutType: 'push-ups',
+                        targetReps: 20,
+                        desiredScreenTimeMinutes: 10,
+                      ));
+                },
+              ),
             ),
-          ),
 
-          const Spacer(),
+            const Spacer(),
 
-          // Start Workout Button
-          Padding(
-            padding: const EdgeInsets.fromLTRB(32, 16, 32, 16),
-            child: PressAnimationButton(
-              onTap: () {
-                _navigateWithSlideAnimation(const WorkoutSelectionScreen());
-              child: Container(
-                width: double.infinity,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.95),
-                  borderRadius: BorderRadius.circular(100),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.white.withOpacity(0.2),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: const Center(
-                  child: Text(
-                    'Choose Workout',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF2A2A6A),
-                      letterSpacing: -0.3,
+            // Start Workout Button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 16, 32, 16),
+              child: PressAnimationButton(
+                onTap: () {
+                  _navigateWithSlideAnimation(
+                      context, const WorkoutSelectionScreen());
+                },
+                child: Container(
+                  width: double.infinity,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(100),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.2),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Choose Workout',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF2A2A6A),
+                        letterSpacing: -0.3,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
 
-          // Quick start subtitle
-          Padding(
-            padding: const EdgeInsets.only(bottom: 32),
-            child: Center(
-              child: Text(
-                'Or tap the card above for quick start',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withOpacity(0.5),
+            // Quick start subtitle
+            Padding(
+              padding: const EdgeInsets.only(bottom: 32),
+              child: Center(
+                child: Text(
+                  'Or tap the card above for quick start',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white.withOpacity(0.5),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateWithSlideAnimation(BuildContext context, Widget screen) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => screen,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          const curve = Curves.easeOutCubic;
+
+          var tween =
+              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400),
       ),
     );
   }
@@ -485,7 +582,6 @@ class _OnboardingStyleWorkoutCard extends StatelessWidget {
   }
 }
 
-
 /// EARNING state view (workout in progress) - Onboarding style
 class _EarningStateView extends StatelessWidget {
   final PushinAppController controller;
@@ -541,7 +637,8 @@ class _EarningStateView extends StatelessWidget {
                       value: progress,
                       strokeWidth: 12,
                       backgroundColor: Colors.white.withOpacity(0.1),
-                      valueColor: const AlwaysStoppedAnimation(Color(0xFF6060FF)),
+                      valueColor:
+                          const AlwaysStoppedAnimation(Color(0xFF6060FF)),
                     ),
                   ),
                   ShaderMask(
@@ -713,7 +810,7 @@ class _EarningStateView extends StatelessWidget {
 }
 
 /// UNLOCKED state view - Onboarding style
-class _UnlockedStateView extends StatelessWidget {
+class _UnlockedStateView extends StatefulWidget {
   final PushinAppController controller;
   final DateTime now;
 
@@ -723,31 +820,38 @@ class _UnlockedStateView extends StatelessWidget {
   });
 
   @override
+  State<_UnlockedStateView> createState() => _UnlockedStateViewState();
+}
+
+class _UnlockedStateViewState extends State<_UnlockedStateView> {
+  @override
   Widget build(BuildContext context) {
-    final remainingSeconds = controller.getUnlockTimeRemaining(now);
+    final homeState = context.findAncestorStateOfType<_HomeScreenState>()!;
+    final remainingSeconds =
+        widget.controller.getUnlockTimeRemaining(widget.now);
     final minutes = remainingSeconds ~/ 60;
     final seconds = remainingSeconds % 60;
 
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Spacer for top
-          SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+    return AnimatedBuilder(
+      animation: homeState._animationController,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, homeState._slideAnimation.value),
+          child: Opacity(
+            opacity: homeState._fadeAnimation.value,
+            child: child,
+          ),
+        );
+      },
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Spacer for top
+            SizedBox(height: MediaQuery.of(context).size.height * 0.06),
 
-          // Main headline
-          AnimatedBuilder(
-            animation: _headerController,
-            builder: (context, child) {
-              return Transform.translate(
-                offset: Offset(0, _headerSlideAnimation.value),
-                child: Opacity(
-                  opacity: _headerFadeAnimation.value,
-                  child: child,
-                ),
-              );
-            },
-            child: Padding(
+            // Main headline
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -794,106 +898,133 @@ class _UnlockedStateView extends StatelessWidget {
                 ],
               ),
             ),
-          ),
 
-          const Spacer(),
+            const Spacer(),
 
-          // Countdown timer card
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 32,
-                vertical: 40,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Column(
-                children: [
-                  ShaderMask(
-                    shaderCallback: (bounds) => const LinearGradient(
-                      colors: [Color(0xFF10B981), Color(0xFF34D399)],
-                    ).createShader(bounds),
-                    blendMode: BlendMode.srcIn,
-                    child: Text(
-                      '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
-                      style: const TextStyle(
-                        fontSize: 72,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 4,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'TIME REMAINING',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white.withOpacity(0.5),
-                      letterSpacing: 2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const Spacer(),
-
-          // Earn More Time button
-          Padding(
-            padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
-            child: PressAnimationButton(
-              onTap: () {
-                _navigateWithSlideAnimation(const WorkoutSelectionScreen());
+            // Countdown timer card
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Container(
                 width: double.infinity,
-                height: 52,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 40,
+                ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.95),
-                  borderRadius: BorderRadius.circular(100),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.white.withOpacity(0.2),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
+                  color: Colors.white.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Column(
+                  children: [
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Color(0xFF10B981), Color(0xFF34D399)],
+                      ).createShader(bounds),
+                      blendMode: BlendMode.srcIn,
+                      child: Text(
+                        '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
+                        style: const TextStyle(
+                          fontSize: 72,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 4,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'TIME REMAINING',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withOpacity(0.5),
+                        letterSpacing: 2,
+                      ),
                     ),
                   ],
                 ),
-                child: const Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.fitness_center, size: 20, color: Color(0xFF2A2A6A)),
-                      SizedBox(width: 8),
-                      Text(
-                        'Earn More Time',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF2A2A6A),
-                          letterSpacing: -0.3,
-                        ),
+              ),
+            ),
+
+            const Spacer(),
+
+            // Earn More Time button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+              child: PressAnimationButton(
+                onTap: () {
+                  _navigateWithSlideAnimation(
+                      context, const WorkoutSelectionScreen());
+                },
+                child: Container(
+                  width: double.infinity,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(100),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.2),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
                       ),
                     ],
+                  ),
+                  child: const Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.fitness_center,
+                            size: 20, color: Color(0xFF2A2A6A)),
+                        SizedBox(width: 8),
+                        Text(
+                          'Earn More Time',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF2A2A6A),
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateWithSlideAnimation(BuildContext context, Widget screen) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => screen,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          const curve = Curves.easeOutCubic;
+
+          var tween =
+              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400),
       ),
     );
   }
 }
 
 /// EXPIRED state view (grace period) - Onboarding style
-class _ExpiredStateView extends StatelessWidget {
+class _ExpiredStateView extends StatefulWidget {
   final PushinAppController controller;
   final DateTime now;
 
@@ -903,29 +1034,36 @@ class _ExpiredStateView extends StatelessWidget {
   });
 
   @override
+  State<_ExpiredStateView> createState() => _ExpiredStateViewState();
+}
+
+class _ExpiredStateViewState extends State<_ExpiredStateView> {
+  @override
   Widget build(BuildContext context) {
-    final graceRemaining = controller.getGracePeriodRemaining(now);
+    final homeState = context.findAncestorStateOfType<_HomeScreenState>()!;
+    final graceRemaining =
+        widget.controller.getGracePeriodRemaining(widget.now);
 
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Spacer for top
-          SizedBox(height: MediaQuery.of(context).size.height * 0.06),
+    return AnimatedBuilder(
+      animation: homeState._animationController,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, homeState._slideAnimation.value),
+          child: Opacity(
+            opacity: homeState._fadeAnimation.value,
+            child: child,
+          ),
+        );
+      },
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Spacer for top
+            SizedBox(height: MediaQuery.of(context).size.height * 0.06),
 
-          // Main headline
-          AnimatedBuilder(
-            animation: _headerController,
-            builder: (context, child) {
-              return Transform.translate(
-                offset: Offset(0, _headerSlideAnimation.value),
-                child: Opacity(
-                  opacity: _headerFadeAnimation.value,
-                  child: child,
-                ),
-              );
-            },
-            child: Padding(
+            // Main headline
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -972,92 +1110,123 @@ class _ExpiredStateView extends StatelessWidget {
                 ],
               ),
             ),
-          ),
 
-          const Spacer(),
+            const Spacer(),
 
-          // Grace period card
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 32,
-                vertical: 40,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.timer_off,
-                    size: 64,
-                    color: Colors.amber.shade400,
-                  ),
-                  const SizedBox(height: 16),
-                  ShaderMask(
-                    shaderCallback: (bounds) => const LinearGradient(
-                      colors: [Color(0xFFF59E0B), Color(0xFFFBBF24)],
-                    ).createShader(bounds),
-                    blendMode: BlendMode.srcIn,
-                    child: Text(
-                      '$graceRemaining',
-                      style: const TextStyle(
-                        fontSize: 56,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+            // Grace period card
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 40,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.timer_off,
+                      size: 64,
+                      color: Colors.amber.shade400,
+                    ),
+                    const SizedBox(height: 16),
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Color(0xFFF59E0B), Color(0xFFFBBF24)],
+                      ).createShader(bounds),
+                      blendMode: BlendMode.srcIn,
+                      child: Text(
+                        '$graceRemaining',
+                        style: const TextStyle(
+                          fontSize: 56,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'SECONDS GRACE PERIOD',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white.withOpacity(0.5),
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const Spacer(),
-
-          // Start Workout button
-          Padding(
-            padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
-            child: PressAnimationButton(
-              onTap: () {
-                _navigateWithSlideAnimation(const WorkoutSelectionScreen());
-                  borderRadius: BorderRadius.circular(100),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.white.withOpacity(0.2),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
+                    const SizedBox(height: 4),
+                    Text(
+                      'SECONDS GRACE PERIOD',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withOpacity(0.5),
+                        letterSpacing: 1,
+                      ),
                     ),
                   ],
                 ),
-                child: const Center(
-                  child: Text(
-                    'Start Workout Now',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF2A2A6A),
-                      letterSpacing: -0.3,
+              ),
+            ),
+
+            const Spacer(),
+
+            // Start Workout button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+              child: PressAnimationButton(
+                onTap: () {
+                  _navigateWithSlideAnimation(
+                      context, const WorkoutSelectionScreen());
+                },
+                child: Container(
+                  width: double.infinity,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(100),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.2),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Start Workout Now',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF2A2A6A),
+                        letterSpacing: -0.3,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateWithSlideAnimation(BuildContext context, Widget screen) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => screen,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          const curve = Curves.easeOutCubic;
+
+          var tween =
+              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400),
       ),
     );
   }
@@ -1182,7 +1351,10 @@ class _PaymentSuccessOverlay extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
                 child: PressAnimationButton(
                   onTap: () {
-                    context.read<PushinAppController>().paymentSuccessState.value = null;
+                    context
+                        .read<PushinAppController>()
+                        .paymentSuccessState
+                        .value = null;
                   },
                   child: Container(
                     width: double.infinity,
@@ -1333,7 +1505,10 @@ class _PaymentCancelOverlay extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
                 child: PressAnimationButton(
                   onTap: () {
-                    context.read<PushinAppController>().paymentCancelState.value = false;
+                    context
+                        .read<PushinAppController>()
+                        .paymentCancelState
+                        .value = false;
                   },
                   child: Container(
                     width: double.infinity,
@@ -1366,31 +1541,6 @@ class _PaymentCancelOverlay extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-  void _navigateWithSlideAnimation(Widget screen) {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => screen,
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          // Smooth slide transition from bottom
-          const begin = Offset(0.0, 1.0);
-          const end = Offset.zero;
-          const curve = Curves.easeOutCubic;
-
-          var tween =
-              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-          var offsetAnimation = animation.drive(tween);
-
-          return SlideTransition(
-            position: offsetAnimation,
-            child: child,
-          );
-        },
-        transitionDuration: const Duration(milliseconds: 400),
       ),
     );
   }

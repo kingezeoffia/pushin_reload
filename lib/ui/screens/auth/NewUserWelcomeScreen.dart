@@ -28,7 +28,8 @@ class NewUserWelcomeScreen extends StatelessWidget {
 
     print('🎨 NewUserWelcomeScreen: Building screen');
     print('   - isReturningUser: $isReturningUser');
-    print('🧪 NewUserWelcomeScreen - justRegistered=${authProvider.justRegistered}, '
+    print(
+        '🧪 NewUserWelcomeScreen - justRegistered=${authProvider.justRegistered}, '
         'isGuestMode=${authProvider.isGuestMode}, '
         'guestCompletedSetup=${authProvider.guestCompletedSetup}');
 
@@ -67,7 +68,7 @@ class NewUserWelcomeScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 20),
                         const Text(
-                          'Welcome to the',
+                          'Welcome to',
                           style: TextStyle(
                             fontSize: 44,
                             fontWeight: FontWeight.w800,
@@ -82,11 +83,12 @@ class NewUserWelcomeScreen extends StatelessWidget {
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                           ).createShader(
-                            Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                            Rect.fromLTWH(
+                                0, 0, bounds.width, bounds.height * 1.3),
                           ),
                           blendMode: BlendMode.srcIn,
                           child: const Text(
-                            'FAMILY',
+                            'PUSHIN\'',
                             style: TextStyle(
                               fontSize: 44,
                               fontWeight: FontWeight.w800,
@@ -120,19 +122,22 @@ class NewUserWelcomeScreen extends StatelessWidget {
                         _RuleItem(
                           icon: Icons.fitness_center,
                           title: 'Smart Workout Tracking',
-                          description: 'AI-powered rep counting and form guidance',
+                          description:
+                              'AI-powered rep counting and form guidance',
                         ),
                         const SizedBox(height: 16),
                         _RuleItem(
                           icon: Icons.block,
                           title: 'App Blocking',
-                          description: 'Stay focused with customizable restrictions',
+                          description:
+                              'Stay focused with customizable restrictions',
                         ),
                         const SizedBox(height: 16),
                         _RuleItem(
                           icon: Icons.emergency,
                           title: 'Emergency Access',
-                          description: 'Three unlocks per day when you need them',
+                          description:
+                              'Three unlocks per day when you need them',
                         ),
                       ],
                     ),
@@ -164,13 +169,15 @@ class NewUserWelcomeScreen extends StatelessWidget {
     print('   - isReturningUser: $isReturningUser');
     print('   - current justRegistered flag: ${authProvider.justRegistered}');
     print('   - user email: ${authProvider.currentUser?.email ?? "none"}');
+    print('   - onboarding completed: ${authProvider.isOnboardingCompleted}');
 
     // This screen should only be shown to new users (isReturningUser = false)
     // The routing logic in AppRouter ensures returning users go directly to onboarding
-    print('   → New user: Clearing justRegistered flag to start onboarding flow');
-    // For new users, clear the justRegistered flag to proceed directly to onboarding
+    print('   → New user: Clearing justRegistered flag to proceed to main app');
+    // For new users, clear the justRegistered flag to proceed to onboarding
     authProvider.clearJustRegisteredFlag();
-    print('   ✓ Just registered flag cleared - router will show onboarding flow');
+    print(
+        '   ✓ Just registered flag cleared - AppRouter will show onboarding flow');
   }
 }
 

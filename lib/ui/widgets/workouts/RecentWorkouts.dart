@@ -74,7 +74,7 @@ class _RecentWorkoutsState extends State<RecentWorkouts> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Recent Workouts',
+            'Workouts',
             style: PushinTheme.headline3,
           ),
           SizedBox(height: PushinTheme.spacingMd),
@@ -102,7 +102,7 @@ class _RecentWorkoutsState extends State<RecentWorkouts> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Recent Workouts',
+          'Workouts',
           style: PushinTheme.headline3,
         ),
         SizedBox(height: PushinTheme.spacingMd),
@@ -277,5 +277,4 @@ class _RecentWorkoutsState extends State<RecentWorkouts> {
         return const Color(0xFF6B7280); // Gray
     }
   }
-
 }

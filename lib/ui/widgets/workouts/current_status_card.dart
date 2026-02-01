@@ -550,7 +550,7 @@ class _CurrentStatusCardState extends State<CurrentStatusCard>
       case 'unlocked':
         return StatusConfig(
           title: 'Apps Unlocked!',
-          description: 'Enjoy your earned screen time',
+          description: 'Enjoy your screen time',
           icon: Icons.lock_open_rounded,
           color: WorkoutsDesignTokens.unlockedGreen,
           gradient: const LinearGradient(
@@ -576,7 +576,7 @@ class _CurrentStatusCardState extends State<CurrentStatusCard>
           title: 'Time Expiring',
           description: gracePeriodSeconds > 0
               ? 'Apps locking soon...'
-              : 'Complete a workout to unlock',
+              : 'Unlock distracting apps',
           icon: Icons.timer_off_rounded,
           color: WorkoutsDesignTokens.expiredGray,
           gradient: const LinearGradient(
@@ -588,7 +588,7 @@ class _CurrentStatusCardState extends State<CurrentStatusCard>
       default: // locked
         return StatusConfig(
           title: 'Apps Blocked',
-          description: 'Complete a workout to unlock',
+          description: 'Unlock distracting apps',
           icon: Icons.lock_rounded,
           color: WorkoutsDesignTokens.lockedRed,
           gradient: const LinearGradient(

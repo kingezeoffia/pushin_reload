@@ -1,4 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'StripeCheckoutService.dart';
+import 'PaymentService.dart';
 
 /// Mock Payment Service for UI Development
 ///
@@ -155,6 +157,94 @@ class MockPaymentService {
     }
   }
 
+  /// Mock implementation of restore by email
+  Future<RestorePurchaseResult> restoreMockSubscriptionByEmail({
+    required String email,
+  }) async {
+    try {
+      print('MOCK: Restoring subscription for email: $email');
+
+      // Simulate network delay
+      await Future.delayed(const Duration(seconds: 2));
+
+      // Normalize email (trim and lowercase)
+      final normalizedEmail = email.trim().toLowerCase();
+
+      // Validate email format
+      final emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+      if (!emailRegex.hasMatch(normalizedEmail)) {
+        return RestorePurchaseResult(
+          success: false,
+          errorCode: 'invalid_email',
+          errorMessage: 'Please enter a valid email address.',
+        );
+      }
+
+      // Mock test emails
+      if (normalizedEmail == 'test@pushinapp.com' ||
+          normalizedEmail == 'pro@test.com') {
+        // Mock Pro subscription
+        final subscription = SubscriptionStatus(
+          isActive: true,
+          planId: 'pro',
+          customerId: 'cus_mock_test',
+          subscriptionId: 'sub_mock_${DateTime.now().millisecondsSinceEpoch}',
+          currentPeriodEnd: DateTime.now().add(const Duration(days: 30)),
+        );
+
+        print('MOCK: Found Pro subscription for $normalizedEmail');
+        return RestorePurchaseResult(
+          success: true,
+          subscription: subscription,
+        );
+      } else if (normalizedEmail == 'advanced@test.com') {
+        // Mock Advanced subscription
+        final subscription = SubscriptionStatus(
+          isActive: true,
+          planId: 'advanced',
+          customerId: 'cus_mock_test',
+          subscriptionId: 'sub_mock_${DateTime.now().millisecondsSinceEpoch}',
+          currentPeriodEnd: DateTime.now().add(const Duration(days: 365)),
+        );
+
+        print('MOCK: Found Advanced subscription for $normalizedEmail');
+        return RestorePurchaseResult(
+          success: true,
+          subscription: subscription,
+        );
+      } else if (normalizedEmail == 'expired@test.com') {
+        // Mock expired subscription
+        print('MOCK: Found expired subscription for $normalizedEmail');
+        return RestorePurchaseResult(
+          success: false,
+          errorCode: 'no_active_subscription',
+          errorMessage: 'No active subscriptions found for this email address.',
+          expiredSubscriptions: [
+            ExpiredSubscription(
+              planId: 'pro',
+              expiredOn: DateTime.now().subtract(const Duration(days: 30)),
+            ),
+          ],
+        );
+      } else {
+        // No subscription found
+        print('MOCK: No subscription found for $normalizedEmail');
+        return RestorePurchaseResult(
+          success: false,
+          errorCode: 'no_active_subscription',
+          errorMessage: 'No active subscriptions found for this email address.',
+        );
+      }
+    } catch (e) {
+      print('MOCK: Error restoring subscription: $e');
+      return RestorePurchaseResult(
+        success: false,
+        errorCode: 'mock_error',
+        errorMessage: 'Mock service error.',
+      );
+    }
+  }
+
   // Private helper methods
 
   Future<void> _saveMockSubscription(MockSubscription subscription) async {
@@ -248,37 +338,5 @@ class MockSubscription {
           data['currentPeriodEnd'] ?? DateTime.now().toIso8601String()),
       cancelAtPeriodEnd: data['cancelAtPeriodEnd'] == 'true',
     );
-  }
-}
-
-/// Subscription Status Model (same as in StripeCheckoutService)
-class SubscriptionStatus {
-  final bool isActive;
-  final String planId; // 'free', 'pro', 'advanced'
-  final String? customerId;
-  final String? subscriptionId;
-  final DateTime? currentPeriodEnd;
-
-  SubscriptionStatus({
-    required this.isActive,
-    required this.planId,
-    this.customerId,
-    this.subscriptionId,
-    this.currentPeriodEnd,
-  });
-
-  bool get isPaid => planId != 'free' && isActive;
-  bool get isPro => planId == 'pro' && isActive;
-  bool get isAdvanced => planId == 'advanced' && isActive;
-
-  String get displayName {
-    switch (planId) {
-      case 'pro':
-        return 'Pro Plan';
-      case 'advanced':
-        return 'Advanced Plan';
-      default:
-        return 'Free Plan';
-    }
   }
 }

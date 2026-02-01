@@ -1,13 +1,105 @@
+import 'dart:ui';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 import '../widgets/settings/enhanced_settings_section.dart'
     hide EnhancedSettingsTile;
 import '../widgets/settings/enhanced_settings_tile.dart';
+import '../widgets/GOStepsBackground.dart';
+import '../widgets/LogoutPopup.dart';
 import '../theme/enhanced_settings_design_tokens.dart';
 import '../../../state/auth_state_provider.dart';
+import '../../../state/pushin_app_controller.dart';
+import '../../../services/platform/ScreenTimeMonitor.dart';
 import 'paywall/PaywallScreen.dart';
+import 'settings/EmergencyUnlockSettingsScreen.dart';
+import 'settings/EditNameScreen.dart';
+import 'settings/EditEmailScreen.dart';
+import 'settings/ChangePasswordScreen.dart';
+import 'auth/WelcomeScreen.dart';
+import 'auth/FirstWelcomeScreen.dart';
+
+/// Premium Logout Button - A sleek pill-shaped logout button with interactive feedback
+class PremiumLogoutButton extends StatefulWidget {
+  final VoidCallback? onPressed;
+
+  const PremiumLogoutButton({
+    Key? key,
+    this.onPressed,
+  }) : super(key: key);
+
+  @override
+  State<PremiumLogoutButton> createState() => _PremiumLogoutButtonState();
+}
+
+class _PremiumLogoutButtonState extends State<PremiumLogoutButton> {
+  bool _isPressed = false;
+
+  final Color dangerRed = EnhancedSettingsDesignTokens.dangerRed;
+  final Color cardColor = EnhancedSettingsDesignTokens.cardDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) => setState(() => _isPressed = false),
+      onTapCancel: () => setState(() => _isPressed = false),
+      onTap: widget.onPressed,
+      child: AnimatedScale(
+        scale: _isPressed ? 0.96 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        child: Container(
+          height: 44, // Shorter "pill" height
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24), // Pill shape
+            color: dangerRed, // Solid red background
+            border: Border.all(
+                color: Colors.transparent,
+                width: 0), // Explicitly remove any borders
+            boxShadow: [
+              BoxShadow(
+                color: dangerRed.withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildReflectiveIcon(Icons.logout_rounded),
+              const SizedBox(width: 10),
+              Text(
+                "Logout",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReflectiveIcon(IconData icon) {
+    return Icon(
+      icon,
+      size: 18,
+      color: Colors.white,
+    );
+  }
+}
 
 /// Enhanced Settings Screen - The highlight of the PUSHIN app
 /// Features premium animations, glassmorphism, and iOS-like design
@@ -19,24 +111,18 @@ class EnhancedSettingsScreen extends StatefulWidget {
 }
 
 class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late AnimationController _headerController;
   late Animation<double> _headerSlideAnimation;
   late Animation<double> _headerFadeAnimation;
 
-  // Settings State
-  bool _isDarkMode = true;
-  bool _notificationsEnabled = true;
-  bool _screenTimePassword = false;
-  double _fontSize = 1.0; // 0.8 = Small, 1.0 = Medium, 1.2 = Large
-  Color _accentColor = EnhancedSettingsDesignTokens.primaryPurple;
-  bool _isPremium = false;
-  String _displayName = 'Your Name';
+  // Shimmer animation for promo banner
+  late AnimationController _shimmerController;
+  late Animation<double> _shimmerAnimation;
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
     _initializeAnimations();
   }
 
@@ -62,439 +148,810 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
       curve: Curves.easeOut,
     ));
 
+    // Shimmer animation for promo banner
+    _shimmerController = AnimationController(
+      duration: const Duration(milliseconds: 2500),
+      vsync: this,
+    )..repeat();
+
+    _shimmerAnimation = Tween<double>(begin: -1.0, end: 2.0).animate(
+      CurvedAnimation(parent: _shimmerController, curve: Curves.easeInOut),
+    );
+
     _headerController.forward();
-  }
-
-  Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _isDarkMode = prefs.getBool('dark_mode') ?? true;
-      _notificationsEnabled = prefs.getBool('notifications') ?? true;
-      _screenTimePassword = prefs.getBool('screen_time_password') ?? false;
-      _fontSize = prefs.getDouble('font_size') ?? 1.0;
-      _isPremium = prefs.getBool('is_premium') ?? false;
-      _displayName = prefs.getString('display_name') ?? 'Your Name';
-
-      // Load accent color
-      final colorValue = prefs.getInt('accent_color');
-      if (colorValue != null) {
-        _accentColor = Color(colorValue);
-      }
-    });
-  }
-
-  Future<void> _saveSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('dark_mode', _isDarkMode);
-    await prefs.setBool('notifications', _notificationsEnabled);
-    await prefs.setBool('screen_time_password', _screenTimePassword);
-    await prefs.setDouble('font_size', _fontSize);
-    await prefs.setInt('accent_color', _accentColor.value);
-    await prefs.setString('display_name', _displayName);
   }
 
   @override
   void dispose() {
     _headerController.dispose();
+    _shimmerController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final pushinController = Provider.of<PushinAppController>(context);
+    final authProvider = Provider.of<AuthStateProvider>(context);
+
+    debugPrint('🎯 Settings Screen Build:');
+    debugPrint('   - User authenticated: ${authProvider.isAuthenticated}');
+    debugPrint('   - User email: ${authProvider.currentUser?.email ?? "none"}');
+    debugPrint('   - Plan tier: ${pushinController.planTier}');
+
     return Scaffold(
-      backgroundColor: EnhancedSettingsDesignTokens.darkBackground,
-      body: SafeArea(
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            // Animated Header
-            SliverToBoxAdapter(
-              child: AnimatedBuilder(
-                animation: _headerController,
-                builder: (context, child) {
-                  return Transform.translate(
-                    offset: Offset(0, _headerSlideAnimation.value),
-                    child: Opacity(
-                      opacity: _headerFadeAnimation.value,
-                      child: child,
-                    ),
-                  );
-                },
-                child: Padding(
-                  padding: const EdgeInsets.all(
-                      EnhancedSettingsDesignTokens.spacingLarge),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Title
-                      const Text(
-                        'Settings',
-                        style: EnhancedSettingsDesignTokens.titleLarge,
+      backgroundColor: Colors.black,
+      body: GOStepsBackground(
+        blackRatio: 0.25,
+        child: SafeArea(
+          bottom:
+              false, // Don't include bottom safe area - navigation pill handles this
+          child: CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              // Animated Header
+              SliverToBoxAdapter(
+                child: AnimatedBuilder(
+                  animation: _headerController,
+                  builder: (context, child) {
+                    return Transform.translate(
+                      offset: Offset(0, _headerSlideAnimation.value),
+                      child: Opacity(
+                        opacity: _headerFadeAnimation.value,
+                        child: child,
                       ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(
+                        EnhancedSettingsDesignTokens.spacingLarge),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title with Subscription Badge
+                        Row(
+                          children: [
+                            const Text(
+                              'Settings',
+                              style: EnhancedSettingsDesignTokens.titleLarge,
+                            ),
+                            const SizedBox(width: 12),
+                            _SubscriptionBadge(),
+                          ],
+                        ),
 
-                      const SizedBox(height: 8),
+                        const SizedBox(height: 4),
 
-                      // Subtitle
-                      Text(
-                        'Personalize your experience',
-                        style: EnhancedSettingsDesignTokens.subtitle,
+                        // Subtitle
+                        Text(
+                          'Personalize your experience',
+                          style: EnhancedSettingsDesignTokens.subtitle,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // GO Club Style Banner Widget
+              SliverToBoxAdapter(
+                child: _buildPromoBanner(),
+              ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+
+              // Account Section
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: EnhancedSettingsDesignTokens.spacingLarge),
+                  child: EnhancedSettingsSection(
+                    title: 'Account',
+                    icon: Icons.person,
+                    gradient: EnhancedSettingsDesignTokens.primaryGradient,
+                    delay: 100,
+                    children: [
+                      EnhancedSettingsTile(
+                        icon: Icons.person_outline,
+                        title: 'Edit Name',
+                        subtitle: 'Change your display name',
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => const EditNameScreen()),
+                          );
+                        },
+                      ),
+                      EnhancedSettingsTile(
+                        icon: Icons.email_outlined,
+                        title: 'Edit E-Mail',
+                        subtitle: 'Change your email address',
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => const EditEmailScreen()),
+                          );
+                        },
+                      ),
+                      EnhancedSettingsTile(
+                        icon: Icons.lock_outline,
+                        title: 'Change Password',
+                        subtitle: 'Update your password',
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) =>
+                                    const ChangePasswordScreen()),
+                          );
+                        },
+                        showDivider: false,
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
 
-            // GO Club Style Banner Widget
-            SliverToBoxAdapter(
-              child: _buildPromoBanner(),
-            ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-
-            // Account Section
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: EnhancedSettingsDesignTokens.spacingLarge),
-                child: EnhancedSettingsSection(
-                  title: 'Account',
-                  icon: Icons.person,
-                  gradient: EnhancedSettingsDesignTokens.primaryGradient,
-                  delay: 100,
-                  children: [
-                    EnhancedSettingsTile(
-                      icon: Icons.person_outline,
-                      title: 'Edit Name',
-                      subtitle: 'Change your display name',
-                      onTap: () => _showEditNameDialog(),
-                    ),
-                    EnhancedSettingsTile(
-                      icon: Icons.email_outlined,
-                      title: 'Edit E-Mail',
-                      subtitle: 'Change your email address',
-                      onTap: () => _showEditEmailDialog(),
-                    ),
-                    EnhancedSettingsTile(
-                      icon: Icons.lock_outline,
-                      title: 'Change Password',
-                      subtitle: 'Update your password',
-                      onTap: () => _showChangePasswordDialog(),
-                      showDivider: false,
-                    ),
-                  ],
+              // App Blocking Section
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: EnhancedSettingsDesignTokens.spacingLarge),
+                  child: EnhancedSettingsSection(
+                    title: 'App Blocking',
+                    icon: Icons.block,
+                    gradient: EnhancedSettingsDesignTokens.accentGradient,
+                    delay: 200,
+                    children: [
+                      _BlockedAppsTile(
+                        onTap: () => _showFocusSessionsDialog(),
+                      ),
+                      EnhancedSettingsTile(
+                        icon: Icons.emergency,
+                        title: 'Emergency Unlock',
+                        subtitle: 'Set timer for urgent access',
+                        onTap: () => _showEmergencyUnlockDialog(),
+                        showDivider: false,
+                        iconColor: const Color(0xFFEF4444), // dangerRed color
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-            // App Blocking Section
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: EnhancedSettingsDesignTokens.spacingLarge),
-                child: EnhancedSettingsSection(
-                  title: 'App Blocking',
-                  icon: Icons.block,
-                  gradient: EnhancedSettingsDesignTokens.accentGradient,
-                  delay: 200,
-                  children: [
-                    EnhancedSettingsTile(
-                      icon: Icons.apps,
-                      title: 'Manage Blocked Apps',
-                      subtitle:
-                          '${_isPremium ? "Unlimited" : "3"} apps blocked',
-                      onTap: () => _navigateToBlockedApps(),
-                    ),
-                    EnhancedSettingsTile(
-                      icon: Icons.timer,
-                      title: 'Emergency Unlock',
-                      subtitle: 'Set timer for urgent access',
-                      onTap: () => _showEmergencyUnlockDialog(),
-                      showDivider: false,
-                    ),
-                  ],
+              // Privacy & Security Section
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: EnhancedSettingsDesignTokens.spacingLarge),
+                  child: EnhancedSettingsSection(
+                    title: 'Privacy & Security',
+                    icon: Icons.security,
+                    gradient: EnhancedSettingsDesignTokens.successGradient,
+                    delay: 400,
+                    children: [
+                      EnhancedSettingsTile(
+                        icon: Icons.privacy_tip,
+                        title: 'Privacy Policy',
+                        onTap: () => _launchURL('https://pushin.app/privacy'),
+                        iconColor: const Color(0xFF10B981), // green color
+                      ),
+                      EnhancedSettingsTile(
+                        icon: Icons.description,
+                        title: 'Terms of Service',
+                        onTap: () => _launchURL('https://pushin.app/terms'),
+                        showDivider: false,
+                        iconColor: const Color(0xFF10B981), // green color
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-            // Privacy & Security Section
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: EnhancedSettingsDesignTokens.spacingLarge),
-                child: EnhancedSettingsSection(
-                  title: 'Privacy & Security',
-                  icon: Icons.security,
-                  gradient: EnhancedSettingsDesignTokens.successGradient,
-                  delay: 400,
-                  children: [
-                    EnhancedSettingsSwitchTile(
-                      icon: Icons.lock,
-                      title: 'Screen Time Password',
-                      subtitle: 'Require password for changes',
-                      value: _screenTimePassword,
-                      onChanged: (value) {
-                        setState(() => _screenTimePassword = value);
-                        _saveSettings();
-                      },
+              // Manage Subscription Section
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: EnhancedSettingsDesignTokens.spacingLarge),
+                  child: EnhancedSettingsSection(
+                    title: 'Manage Subscription',
+                    icon: Icons.subscriptions,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFFEB3B), Color(0xFFFFC107)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    EnhancedSettingsTile(
-                      icon: Icons.privacy_tip,
-                      title: 'Privacy Policy',
-                      onTap: () => _launchURL('https://pushin.app/privacy'),
-                    ),
-                    EnhancedSettingsTile(
-                      icon: Icons.description,
-                      title: 'Terms of Service',
-                      onTap: () => _launchURL('https://pushin.app/terms'),
-                      showDivider: false,
-                    ),
-                  ],
+                    delay: 500,
+                    children: [
+                      EnhancedSettingsTile(
+                        icon: Icons.sync,
+                        title: 'Edit Subscription',
+                        subtitle: 'Upgrade or downgrade your plan',
+                        iconColor: const Color(0xFFFFEB3B), // yellow color
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          Navigator.of(context).push(
+                            PageRouteBuilder(
+                              pageBuilder:
+                                  (context, animation, secondaryAnimation) =>
+                                      const PaywallScreen(),
+                              transitionsBuilder: (context, animation,
+                                  secondaryAnimation, child) {
+                                // Smooth slide transition from bottom
+                                const begin = Offset(0.0, 1.0);
+                                const end = Offset.zero;
+                                const curve = Curves.easeOutCubic;
+
+                                var tween = Tween(begin: begin, end: end)
+                                    .chain(CurveTween(curve: curve));
+                                var offsetAnimation = animation.drive(tween);
+
+                                return SlideTransition(
+                                  position: offsetAnimation,
+                                  child: child,
+                                );
+                              },
+                              transitionDuration:
+                                  const Duration(milliseconds: 400),
+                            ),
+                          );
+                        },
+                        showDivider: false,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 40)),
+              const SliverToBoxAdapter(child: SizedBox(height: 40)),
 
-            // Logout Button
-            SliverToBoxAdapter(
-              child: _buildLogoutButton(),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 60)),
-
-            // App Version
-            SliverToBoxAdapter(
-              child: Center(
-                child: Text(
-                  'PUSHIN v1.0.0',
-                  style: EnhancedSettingsDesignTokens.tileSubtitle,
-                ),
+              // Logout Button
+              SliverToBoxAdapter(
+                child: _buildLogoutButton(),
               ),
-            ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 40)),
-          ],
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+
+              const SliverToBoxAdapter(
+                  child: SizedBox(
+                      height:
+                          112)), // Navigation pill (64px) + margin (8px) + extra spacing (40px)
+            ],
+          ),
         ),
       ),
     );
   }
 
-  /// Build GO Club style promotional banner
+  /// Build GO Club style promotional banner with shimmer effect
   Widget _buildPromoBanner() {
+    final controller = Provider.of<PushinAppController>(context, listen: false);
+    final planTier = controller.planTier;
+
+    // Show user banner for advanced users
+    if (planTier == 'advanced') {
+      return Consumer<AuthStateProvider>(
+        builder: (context, authProvider, _) {
+          return _buildUserBanner(authProvider);
+        },
+      );
+    }
+
+    // Determine banner text based on plan
+    final isOnPro = planTier == 'pro';
+    final labelText = isOnPro ? 'UPGRADE TO:' : 'TRY NOW:';
+    final titleText = isOnPro ? 'PUSHIN Adv.' : 'PUSHIN Pro';
+
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: EnhancedSettingsDesignTokens.spacingLarge,
       ),
-      child: Container(
-        margin: const EdgeInsets.only(
-            bottom: EnhancedSettingsDesignTokens.spacingMedium),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFD4FF00), Color(0xFFB8E600)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(
-              EnhancedSettingsDesignTokens.borderRadiusLarge),
-          border: Border.all(
-            color: const Color(0xFF4A5FFF),
-            width: 3,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFD4FF00).withOpacity(0.3),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
+      child: AnimatedBuilder(
+        animation: _shimmerAnimation,
+        builder: (context, child) {
+          return Container(
+            margin: const EdgeInsets.only(
+                bottom: EnhancedSettingsDesignTokens.spacingMedium),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(
+                  EnhancedSettingsDesignTokens.borderRadiusLarge),
             ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(
-                EnhancedSettingsDesignTokens.borderRadiusLarge),
-            onTap: () => _handleUpgrade(),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(
+                  EnhancedSettingsDesignTokens.borderRadiusLarge - 3),
+              child: Stack(
                 children: [
-                  // GO Logo Circle
+                  // Base gradient background with content
                   Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: Colors.black,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 10,
-                        ),
-                      ],
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFFD4FF00), Color(0xFFB8E600)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                     ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Concentric circles effect
-                        ...List.generate(3, (index) {
-                          return Container(
-                            width: 60 - (index * 8.0),
-                            height: 60 - (index * 8.0),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: const Color(0xFFD4FF00),
-                                width: 2,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _handleUpgrade(),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Row(
+                            children: [
+                              // GO Logo Circle
+                              Container(
+                                width: 60,
+                                height: 60,
+                                decoration: BoxDecoration(
+                                  color: Colors.black,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.3),
+                                      blurRadius: 10,
+                                    ),
+                                  ],
+                                ),
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    // Concentric circles effect
+                                    ...List.generate(3, (index) {
+                                      return Container(
+                                        width: 60 - (index * 8.0),
+                                        height: 60 - (index * 8.0),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: const Color(0xFFD4FF00),
+                                            width: 2,
+                                          ),
+                                        ),
+                                      );
+                                    }),
+                                    const Text(
+                                      'GO',
+                                      style: TextStyle(
+                                        color: Color(0xFFD4FF00),
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: -1,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          );
-                        }),
-                        const Text(
-                          'GO',
-                          style: TextStyle(
-                            color: Color(0xFFD4FF00),
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -1,
+
+                              const SizedBox(width: 16),
+
+                              // Text Content
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      labelText,
+                                      style: const TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      titleText,
+                                      style: const TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w900,
+                                        height: 1,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              // Arrow
+                              const Icon(
+                                Icons.arrow_forward,
+                                color: Colors.black,
+                                size: 28,
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
-
-                  const SizedBox(width: 16),
-
-                  // Text Content
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'TRY NOW:',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1,
+                  // Full-width shimmer overlay
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment(
+                                -2.0 + (_shimmerAnimation.value * 2), -0.5),
+                            end: Alignment(
+                                -1.0 + (_shimmerAnimation.value * 2), 0.5),
+                            colors: [
+                              Colors.transparent,
+                              Colors.white.withOpacity(0.0),
+                              Colors.white.withOpacity(0.3),
+                              Colors.white.withOpacity(0.5),
+                              Colors.white.withOpacity(0.3),
+                              Colors.white.withOpacity(0.0),
+                              Colors.transparent,
+                            ],
+                            stops: const [0.0, 0.2, 0.35, 0.5, 0.65, 0.8, 1.0],
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'PUSHIN Pro',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w900,
-                            height: 1,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-
-                  // Arrow
-                  const Icon(
-                    Icons.arrow_forward,
-                    color: Colors.black,
-                    size: 28,
                   ),
                 ],
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
+    );
+  }
+
+  /// Build user banner for Advanced users with profile picture and name
+  /// Styled exactly like the promotional GO banner
+  Widget _buildUserBanner(AuthStateProvider authProvider) {
+    final userName = authProvider.currentUser?.name ?? 'User';
+    final profileImagePath = authProvider.currentUser?.profileImagePath;
+    final hasProfileImage =
+        profileImagePath != null && File(profileImagePath).existsSync();
+
+    debugPrint(
+        '🖼️ Building user banner - profileImagePath: $profileImagePath, hasProfileImage: $hasProfileImage');
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: EnhancedSettingsDesignTokens.spacingLarge,
+      ),
+      child: hasProfileImage
+          ? Container(
+              margin: const EdgeInsets.only(
+                  bottom: EnhancedSettingsDesignTokens.spacingMedium),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(
+                    EnhancedSettingsDesignTokens.borderRadiusLarge),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(
+                    EnhancedSettingsDesignTokens.borderRadiusLarge - 3),
+                child: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFFD4FF00), Color(0xFFB8E600)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _handleAddProfilePicture(),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Row(
+                          children: [
+                            // User Profile Circle (same size as GO circle)
+                            Container(
+                              width: 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                color: Colors.black,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.3),
+                                    blurRadius: 10,
+                                  ),
+                                ],
+                              ),
+                              child: ClipOval(
+                                child: Image.file(
+                                  File(profileImagePath!),
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(width: 16),
+
+                            // User Name with label (same styling as GO banner text)
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'KEEP PUSHIN:',
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    userName,
+                                    style: const TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w900,
+                                      height: 1,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : AnimatedBuilder(
+              animation: _shimmerAnimation,
+              builder: (context, child) {
+                return Container(
+                  margin: const EdgeInsets.only(
+                      bottom: EnhancedSettingsDesignTokens.spacingMedium),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(
+                        EnhancedSettingsDesignTokens.borderRadiusLarge),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(
+                        EnhancedSettingsDesignTokens.borderRadiusLarge - 3),
+                    child: Stack(
+                      children: [
+                        // Base gradient background with content (same as GO banner)
+                        Container(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Color(0xFFD4FF00), Color(0xFFB8E600)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => _handleAddProfilePicture(),
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Row(
+                                  children: [
+                                    // User Profile Circle (same size as GO circle)
+                                    Container(
+                                      width: 60,
+                                      height: 60,
+                                      decoration: BoxDecoration(
+                                        color: Colors.black,
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color:
+                                                Colors.black.withOpacity(0.3),
+                                            blurRadius: 10,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const CircleAvatar(
+                                        radius: 28,
+                                        backgroundColor: Colors.transparent,
+                                        child: Icon(
+                                          Icons.person,
+                                          color: Color(0xFFD4FF00),
+                                          size: 32,
+                                        ),
+                                      ),
+                                    ),
+
+                                    const SizedBox(width: 16),
+
+                                    // User Name with label (same styling as GO banner text)
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'KEEP PUSHIN:',
+                                            style: TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: 1,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            userName,
+                                            style: const TextStyle(
+                                              color: Colors.black,
+                                              fontSize: 24,
+                                              fontWeight: FontWeight.w900,
+                                              height: 1,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Full-width shimmer overlay (same as GO banner)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment(
+                                      -2.0 + (_shimmerAnimation.value * 2),
+                                      -0.5),
+                                  end: Alignment(
+                                      -1.0 + (_shimmerAnimation.value * 2),
+                                      0.5),
+                                  colors: [
+                                    Colors.transparent,
+                                    Colors.white.withOpacity(0.0),
+                                    Colors.white.withOpacity(0.3),
+                                    Colors.white.withOpacity(0.5),
+                                    Colors.white.withOpacity(0.3),
+                                    Colors.white.withOpacity(0.0),
+                                    Colors.transparent,
+                                  ],
+                                  stops: const [
+                                    0.0,
+                                    0.2,
+                                    0.35,
+                                    0.5,
+                                    0.65,
+                                    0.8,
+                                    1.0
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 
   Widget _buildLogoutButton() {
+    final authProvider = Provider.of<AuthStateProvider>(context);
+    final isAuthenticated = authProvider.isAuthenticated;
+
+    debugPrint('🧭 BUILD LOGOUT BUTTON:');
+    debugPrint('   - isAuthenticated: $isAuthenticated');
+    debugPrint('   - isGuestMode: ${authProvider.isGuestMode}');
+    debugPrint('   - guestCompletedSetup: ${authProvider.guestCompletedSetup}');
+    debugPrint(
+        '   - currentUser: ${authProvider.currentUser?.email ?? 'null'}');
+
     return Padding(
       padding: const EdgeInsets.symmetric(
           horizontal: EnhancedSettingsDesignTokens.spacingLarge),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          onPressed: () => _handleLogout(),
-          icon: const Icon(Icons.logout),
-          label: const Text('Logout'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: EnhancedSettingsDesignTokens.dangerRed,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(
-                EnhancedSettingsDesignTokens.borderRadiusMedium,
+      child: Center(
+        child: !isAuthenticated
+            ? _buildSignUpButton()
+            : PremiumLogoutButton(
+                onPressed: () => _handleLogout(),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildSignUpButton() {
+    return GestureDetector(
+      onTap: () {
+        debugPrint('🧭 SIGN UP BUTTON TAPPED');
+        final authProvider =
+            Provider.of<AuthStateProvider>(context, listen: false);
+
+        debugPrint('   - isAuthenticated: ${authProvider.isAuthenticated}');
+        debugPrint('   - isGuestMode: ${authProvider.isGuestMode}');
+        debugPrint(
+            '   - isOnboardingCompleted: ${authProvider.isOnboardingCompleted}');
+
+        // For all unauthenticated users, navigate to first welcome screen with sign up and sign in buttons
+        debugPrint(
+            '   → Navigating to FirstWelcomeScreen for unauthenticated users');
+        // since state-driven navigation doesn't work from within the main app
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const FirstWelcomeScreen(),
+          ),
+        );
+        HapticFeedback.lightImpact();
+      },
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          color: const Color(0xFF10B981), // Green color
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF10B981).withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.person_add_rounded,
+              size: 18,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              "Sign Up",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                letterSpacing: 0.5,
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
   }
 
-  // Dialog and Navigation Methods
-
-  void _showEditNameDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => EditNameDialog(
-        currentName: _displayName,
-        onNameUpdated: (newName) async {
-          setState(() => _displayName = newName);
-          _saveSettings();
-          // Also update the backend account name
-          await _updateAccountName(newName);
-        },
-      ),
-    );
-  }
-
-  void _showEditEmailDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => EditEmailDialog(
-        currentEmail: Provider.of<AuthStateProvider>(context, listen: false).currentUser?.email ?? '',
-        onEmailUpdated: (newEmail) {
-          // Email update will be handled by the dialog
-        },
-      ),
-    );
-  }
-
-  void _showChangePasswordDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => ChangePasswordDialog(
-        onPasswordUpdated: () {
-          // Password update will be handled by the dialog
-        },
-      ),
-    );
-  }
-
-  Future<void> _updateAccountName(String newName) async {
-    final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
-    await authProvider.updateProfile(name: newName);
-  }
-
-  void _navigateToBlockedApps() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Blocked Apps - Coming Soon!')),
-    );
-  }
+  // Navigation Methods
 
   void _showEmergencyUnlockDialog() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Emergency Unlock - Coming Soon!')),
+    HapticFeedback.lightImpact();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const EmergencyUnlockSettingsScreen(),
+      ),
     );
   }
 
   Future<void> _launchURL(String url) async {
+    HapticFeedback.lightImpact();
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
@@ -507,11 +964,210 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
     }
   }
 
+  void _handleAddProfilePicture() {
+    HapticFeedback.lightImpact();
+
+    // Show bottom sheet with options
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: EnhancedSettingsDesignTokens.cardDark,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Add Profile Picture',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 24),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6060FF).withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.camera_alt,
+                    color: Color(0xFF6060FF),
+                  ),
+                ),
+                title: const Text(
+                  'Take Photo',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImageFromCamera();
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.photo_library,
+                    color: Color(0xFF10B981),
+                  ),
+                ),
+                title: const Text(
+                  'Choose from Gallery',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImageFromGallery();
+                },
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImageFromCamera() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.camera,
+      );
+
+      if (image != null) {
+        await _cropAndSaveImage(image.path);
+      }
+    } catch (e) {
+      debugPrint('Failed to take photo: $e');
+    }
+  }
+
+  Future<void> _pickImageFromGallery() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+      );
+
+      if (image != null) {
+        await _cropAndSaveImage(image.path);
+      }
+    } catch (e) {
+      debugPrint('Failed to pick image: $e');
+    }
+  }
+
+  Future<void> _cropAndSaveImage(String imagePath) async {
+    try {
+      final croppedFile = await ImageCropper().cropImage(
+        sourcePath: imagePath,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        maxWidth: 512,
+        maxHeight: 512,
+        compressQuality: 85,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop Profile Picture',
+            toolbarColor: Colors.black,
+            toolbarWidgetColor: const Color(0xFFD4FF00),
+            backgroundColor: Colors.black,
+            activeControlsWidgetColor: const Color(0xFFD4FF00),
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+            hideBottomControls: false,
+          ),
+          IOSUiSettings(
+            title: 'Crop Profile Picture',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+            aspectRatioPickerButtonHidden: true,
+            rotateButtonsHidden: false,
+            cancelButtonTitle: 'Cancel',
+            doneButtonTitle: 'Done',
+          ),
+        ],
+      );
+
+      if (croppedFile != null) {
+        await _saveProfileImage(croppedFile.path);
+      }
+    } catch (e) {
+      debugPrint('Failed to crop image: $e');
+    }
+  }
+
+  Future<void> _saveProfileImage(String imagePath) async {
+    try {
+      // Get app documents directory
+      final directory = await getApplicationDocumentsDirectory();
+      final String profileImageDir = '${directory.path}/profile_images';
+
+      // Create directory if it doesn't exist
+      await Directory(profileImageDir).create(recursive: true);
+
+      // Generate unique filename
+      final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+      final String extension = path.extension(imagePath);
+      final String fileName = 'profile_$timestamp$extension';
+      final String savedPath = '$profileImageDir/$fileName';
+
+      // Copy image to permanent location
+      await File(imagePath).copy(savedPath);
+
+      // Update auth provider with new image path
+      final authProvider =
+          Provider.of<AuthStateProvider>(context, listen: false);
+      await authProvider.setProfileImagePath(savedPath);
+
+      // TODO: Upload to backend server when ready
+    } catch (e) {
+      debugPrint('Failed to save image: $e');
+    }
+  }
+
   void _handleUpgrade() {
+    HapticFeedback.heavyImpact();
+
+    // Determine which plan to pre-select based on current plan tier
+    final controller = Provider.of<PushinAppController>(context, listen: false);
+    final planTier = controller.planTier;
+    final preSelectedPlan = planTier == 'pro' ? 'advanced' : 'pro';
+
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            const PaywallScreen(),
+            PaywallScreen(preSelectedPlan: preSelectedPlan),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           // Smooth slide transition from bottom
           const begin = Offset(0.0, 1.0);
@@ -533,34 +1189,65 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
   }
 
   void _handleLogout() {
-    showDialog(
+    HapticFeedback.lightImpact();
+    showGeneralDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: EnhancedSettingsDesignTokens.cardDark,
-        title: const Text('Logout', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'Are you sure you want to logout?',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              // TODO: Implement logout with AuthStateProvider
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: EnhancedSettingsDesignTokens.dangerRed,
-            ),
-            child: const Text('Logout'),
-          ),
-        ],
-      ),
+      barrierDismissible: false,
+      barrierColor:
+          Colors.transparent, // We handle the background in the popup itself
+      transitionDuration: Duration.zero,
+      pageBuilder: (BuildContext context, Animation<double> animation,
+          Animation<double> secondaryAnimation) {
+        return LogoutPopup(
+          onCancel: () {
+            Navigator.of(context).pop(); // Just close the popup
+          },
+          onLogout: () async {
+            // Close the dialog first
+            Navigator.of(context).pop();
+
+            // Perform logout - this will clear all state and navigate to WelcomeScreen
+            final authProvider =
+                Provider.of<AuthStateProvider>(context, listen: false);
+            await authProvider.logout();
+
+            // Small delay to ensure state is fully updated
+            await Future.delayed(const Duration(milliseconds: 100));
+
+            // Force navigation back to WelcomeScreen and clear navigation stack
+            if (context.mounted) {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => WelcomeScreen()),
+                (route) => false,
+              );
+            }
+          },
+        );
+      },
     );
+  }
+
+  void _showFocusSessionsDialog() async {
+    HapticFeedback.lightImpact();
+    try {
+      final appController = context.read<PushinAppController>();
+
+      // Use the controller's method which handles permission request + picker
+      final success = await appController.presentIOSAppPicker();
+
+      if (!success && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Screen Time access is required to block apps')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to open app picker')),
+        );
+      }
+    }
   }
 }
 
@@ -966,725 +1653,108 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
   }
 }
 
-/// Edit Name Dialog Widget
-class EditNameDialog extends StatefulWidget {
-  final String currentName;
-  final Future<void> Function(String) onNameUpdated;
-
-  const EditNameDialog({
-    Key? key,
-    required this.currentName,
-    required this.onNameUpdated,
-  }) : super(key: key);
-
-  @override
-  State<EditNameDialog> createState() => _EditNameDialogState();
-}
-
-class _EditNameDialogState extends State<EditNameDialog> {
-  late TextEditingController _nameController;
-  bool _isLoading = false;
-  String? _errorMessage;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(text: widget.currentName);
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _updateName() async {
-    final name = _nameController.text.trim();
-
-    // Basic validation
-    if (name.isEmpty) {
-      setState(() => _errorMessage = 'Name cannot be empty');
-      return;
-    }
-
-    if (name.length > 50) {
-      setState(() => _errorMessage = 'Name must be less than 50 characters');
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      await widget.onNameUpdated(name);
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Display name updated successfully')),
-      );
-    } catch (e) {
-      setState(() => _errorMessage = 'Failed to update name: $e');
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
+/// Subscription Badge Widget - Shows current subscription tier
+class _SubscriptionBadge extends StatelessWidget {
+  const _SubscriptionBadge();
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: EnhancedSettingsDesignTokens.cardDark,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+    return Consumer2<AuthStateProvider, PushinAppController>(
+      builder: (context, authProvider, pushinController, _) {
+        final isAuthenticated = authProvider.isAuthenticated;
+        final isGuest = authProvider.isGuestMode;
+        final planTier = pushinController.planTier;
+
+        // Show actual subscription tier for paid plans, regardless of auth status
+        switch (planTier) {
+          case 'pro':
+            return _buildBadge('PRO', const Color(0xFF6060FF)); // Purple/Blue
+          case 'advanced':
+            return _buildBadge('ADVANCED', const Color(0xFFFFB347)); // Orange
+          case 'free':
+            // Free plan - show FREE for authenticated users, GUEST for guest mode
+            if (isAuthenticated && !isGuest) {
+              return _buildBadge('FREE', const Color(0xFF10B981)); // Green
+            } else {
+              return _buildBadge(
+                  'GUEST', const Color(0xFF94A3B8)); // Gray for guest
+            }
+          default:
+            // Default to guest for unknown states
+            return _buildBadge(
+                'GUEST', const Color(0xFF94A3B8)); // Gray for guest
+        }
+      },
+    );
+  }
+
+  Widget _buildBadge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(
+          color: color.withOpacity(0.5),
+          width: 1.5,
+        ),
       ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              const Text(
-                'Edit Display Name',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Choose how you want to be addressed',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withOpacity(0.6),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Error message
-              if (_errorMessage != null)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color:
-                        EnhancedSettingsDesignTokens.dangerRed.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: EnhancedSettingsDesignTokens.dangerRed
-                          .withOpacity(0.3),
-                    ),
-                  ),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(
-                      color: EnhancedSettingsDesignTokens.dangerRed,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-
-              if (_errorMessage != null) const SizedBox(height: 16),
-
-              // Name field
-              TextField(
-                controller: _nameController,
-                autofocus: true,
-                style: const TextStyle(color: Colors.white),
-                maxLength: 50,
-                decoration: InputDecoration(
-                  labelText: 'Display Name',
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  counterStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide:
-                        BorderSide(color: Colors.white.withOpacity(0.3)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFF6060FF)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Action buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed:
-                          _isLoading ? null : () => Navigator.of(context).pop(),
-                      child: Text(
-                        'Cancel',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _updateName,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6060FF),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              'Update',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: color,
+          letterSpacing: 0.5,
         ),
       ),
     );
   }
 }
 
-/// Edit E-Mail Dialog Widget
-class EditEmailDialog extends StatefulWidget {
-  final String currentEmail;
-  final Function(String) onEmailUpdated;
+/// Stateful widget that properly listens to blocked apps changes
+class _BlockedAppsTile extends StatefulWidget {
+  final VoidCallback onTap;
 
-  const EditEmailDialog({
-    Key? key,
-    required this.currentEmail,
-    required this.onEmailUpdated,
-  }) : super(key: key);
+  const _BlockedAppsTile({required this.onTap});
 
   @override
-  State<EditEmailDialog> createState() => _EditEmailDialogState();
+  State<_BlockedAppsTile> createState() => _BlockedAppsTileState();
 }
 
-class _EditEmailDialogState extends State<EditEmailDialog> {
-  late TextEditingController _emailController;
-  late TextEditingController _passwordController;
-  bool _obscurePassword = true;
-  bool _isLoading = false;
-  String? _errorMessage;
+class _BlockedAppsTileState extends State<_BlockedAppsTile> {
+  late PushinAppController _controller;
 
   @override
-  void initState() {
-    super.initState();
-    _emailController = TextEditingController(text: widget.currentEmail);
-    _passwordController = TextEditingController();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _controller = Provider.of<PushinAppController>(context, listen: false);
+    _controller.addListener(_onControllerChanged);
   }
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
+    _controller.removeListener(_onControllerChanged);
     super.dispose();
   }
 
-  Future<void> _updateEmail() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
-
-    // Basic validation
-    if (email.isEmpty || !email.contains("@")) {
-      setState(() => _errorMessage = "Please enter a valid email address");
-      return;
-    }
-
-    if (password.isEmpty) {
-      setState(() => _errorMessage = "Current password is required to change email");
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
-      final success = await authProvider.updateProfile(email: email);
-
-      if (success) {
-        widget.onEmailUpdated(email);
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Email updated successfully")),
-        );
-      } else {
-        setState(() => _errorMessage = authProvider.errorMessage ?? "Failed to update email");
-      }
-    } catch (e) {
-      setState(() => _errorMessage = "Failed to update email: $e");
-    } finally {
-      setState(() => _isLoading = false);
+  void _onControllerChanged() {
+    if (mounted) {
+      setState(() {});
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: EnhancedSettingsDesignTokens.cardDark,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              const Text(
-                "Edit E-mail",
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                "Enter your new email address",
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withOpacity(0.6),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Error message
-              if (_errorMessage != null)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: EnhancedSettingsDesignTokens.dangerRed.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: EnhancedSettingsDesignTokens.dangerRed.withOpacity(0.3),
-                    ),
-                  ),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(
-                      color: EnhancedSettingsDesignTokens.dangerRed,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-
-              if (_errorMessage != null) const SizedBox(height: 16),
-
-              // Email field
-              TextField(
-                controller: _emailController,
-                autofocus: true,
-                keyboardType: TextInputType.emailAddress,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: "New Email",
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFF6060FF)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Current password field
-              TextField(
-                controller: _passwordController,
-                obscureText: _obscurePassword,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: "Current Password",
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFF6060FF)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
-                      color: Colors.white.withOpacity(0.5),
-                    ),
-                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Action buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-                      child: Text(
-                        "Cancel",
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _updateEmail,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6060FF),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              "Update",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Change Password Dialog Widget
-class ChangePasswordDialog extends StatefulWidget {
-  final VoidCallback onPasswordUpdated;
-
-  const ChangePasswordDialog({
-    Key? key,
-    required this.onPasswordUpdated,
-  }) : super(key: key);
-
-  @override
-  State<ChangePasswordDialog> createState() => _ChangePasswordDialogState();
-}
-
-class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
-  final TextEditingController _currentPasswordController = TextEditingController();
-  final TextEditingController _newPasswordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
-
-  bool _obscureCurrent = true;
-  bool _obscureNew = true;
-  bool _obscureConfirm = true;
-  bool _isLoading = false;
-  String? _errorMessage;
-
-  @override
-  void dispose() {
-    _currentPasswordController.dispose();
-    _newPasswordController.dispose();
-    _confirmPasswordController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _updatePassword() async {
-    final currentPassword = _currentPasswordController.text;
-    final newPassword = _newPasswordController.text;
-    final confirmPassword = _confirmPasswordController.text;
-
-    // Basic validation
-    if (currentPassword.isEmpty) {
-      setState(() => _errorMessage = "Current password is required");
-      return;
-    }
-
-    if (newPassword.isEmpty) {
-      setState(() => _errorMessage = "New password is required");
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      setState(() => _errorMessage = "New password must be at least 6 characters");
-      return;
-    }
-
-    if (newPassword != confirmPassword) {
-      setState(() => _errorMessage = "New passwords do not match");
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
-      final success = await authProvider.updateProfile(password: newPassword);
-
-      if (success) {
-        widget.onPasswordUpdated();
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Password updated successfully")),
-        );
-      } else {
-        setState(() => _errorMessage = authProvider.errorMessage ?? "Failed to update password");
-      }
-    } catch (e) {
-      setState(() => _errorMessage = "Failed to update password: $e");
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: EnhancedSettingsDesignTokens.cardDark,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              const Text(
-                "Change Password",
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                "Enter your new password",
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withOpacity(0.6),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Error message
-              if (_errorMessage != null)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: EnhancedSettingsDesignTokens.dangerRed.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: EnhancedSettingsDesignTokens.dangerRed.withOpacity(0.3),
-                    ),
-                  ),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(
-                      color: EnhancedSettingsDesignTokens.dangerRed,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-
-              if (_errorMessage != null) const SizedBox(height: 16),
-
-              // Current password field
-              TextField(
-                controller: _currentPasswordController,
-                obscureText: _obscureCurrent,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: "Current Password",
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFF6060FF)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureCurrent ? Icons.visibility : Icons.visibility_off,
-                      color: Colors.white.withOpacity(0.5),
-                    ),
-                    onPressed: () => setState(() => _obscureCurrent = !_obscureCurrent),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // New password field
-              TextField(
-                controller: _newPasswordController,
-                obscureText: _obscureNew,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: "New Password",
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFF6060FF)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureNew ? Icons.visibility : Icons.visibility_off,
-                      color: Colors.white.withOpacity(0.5),
-                    ),
-                    onPressed: () => setState(() => _obscureNew = !_obscureNew),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Confirm password field
-              TextField(
-                controller: _confirmPasswordController,
-                obscureText: _obscureConfirm,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: "Confirm New Password",
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFF6060FF)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureConfirm ? Icons.visibility : Icons.visibility_off,
-                      color: Colors.white.withOpacity(0.5),
-                    ),
-                    onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Action buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-                      child: Text(
-                        "Cancel",
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _updatePassword,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6060FF),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              "Update",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+    final count = _controller.blockedApps.length;
+    return EnhancedSettingsTile(
+      icon: Icons.screen_lock_portrait,
+      title: 'Distracting Apps',
+      subtitle: count > 0
+          ? '$count apps blocked'
+          : 'Choose distracting apps to block',
+      onTap: widget.onTap,
+      iconColor: const Color(0xFFEF4444), // dangerRed color
     );
   }
 }

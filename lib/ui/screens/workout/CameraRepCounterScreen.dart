@@ -9,7 +9,6 @@ import 'dart:async';
 import '../../../state/pushin_app_controller.dart';
 import '../../../services/CameraWorkoutService.dart';
 import '../../../services/PoseDetectionService.dart';
-import '../../../services/PhoneStabilityService.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/pill_navigation_bar.dart';
 import 'WorkoutCompletionScreen.dart';
@@ -45,7 +44,6 @@ class CameraRepCounterScreen extends StatefulWidget {
 class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     with TickerProviderStateMixin {
   late CameraWorkoutService _cameraService;
-  late PhoneStabilityService _stabilityService;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
   late AnimationController _fadeController;
@@ -61,46 +59,37 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
   String _feedbackMessage = 'Position yourself in frame';
   dynamic _currentPhase = PushUpPhase.unknown; // Can be any phase enum
 
-  // NEW: Workout initialization state
+  // Workout initialization state
   bool _isFullBodyDetected = false;
   bool _isReadyToStart = false;
   bool _isPositioning = false; // In positioning state (starts immediately)
+  bool _countdownTriggered = false; // Prevent duplicate countdown triggers
   int _countdownValue = 3;
   bool _isCountingDown = false;
   Timer? _countdownTimer;
-  Timer? _stabilityTimer; // Timer to track stable pose before auto-countdown
-  Timer? _step2Timer; // Timer for step 2 countdown
-  Timer? _step3Timer; // Timer for step 3 countdown
-  DateTime? _readyStateStartTime; // When pose became ready
 
   // Step completion state
   bool _step1Completed = false; // Phone positioned (stable)
   bool _step2Completed = false; // Full body visible
   bool _step3Completed = false; // Arms and legs in frame
 
-  // Step countdown state for visual feedback
-  bool _step2CountingDown = false;
-  bool _step3CountingDown = false;
-
-  // Phone stability state for visual feedback
-  StabilityState _currentStabilityState = StabilityState(isStable: false, isDetecting: false);
-
   // Prevent duplicate workout completion calls
   bool _workoutCompleted = false;
-  static const Duration _stabilityDuration =
-      Duration(milliseconds: 1500); // 1.5 seconds stable
+
+  // Performance optimization: throttle UI updates
+  DateTime? _lastPoseUpdateTime;
+  static const Duration _poseUpdateThrottle =
+      Duration(milliseconds: 100); // 10fps
 
   // Mode colors
   late Color _primaryColor;
   late Color _secondaryColor;
-  late LinearGradient _modeGradient;
 
   @override
   void initState() {
     super.initState();
     _setupModeColors();
     _setupAnimations();
-    _setupStabilityService();
 
     // Reset rep count to ensure clean start
     _currentReps = 0;
@@ -111,10 +100,6 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     _step1Completed = false;
     _step2Completed = false;
     _step3Completed = false;
-
-    // Reset step countdown states
-    _step2CountingDown = false;
-    _step3CountingDown = false;
 
     _initializeCameraService();
 
@@ -133,23 +118,14 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
       case 'cozy':
         _primaryColor = const Color(0xFF10B981); // Green
         _secondaryColor = const Color(0xFF34D399);
-        _modeGradient = const LinearGradient(
-          colors: [Color(0xFF10B981), Color(0xFF34D399)],
-        );
         break;
       case 'tuff':
         _primaryColor = const Color(0xFFF59E0B); // Orange
         _secondaryColor = const Color(0xFFFBBF24);
-        _modeGradient = const LinearGradient(
-          colors: [Color(0xFFF59E0B), Color(0xFFFBBF24)],
-        );
         break;
       default: // normal
         _primaryColor = const Color(0xFF6060FF); // Purple
         _secondaryColor = const Color(0xFF9090FF);
-        _modeGradient = const LinearGradient(
-          colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
-        );
     }
   }
 
@@ -169,79 +145,6 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _fadeController, curve: Curves.easeIn),
     );
-  }
-
-  void _setupStabilityService() {
-    _stabilityService = PhoneStabilityService();
-
-    // Listen for stability state changes
-    _stabilityService.onStabilityStateChanged.listen((state) {
-      if (mounted) {
-        setState(() {
-          _currentStabilityState = state;
-
-          if (_isPositioning) {
-            // Step 1 is completed when phone is stable and flat
-            final step1ShouldBeCompleted = state.isStable;
-
-            if (step1ShouldBeCompleted && !_step1Completed) {
-              _step1Completed = true;
-              debugPrint('Step 1 completed: Phone positioned and stable (stability detection)');
-            } else if (!step1ShouldBeCompleted && _step1Completed) {
-              // Reset step 1 if phone becomes unstable
-              _step1Completed = false;
-              debugPrint('Step 1 reset: Phone moved (stability detection)');
-            }
-          }
-        });
-      }
-    });
-  }
-
-  void _startStep2Countdown() {
-    _step2CountingDown = true;
-    _step2Timer?.cancel();
-
-    _step2Timer = Timer(const Duration(seconds: 2), () {
-      if (mounted && _isPositioning && _step2CountingDown) {
-        setState(() {
-          _step2Completed = true;
-          _step2CountingDown = false;
-        });
-        debugPrint('Step 2 completed: Full body visible (after countdown)');
-      }
-    });
-
-    debugPrint('Started Step 2 countdown');
-  }
-
-  void _resetStep2Countdown() {
-    _step2CountingDown = false;
-    _step2Timer?.cancel();
-    debugPrint('Step 2 countdown reset');
-  }
-
-  void _startStep3Countdown() {
-    _step3CountingDown = true;
-    _step3Timer?.cancel();
-
-    _step3Timer = Timer(const Duration(seconds: 2), () {
-      if (mounted && _isPositioning && _step3CountingDown) {
-        setState(() {
-          _step3Completed = true;
-          _step3CountingDown = false;
-        });
-        debugPrint('Step 3 completed: Arms and legs in frame (after countdown)');
-      }
-    });
-
-    debugPrint('Started Step 3 countdown');
-  }
-
-  void _resetStep3Countdown() {
-    _step3CountingDown = false;
-    _step3Timer?.cancel();
-    debugPrint('Step 3 countdown reset');
   }
 
   /// Check if this is a time-based workout (like plank)
@@ -284,59 +187,51 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
 
     _cameraService.onPoseUpdate = (result) {
       if (mounted) {
-        final wasReady = _isReadyToStart;
-        setState(() {
-          _feedbackMessage = result.feedbackMessage ?? 'Keep going!';
-          _currentPhase = result.phase;
-          _isFullBodyDetected = result.isFullBodyDetected;
-          _isReadyToStart = result.isReadyToStart;
+        final now = DateTime.now();
+        final shouldUpdateUI = _lastPoseUpdateTime == null ||
+            now.difference(_lastPoseUpdateTime!) >= _poseUpdateThrottle;
 
-          // Update step completion states
-          if (_isPositioning) {
-            // Step 1: Phone positioned - now handled by PhoneStabilityService
-            // (was: complete when full body is scanned)
+        final wasFullBodyDetected = _isFullBodyDetected;
 
-            // Step 2: Full body visible - start countdown when detected
-            if (_isFullBodyDetected && !_step2Completed && !_step2CountingDown) {
-              _startStep2Countdown();
-            } else if (!_isFullBodyDetected && _step2CountingDown) {
-              // Reset if body leaves frame during countdown
-              _resetStep2Countdown();
-            }
+        // Always update critical state variables for logic, but throttle UI updates
+        _feedbackMessage = result.feedbackMessage ?? 'Keep going!';
+        _currentPhase = result.phase;
+        _isFullBodyDetected = result.isFullBodyDetected;
+        _isReadyToStart = result.isReadyToStart;
 
-            // Step 3: Arms and legs in frame - start countdown when ready
-            if (_isReadyToStart && !_step3Completed && !_step3CountingDown) {
-              _startStep3Countdown();
-            } else if (!_isReadyToStart && _step3CountingDown) {
-              // Reset if pose becomes invalid during countdown
-              _resetStep3Countdown();
-            }
-          }
-        });
-
-        // Auto-countdown logic when in positioning state
-        if (_isPositioning && !_isCountingDown) {
-          if (_isReadyToStart) {
-            // Pose is ready - track stability
-            if (!wasReady) {
-              // Just became ready - start tracking
-              _readyStateStartTime = DateTime.now();
-            } else {
-              // Check if stable long enough
-              final now = DateTime.now();
-              if (_readyStateStartTime != null &&
-                  now.difference(_readyStateStartTime!) >= _stabilityDuration) {
-                // Stable for required duration - trigger countdown!
-                _triggerAutoCountdown();
-              }
-            }
-          } else {
-            // Not ready - reset stability timer
-            _readyStateStartTime = null;
-          }
+        // Update step completion states
+        if (_isPositioning) {
+          // All steps complete when whole body is visible
+          _step1Completed = _isFullBodyDetected;
+          _step2Completed = _isFullBodyDetected;
+          _step3Completed = _isFullBodyDetected;
         }
 
-        // Pause logic - if active and body leaves frame
+        // Only update UI if enough time has passed, or if critical state changes
+        final criticalStateChanged =
+            (wasFullBodyDetected != _isFullBodyDetected) ||
+                (_isPositioning &&
+                    !_isCountingDown); // Always update during positioning
+
+        if (shouldUpdateUI || criticalStateChanged) {
+          _lastPoseUpdateTime = now;
+          setState(() {
+            // State variables already updated above
+          });
+        }
+
+        // Auto-start countdown when ready to start (during positioning state)
+        if (_isPositioning &&
+            !_isCountingDown &&
+            !_countdownTriggered &&
+            _isReadyToStart) {
+          debugPrint(
+              '🎯 Full body detected! Auto-starting workout countdown...');
+          _countdownTriggered = true;
+          _triggerAutoCountdown();
+        }
+
+        // Pause logic - if active and body leaves frame (always run, not throttled)
         if (_cameraService.poseDetectionService?.workoutState ==
             WorkoutState.active) {
           if (!_isFullBodyDetected || !_isReadyToStart) {
@@ -344,45 +239,11 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
           }
         }
 
-        // Resume logic - if paused and body back in frame
+        // Resume logic - if paused and body back in frame (always run, not throttled)
         if (_cameraService.poseDetectionService?.workoutState ==
             WorkoutState.paused) {
           if (_isFullBodyDetected && _isReadyToStart) {
             _cameraService.poseDetectionService?.resumeWorkout();
-          }
-        }
-
-        // Countdown interruption logic - if user moves away during countdown, cancel it and go back to positioning
-        if (_isCountingDown && !_isFullBodyDetected) {
-          debugPrint(
-              'User moved away during countdown - canceling countdown and returning to positioning');
-          // Cancel timer safely to prevent race conditions
-          final timer = _countdownTimer;
-          _countdownTimer = null;
-          timer?.cancel();
-
-          // Reset pose detection service state first
-          _cameraService.poseDetectionService?.cancelCountdown();
-
-          if (mounted) {
-            setState(() {
-              _isCountingDown = false;
-              _isPositioning = true;
-              _countdownValue = 3;
-              _readyStateStartTime = null; // Reset stability tracking
-              // Reset step completion states to ensure clean restart
-              _step1Completed = false;
-              _step2Completed = false;
-              _step3Completed = false;
-
-              // Reset step countdown states
-              _step2CountingDown = false;
-              _step3CountingDown = false;
-              _step2Timer?.cancel();
-              _step3Timer?.cancel();
-            });
-            debugPrint(
-                '✅ Countdown interrupted successfully - back to positioning mode');
           }
         }
       }
@@ -427,10 +288,7 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
         });
         _fadeController.forward();
 
-        // Start phone stability detection for step 1
-        _stabilityService.startStabilityDetection();
-
-        // Step 1 will be completed when phone stability is detected
+        // Step 1 will be completed when we start receiving valid pose detection data
 
         // Notify pose detection service to enter positioning state immediately
         _cameraService.poseDetectionService?.enterPositioningState();
@@ -534,105 +392,142 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
   void _cancelWorkout() {
     showDialog(
       context: context,
+      barrierColor: Colors.black.withOpacity(0.6),
       builder: (context) => Dialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(28),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF59E0B).withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.warning_amber_rounded,
-                  size: 48,
-                  color: Color(0xFFF59E0B),
-                ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(
+                    0x99000000), // Same glass color as positioning overlay
+                border: Border.all(color: Colors.white.withOpacity(0.1)),
+                borderRadius: BorderRadius.circular(24),
               ),
-              const SizedBox(height: 20),
-              const Text(
-                'Cancel Workout?',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Your progress will be lost.',
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Colors.white.withOpacity(0.6),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: PressAnimationButton(
-                      onTap: () async {
-                        await _cameraService.stopWorkout();
-                        if (mounted) {
-                          context.read<PushinAppController>().cancelWorkout();
-                          Navigator.pop(context);
-                          Navigator.pop(context);
-                        }
-                      },
-                      child: Container(
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(100),
-                        ),
-                        child: Center(
-                          child: Text(
-                            'Cancel',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white.withOpacity(0.8),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                  const SizedBox(height: 8),
+                  // Cancel Icon
+                  Image.asset(
+                    'assets/icons/cancel_icon.png',
+                    width: 36,
+                    height: 36,
+                    color: const Color(0xFFEF4444),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: PressAnimationButton(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.95),
-                          borderRadius: BorderRadius.circular(100),
-                        ),
-                        child: const Center(
-                          child: Text(
-                            'Keep Going',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF2A2A6A),
+                  const SizedBox(height: 16),
+                  // Title with improved typography
+                  Text(
+                    'Cancel Workout?',
+                    style: GoogleFonts.poppins(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: -0.5,
+                      decoration: TextDecoration.none,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 6),
+                  // Subtitle with improved styling
+                  Text(
+                    'Your progress will be lost!',
+                    style: GoogleFonts.poppins(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.white.withOpacity(0.7),
+                      height: 1.4,
+                      decoration: TextDecoration.none,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  // Buttons with enhanced styling
+                  Row(
+                    children: [
+                      Expanded(
+                        child: PressAnimationButton(
+                          onTap: () async {
+                            await _cameraService.stopWorkout();
+                            if (mounted) {
+                              context
+                                  .read<PushinAppController>()
+                                  .cancelWorkout();
+                              Navigator.pop(context);
+                              Navigator.pop(context);
+                            }
+                          },
+                          child: Container(
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444), // Red color
+                              borderRadius: BorderRadius.circular(100),
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      const Color(0xFFEF4444).withOpacity(0.4),
+                                  blurRadius: 15,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: Center(
+                              child: Text(
+                                'Cancel',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: PressAnimationButton(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.95),
+                              borderRadius: BorderRadius.circular(100),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.white.withOpacity(0.2),
+                                  blurRadius: 20,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: Center(
+                              child: Text(
+                                'Continue',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF2A2A6A),
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -649,9 +544,6 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
       _countdownValue = 3;
     });
 
-    // Stop stability detection when starting countdown
-    _stabilityService.stopStabilityDetection();
-
     // Notify pose detection service that countdown started
     _cameraService.poseDetectionService?.startCountdown();
 
@@ -659,26 +551,17 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
 
     // Countdown timer
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      // Safety check - if timer was canceled, don't execute
-      if (_countdownTimer != timer) return;
-
       if (_countdownValue > 1) {
-        if (mounted) {
-          setState(() {
-            _countdownValue--;
-          });
-        }
+        setState(() {
+          _countdownValue--;
+        });
         HapticFeedback.lightImpact();
       } else {
         // Countdown complete!
         timer.cancel();
-        _countdownTimer = null;
-
-        if (mounted) {
-          setState(() {
-            _isCountingDown = false;
-          });
-        }
+        setState(() {
+          _isCountingDown = false;
+        });
 
         // Activate workout in pose detection service
         _cameraService.poseDetectionService?.activateWorkout();
@@ -691,11 +574,7 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
   @override
   void dispose() {
     _countdownTimer?.cancel();
-    _stabilityTimer?.cancel();
-    _step2Timer?.cancel();
-    _step3Timer?.cancel();
     _cameraService.dispose();
-    _stabilityService.dispose();
     _pulseController.dispose();
     _fadeController.dispose();
     super.dispose();
@@ -703,86 +582,102 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
 
   @override
   Widget build(BuildContext context) {
-    final progress = _currentValue / _targetValue;
     final isComplete = _currentValue >= _targetValue;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // Camera preview background
-          _buildCameraPreview(),
+    return WillPopScope(
+      onWillPop: () async {
+        // Cancel workout when user presses back button (Android)
+        await _cameraService.stopWorkout();
+        if (mounted) {
+          context.read<PushinAppController>().cancelWorkout();
+        }
+        return true; // Allow navigation back
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            // Camera preview background
+            _buildCameraPreview(),
 
-          // Gradient overlay for better text visibility
-          _buildGradientOverlay(),
+            // Gradient overlay for better text visibility
+            _buildGradientOverlay(),
 
-          // Pose skeleton overlay
-          if (_isInitialized && !_cameraFailed) _buildPoseOverlay(),
+            // Pose skeleton overlay
+            if (_isInitialized && !_cameraFailed) _buildPoseOverlay(),
 
-          // Main UI content (Header and Counter) - hide during positioning
-          if (!_isPositioning)
-            SafeArea(
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: Column(
-                  children: [
-                    // Header
-                    _buildHeader(),
+            // Main UI content (Header and Counter) - hide during positioning and countdown
+            if (!_isPositioning && !_isCountingDown)
+              SafeArea(
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: Column(
+                    children: [
+                      // Header
+                      _buildHeader(),
 
-                    // Small rep counter below header
-                    _buildSmallRepCounter(),
+                      // Small rep counter below header
+                      _buildSmallRepCounter(),
 
-                    // Large spacer for camera visibility
-                    const Spacer(),
-                  ],
+                      // Large spacer for camera visibility
+                      const Spacer(),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
-          // Bottom action buttons positioned at navigation pill level - hide during positioning
-          if (!_isPositioning)
-            BottomActionContainer(
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: _buildBottomSectionWithFeedback(isComplete),
+            // Bottom action buttons positioned at navigation pill level - hide during positioning and countdown
+            if (!_isPositioning && !_isCountingDown)
+              BottomActionContainer(
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: _buildBottomSectionWithFeedback(isComplete),
+                ),
               ),
-            ),
 
-          // Positioning instructions overlay (show immediately when entering workout)
-          if (_isPositioning && !_isCountingDown) _buildPositioningOverlay(),
+            // Positioning instructions overlay (show immediately when entering workout)
+            if (_isPositioning && !_isCountingDown) _buildPositioningOverlay(),
 
-          // Back button for positioning mode (top left) - hide when ready to avoid visual distraction
-          if (_isPositioning && !_isCountingDown && !_isReadyToStart)
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.4),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.arrow_back_ios_new,
-                      color: Colors.white,
-                      size: 20,
+            // Back button for positioning mode (top left) - hide when ready to avoid visual distraction
+            if (_isPositioning && !_isCountingDown && !_isReadyToStart)
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: GestureDetector(
+                    onTap: () async {
+                      // Cancel the workout when navigating back
+                      await _cameraService.stopWorkout();
+                      if (mounted) {
+                        context.read<PushinAppController>().cancelWorkout();
+                        Navigator.pop(context);
+                      }
+                    },
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.4),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back_ios_new,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
 
-          // Countdown overlay (3-2-1)
-          if (_isCountingDown) _buildCountdownOverlay(),
+            // Countdown overlay (3-2-1)
+            if (_isCountingDown) _buildCountdownOverlay(),
 
-          // Loading overlay
-          (_isInitializing || _cameraFailed)
-              ? _buildLoadingOverlay()
-              : const SizedBox.shrink(),
-        ],
+            // Loading overlay
+            (_isInitializing || _cameraFailed)
+                ? _buildLoadingOverlay()
+                : const SizedBox.shrink(),
+          ],
+        ),
       ),
     );
   }
@@ -941,7 +836,7 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           decoration: BoxDecoration(
             color: glassColor,
             border: Border.all(color: Colors.white.withOpacity(0.1)),
@@ -961,7 +856,6 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
   Widget _buildReadyMessage(Color accentColor) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
-      key: const ValueKey('ReadyMessage'),
       children: [
         Text(
           "Perfect!",
@@ -989,7 +883,6 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min, // Hug content
-      key: const ValueKey('StepsList'),
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1028,23 +921,20 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
           text: 'Place phone 2-3 feet away',
           isCompleted: _step1Completed,
           accentColor: accentColor,
-          showStabilityProgress: _isPositioning && !_step1Completed,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         _buildStepRow(
           icon: Icons.accessibility_new_rounded,
           text: 'Step back until full body is visible',
           isCompleted: _step2Completed,
           accentColor: accentColor,
-          showStep2Progress: _isPositioning && !_step2Completed,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         _buildStepRow(
           icon: Icons.fit_screen_rounded,
           text: 'Ensure arms and legs are in frame',
           isCompleted: _step3Completed,
           accentColor: accentColor,
-          showStep3Progress: _isPositioning && !_step3Completed,
         ),
       ],
     );
@@ -1055,9 +945,6 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     required String text,
     required bool isCompleted,
     required Color accentColor,
-    bool showStabilityProgress = false,
-    bool showStep2Progress = false,
-    bool showStep3Progress = false,
   }) {
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 300),
@@ -1078,22 +965,11 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
                     isCompleted ? accentColor : Colors.white.withOpacity(0.3),
               ),
             ),
-            child: (showStabilityProgress && _currentStabilityState.isDetecting && !isCompleted) ||
-                     (showStep2Progress && _step2CountingDown && !isCompleted) ||
-                     (showStep3Progress && _step3CountingDown && !isCompleted)
-                ? SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(accentColor),
-                    ),
-                  )
-                : Icon(
-                    isCompleted ? Icons.check : icon,
-                    size: 18,
-                    color: isCompleted ? Colors.white : Colors.white,
-                  ),
+            child: Icon(
+              isCompleted ? Icons.check : icon,
+              size: 18,
+              color: isCompleted ? Colors.white : Colors.white,
+            ),
           ),
           const SizedBox(width: 16),
 
@@ -1119,47 +995,51 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
   /// Build countdown overlay with large number
   Widget _buildCountdownOverlay() {
     return Container(
-      key: ValueKey(
-          'countdown_$_countdownValue'), // Force rebuild on value change
       color: Colors.black.withOpacity(0.4),
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Large countdown number with safe animation
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              transitionBuilder: (child, animation) =>
-                  ScaleTransition(scale: animation, child: child),
-              child: Container(
-                key: ValueKey(_countdownValue), // Force animation restart
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [_primaryColor, _secondaryColor],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _primaryColor.withOpacity(0.5),
-                      blurRadius: 40,
-                      spreadRadius: 10,
+            // Large countdown number
+            TweenAnimationBuilder<double>(
+              key: ValueKey(
+                  _countdownValue), // Unique key for each countdown value
+              tween: Tween(begin: 0.8, end: 1.2),
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.elasticOut,
+              builder: (context, scale, child) {
+                return Transform.scale(
+                  scale: scale,
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [_primaryColor, _secondaryColor],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _primaryColor.withOpacity(0.5),
+                          blurRadius: 40,
+                          spreadRadius: 10,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: Center(
-                  child: Text(
-                    '$_countdownValue',
-                    style: const TextStyle(
-                      fontSize: 64,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      height: 1.0,
+                    child: Center(
+                      child: Text(
+                        '$_countdownValue',
+                        style: const TextStyle(
+                          fontSize: 64,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          height: 1.0,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
             const SizedBox(height: 32),
             // Get Ready text
@@ -1308,22 +1188,22 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
                     )
                   : null,
             ),
-            child: Icon(
-              _cameraFailed
-                  ? Icons.visibility_off
-                  : _isReadyToStart
-                      ? Icons.check_circle
-                      : _isFullBodyDetected
-                          ? Icons.person
-                          : Icons.person_outline,
-              color: _cameraFailed
-                  ? Colors.red
-                  : _isReadyToStart
-                      ? const Color(0xFF10B981)
-                      : _isFullBodyDetected
-                          ? const Color(0xFFF59E0B)
-                          : Colors.white.withOpacity(0.5),
-              size: 22,
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: Image.asset(
+                  'assets/icons/body_cutout.png',
+                  fit: BoxFit.contain,
+                  color: _cameraFailed
+                      ? Colors.red
+                      : _isReadyToStart
+                          ? const Color(0xFF10B981)
+                          : _isFullBodyDetected
+                              ? const Color(0xFFF59E0B)
+                              : Colors.white.withOpacity(0.5),
+                ),
+              ),
             ),
           ),
         ],
@@ -1397,9 +1277,8 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Feedback message or positioning instructions
+        // Positioning instruction with workout icon
         !isComplete &&
-                !_isCountingDown && // Don't show during countdown
                 (_isPositioning ||
                     _cameraService.poseDetectionService?.workoutState ==
                         WorkoutState.active ||
@@ -1420,18 +1299,19 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _buildPhaseIndicator(),
+                    Image.asset(
+                      _getWorkoutIconPath(),
+                      width: 24,
+                      height: 24,
+                      color: _primaryColor,
+                    ),
                     const SizedBox(width: 12),
-                    Flexible(
-                      child: Text(
-                        _getMotivationalMessage(
-                            progress: _currentReps / widget.targetReps),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                        textAlign: TextAlign.center,
+                    Text(
+                      _getPositioningInstruction(),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withOpacity(0.9),
                       ),
                     ),
                   ],
@@ -1516,48 +1396,6 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
                   )
                 : const SizedBox.shrink(),
       ],
-    );
-  }
-
-  Widget _buildPhaseIndicator() {
-    IconData icon;
-    Color color;
-
-    // Use string representation for generic phase detection
-    final phaseStr = _currentPhase.toString().toLowerCase();
-
-    if (phaseStr.contains('.up') && !phaseStr.contains('going')) {
-      icon = Icons.arrow_downward_rounded;
-      color = _primaryColor;
-    } else if (phaseStr.contains('goingdown')) {
-      icon = Icons.arrow_downward_rounded;
-      color = _secondaryColor;
-    } else if (phaseStr.contains('.down')) {
-      icon = Icons.arrow_upward_rounded;
-      color = _primaryColor;
-    } else if (phaseStr.contains('goingup')) {
-      icon = Icons.arrow_upward_rounded;
-      color = _secondaryColor;
-    } else if (phaseStr.contains('holding')) {
-      // For plank
-      icon = Icons.accessibility_new_rounded;
-      color = _primaryColor;
-    } else if (phaseStr.contains('together') || phaseStr.contains('apart')) {
-      // For jumping jacks
-      icon = Icons.directions_run_rounded;
-      color = _primaryColor;
-    } else {
-      icon = Icons.fitness_center_rounded;
-      color = Colors.white.withOpacity(0.5);
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
-        shape: BoxShape.circle,
-      ),
-      child: Icon(icon, color: color, size: 18),
     );
   }
 
@@ -1702,30 +1540,42 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
     }).join(' ');
   }
 
-  String _getMotivationalMessage({required double progress}) {
-    // Only show detection-related feedback messages (directional and form guidance)
-    return _feedbackMessage;
-  }
-
-  // TEMPORARY DEBUG METHODS - Remove after testing
-  String _getJumpingJackConfidence() {
-    final poseService = _cameraService?.poseDetectionService;
-    if (poseService == null) return '0';
-    return poseService.jumpingJackConfidence.toString();
-  }
-
-  String _getCurrentRawPhase() {
-    final poseService = _cameraService?.poseDetectionService;
-    if (poseService == null) return 'unknown';
-
-    final rawPhase = poseService.currentRawPhase;
-    if (rawPhase == null) return 'unknown';
-
-    // Convert enum to string
-    if (rawPhase is JumpingJackPhase) {
-      return rawPhase.toString().split('.').last;
+  String _getWorkoutIconPath() {
+    switch (widget.workoutType.toLowerCase()) {
+      case 'push-ups':
+        return 'assets/icons/pushup_icon.png';
+      case 'squats':
+        return 'assets/icons/squats_icon.png';
+      case 'plank':
+        return 'assets/icons/plank_icon.png';
+      case 'jumping-jacks':
+        return 'assets/icons/jumping_jacks_icon.png';
+      case 'burpees':
+        return 'assets/icons/pushup_icon.png'; // Use pushup icon as fallback for burpees
+      case 'glute-bridge':
+        return 'assets/icons/glutebridge_icon.png';
+      default:
+        return 'assets/icons/pushup_icon.png';
     }
-    return 'unknown';
+  }
+
+  String _getPositioningInstruction() {
+    switch (widget.workoutType.toLowerCase()) {
+      case 'push-ups':
+        return 'Face the camera from the side';
+      case 'squats':
+        return 'Face the camera from the side';
+      case 'plank':
+        return 'Face the camera from the side';
+      case 'jumping-jacks':
+        return 'Face the camera from the front';
+      case 'burpees':
+        return 'Face the camera from the side';
+      case 'glute-bridge':
+        return 'Face the camera from the side';
+      default:
+        return 'Face the camera from the front';
+    }
   }
 }
 
@@ -1789,7 +1639,6 @@ class _ProgressBorderPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round;
 
       // Create path that follows the pill perimeter
-      final path = Path();
       final metrics = _createPillPath(rrect).computeMetrics().first;
       final extractPath = metrics.extractPath(0, metrics.length * progress);
 

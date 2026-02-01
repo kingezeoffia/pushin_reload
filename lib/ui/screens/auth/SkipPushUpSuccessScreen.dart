@@ -47,7 +47,8 @@ class SkipPushUpSuccessScreen extends StatefulWidget {
   });
 
   @override
-  State<SkipPushUpSuccessScreen> createState() => _SkipPushUpSuccessScreenState();
+  State<SkipPushUpSuccessScreen> createState() =>
+      _SkipPushUpSuccessScreenState();
 }
 
 class _SkipPushUpSuccessScreenState extends State<SkipPushUpSuccessScreen>
@@ -162,7 +163,8 @@ class _SkipPushUpSuccessScreenState extends State<SkipPushUpSuccessScreen>
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: const Color(0xFF10B981).withOpacity(0.4),
+                                          color: const Color(0xFF10B981)
+                                              .withOpacity(0.4),
                                           blurRadius: 40,
                                           spreadRadius: 10,
                                         ),
@@ -211,31 +213,36 @@ class _SkipPushUpSuccessScreenState extends State<SkipPushUpSuccessScreen>
                   ),
 
                   const Spacer(),
-
-                  // Action Button
-                  Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: _ContinueButton(
-                      onTap: () {
-                        final authProvider =
-                            Provider.of<AuthStateProvider>(context, listen: false);
-                        authProvider.advanceGuestSetupStep();
-
-                        // Navigate to the next screen in the guest flow (disable swipe back)
-                        Navigator.push(
-                          context,
-                          _NoSwipeBackRoute(
-                            builder: (context) => SkipEmergencyUnlockScreen(
-                              blockedApps: blockedApps,
-                              selectedWorkout: selectedWorkout,
-                              unlockDuration: 15, // Default 15 minutes
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
                 ],
+              ),
+            ),
+          ),
+
+          // Continue Button - positioned at screen edge like other major onboarding buttons
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: MediaQuery.of(context).padding.bottom,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: _ContinueButton(
+                onTap: () {
+                  final authProvider =
+                      Provider.of<AuthStateProvider>(context, listen: false);
+                  authProvider.advanceGuestSetupStep();
+
+                  // Navigate to the next screen in the guest flow (disable swipe back)
+                  Navigator.push(
+                    context,
+                    _NoSwipeBackRoute(
+                      builder: (context) => SkipEmergencyUnlockScreen(
+                        blockedApps: blockedApps,
+                        selectedWorkout: selectedWorkout,
+                        unlockDuration: 15, // Default 15 minutes
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ),

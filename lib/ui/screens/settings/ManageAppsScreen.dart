@@ -63,7 +63,8 @@ class _ManageAppsScreenState extends State<ManageAppsScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Enable "Display over other apps" for PUSHIN, then return here'),
+          content: const Text(
+              'Enable "Display over other apps" for PUSHIN, then return here'),
           backgroundColor: PushinTheme.primaryBlue,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 4),
@@ -114,11 +115,11 @@ class _ManageAppsScreenState extends State<ManageAppsScreen> {
           isBlocked: blockedApps.contains('com.google.android.youtube'),
           category: 'Entertainment'),
       AppItem(
-          name: 'Netflix',
-          packageName: 'com.netflix.mediaclient',
-          icon: Icons.movie,
-          isBlocked: blockedApps.contains('com.netflix.mediaclient'),
-          category: 'Entertainment'),
+          name: 'Figma',
+          packageName: 'com.figma.mirror',
+          icon: Icons.design_services,
+          isBlocked: blockedApps.contains('com.figma.mirror'),
+          category: 'Productivity'),
       AppItem(
           name: 'Reddit',
           packageName: 'com.reddit.frontpage',
@@ -173,10 +174,8 @@ class _ManageAppsScreenState extends State<ManageAppsScreen> {
 
     // Update the controller with the new blocked apps list
     final controller = context.read<PushinAppController>();
-    final blockedPackageNames = _apps
-        .where((a) => a.isBlocked)
-        .map((a) => a.packageName)
-        .toList();
+    final blockedPackageNames =
+        _apps.where((a) => a.isBlocked).map((a) => a.packageName).toList();
 
     await controller.updateBlockedApps(blockedPackageNames);
   }
@@ -213,6 +212,18 @@ class _ManageAppsScreenState extends State<ManageAppsScreen> {
           SnackBar(
             content: const Text('Apps selected for blocking'),
             backgroundColor: PushinTheme.successGreen,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      } else if (mounted) {
+        // Show error message if permission was denied or picker failed
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Screen Time access is required to block apps'),
+            backgroundColor: PushinTheme.errorRed,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -293,8 +304,8 @@ class _ManageAppsScreenState extends State<ManageAppsScreen> {
                     Expanded(
                       child: Text(
                         _isIOS
-                          ? 'Complete a workout to unblock apps'
-                          : 'Blocked apps require a workout to access',
+                            ? 'Complete a workout to unblock apps'
+                            : 'Blocked apps require a workout to access',
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.white.withValues(alpha: 0.7),
@@ -329,13 +340,13 @@ class _ManageAppsScreenState extends State<ManageAppsScreen> {
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   gradient: hasTokens
-                    ? PushinTheme.primaryGradient
-                    : LinearGradient(
-                        colors: [
-                          Colors.orange.withValues(alpha: 0.3),
-                          Colors.orange.withValues(alpha: 0.1),
-                        ],
-                      ),
+                      ? PushinTheme.primaryGradient
+                      : LinearGradient(
+                          colors: [
+                            Colors.orange.withValues(alpha: 0.3),
+                            Colors.orange.withValues(alpha: 0.1),
+                          ],
+                        ),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
@@ -361,8 +372,8 @@ class _ManageAppsScreenState extends State<ManageAppsScreen> {
                           const SizedBox(height: 2),
                           Text(
                             hasTokens
-                              ? 'Screen Time blocking is ready'
-                              : 'Select apps to block via Screen Time',
+                                ? 'Screen Time blocking is ready'
+                                : 'Select apps to block via Screen Time',
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.white.withValues(alpha: 0.8),
@@ -385,8 +396,12 @@ class _ManageAppsScreenState extends State<ManageAppsScreen> {
                   icon: Icons.security,
                   title: 'Screen Time Access',
                   description: 'Allow PUSHIN to manage app restrictions',
-                  buttonText: _isRequestingPermission ? 'Requesting...' : 'Grant Access',
-                  onPressed: _isRequestingPermission ? null : _requestScreenTimePermission,
+                  buttonText: _isRequestingPermission
+                      ? 'Requesting...'
+                      : 'Grant Access',
+                  onPressed: _isRequestingPermission
+                      ? null
+                      : _requestScreenTimePermission,
                   isLoading: _isRequestingPermission,
                 ),
                 const SizedBox(height: 24),
@@ -401,9 +416,10 @@ class _ManageAppsScreenState extends State<ManageAppsScreen> {
               _buildActionCard(
                 icon: Icons.apps,
                 title: 'Choose Apps',
-                description: 'Open Apple\'s app picker to select which apps to block',
+                description:
+                    'Open Apple\'s app picker to select which apps to block',
                 buttonText: _isOpeningPicker ? 'Opening...' : 'Select Apps',
-                onPressed: (isAuthorized && !_isOpeningPicker) ? _openIOSAppPicker : null,
+                onPressed: !_isOpeningPicker ? _openIOSAppPicker : null,
                 isLoading: _isOpeningPicker,
                 isPrimary: true,
               ),
@@ -521,8 +537,8 @@ class _ManageAppsScreenState extends State<ManageAppsScreen> {
               onPressed: onPressed,
               style: ElevatedButton.styleFrom(
                 backgroundColor: isPrimary
-                  ? PushinTheme.primaryBlue
-                  : Colors.white.withValues(alpha: 0.1),
+                    ? PushinTheme.primaryBlue
+                    : Colors.white.withValues(alpha: 0.1),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
@@ -531,21 +547,21 @@ class _ManageAppsScreenState extends State<ManageAppsScreen> {
                 elevation: 0,
               ),
               child: isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(
+                      buttonText,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  )
-                : Text(
-                    buttonText,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
             ),
           ),
         ],

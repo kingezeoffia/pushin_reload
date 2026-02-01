@@ -28,13 +28,12 @@ class CameraWorkoutService extends ChangeNotifier {
   CameraServiceState _state = CameraServiceState.uninitialized;
   String? _errorMessage;
   bool _isProcessingFrame = false;
-  int _frameSkipCounter = 0;
   String _workoutType = 'push-ups'; // Current workout type
 
-  // Process every N frames to maintain performance
-  int get _frameSkipRate => _workoutType == 'jumping-jacks'
-      ? 1
-      : 3; // Process 1 in every 1 frame for jumping jacks (~30 FPS), 3 for others (~10 FPS)
+  // PERFORMANCE: Store latest frame to process instead of dropping
+  CameraImage? _pendingFrame;
+  InputImageRotation? _pendingRotation;
+  Size? _pendingSize;
 
   // Current detection result
   PoseDetectionResult _lastResult = PoseDetectionResult.empty();
@@ -164,11 +163,13 @@ class CameraWorkoutService extends ChangeNotifier {
       );
 
       // Initialize camera controller
+      // PERFORMANCE: Use 1080p - good balance of quality and performance
+      // Options: high (720p) for slower devices, veryHigh (1080p) for modern devices
       debugPrint(
           'Initializing camera controller with ${preferredCamera == CameraLensDirection.front ? "front" : "back"} camera...');
       _cameraController = CameraController(
         selectedCamera,
-        ResolutionPreset.veryHigh, // High quality for modern devices like iPhone 15 Pro Max
+        ResolutionPreset.veryHigh, // 1080p - good for iPhone 15 Pro Max
         enableAudio: false,
         imageFormatGroup: Platform.isAndroid
             ? ImageFormatGroup.nv21
@@ -263,30 +264,38 @@ class CameraWorkoutService extends ChangeNotifier {
   }
 
   /// Process camera frame
-  void _onCameraFrame(CameraImage image) async {
-    // Skip frames to maintain performance
-    _frameSkipCounter++;
-    if (_frameSkipCounter < _frameSkipRate) {
+  /// PERFORMANCE: Always keeps latest frame, never drops user movement
+  void _onCameraFrame(CameraImage image) {
+    if (_poseDetectionService == null || _cameraController == null) {
       return;
     }
-    _frameSkipCounter = 0;
 
-    // Prevent concurrent processing
-    if (_isProcessingFrame ||
-        _poseDetectionService == null ||
-        _cameraController == null) {
+    // Always store the latest frame data
+    final rotation = _getImageRotation();
+    final imageSize = Size(
+      image.width.toDouble(),
+      image.height.toDouble(),
+    );
+
+    // If already processing, queue this frame as pending (replaces any previous pending)
+    if (_isProcessingFrame) {
+      _pendingFrame = image;
+      _pendingRotation = rotation;
+      _pendingSize = imageSize;
       return;
     }
 
     _isProcessingFrame = true;
+    _processFrameAsync(image, rotation, imageSize);
+  }
 
+  /// Async frame processing - processes pending frame when done
+  Future<void> _processFrameAsync(
+    CameraImage image,
+    InputImageRotation rotation,
+    Size imageSize,
+  ) async {
     try {
-      final rotation = _getImageRotation();
-      final imageSize = Size(
-        image.width.toDouble(),
-        image.height.toDouble(),
-      );
-
       final result = await _poseDetectionService!.processFrame(
         image,
         rotation,
@@ -295,11 +304,26 @@ class CameraWorkoutService extends ChangeNotifier {
 
       _lastResult = result;
       onPoseUpdate?.call(result);
-      notifyListeners();
+      if (hasListeners) {
+        notifyListeners();
+      }
     } catch (e) {
       debugPrint('Frame processing error: $e');
     } finally {
-      _isProcessingFrame = false;
+      // Check if there's a pending frame to process immediately
+      if (_pendingFrame != null && _pendingRotation != null && _pendingSize != null) {
+        final nextFrame = _pendingFrame!;
+        final nextRotation = _pendingRotation!;
+        final nextSize = _pendingSize!;
+        _pendingFrame = null;
+        _pendingRotation = null;
+        _pendingSize = null;
+
+        // Process the pending frame immediately (no gap)
+        _processFrameAsync(nextFrame, nextRotation, nextSize);
+      } else {
+        _isProcessingFrame = false;
+      }
     }
   }
 

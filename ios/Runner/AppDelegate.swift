@@ -95,38 +95,154 @@ class NativeLiquidGlassView: NSObject, FlutterPlatformView {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // Call super FIRST to ensure Flutter engine is initialized properly
+    let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    
     GeneratedPluginRegistrant.register(with: self)
 
     // Set up notification center delegate for native notifications
     UNUserNotificationCenter.current().delegate = self
 
-    // Initialize Screen Time platform channel
-    setupScreenTimeChannel()
+    // Ensure window is visible and Flutter view is ready
+    // This helps ensure the launch screen is properly dismissed
+    if let window = self.window {
+      window.makeKeyAndVisible()
+    }
 
-    // Initialize iOS Settings platform channel
-    setupIOSSettingsChannel()
+    // Defer platform channel setup until the window and Flutter view controller are ready
+    // This ensures the Flutter engine is fully initialized before we try to access it
+    DispatchQueue.main.async { [weak self] in
+      self?.setupPlatformChannels()
+    }
 
-    // Initialize Native Liquid Glass method channel
-    setupNativeLiquidGlass()
+    return result
+  }
 
-    print("📱 PUSHIN - Screen Time, iOS Settings, and Native Liquid Glass integration active")
+  /// Track if platform channels have been set up
+  private var platformChannelsSetup = false
+  
+  /// Track if native liquid glass plugin has been registered
+  private var nativeLiquidGlassRegistered = false
 
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  /// Find Flutter view controller recursively (handles Mac Catalyst nested hierarchy)
+  private func findFlutterViewController(in viewController: UIViewController?) -> FlutterViewController? {
+    guard let vc = viewController else { return nil }
+    
+    // Check if this is the Flutter view controller
+    if let flutterVC = vc as? FlutterViewController {
+      return flutterVC
+    }
+    
+    // Check child view controllers
+    for child in vc.children {
+      if let flutterVC = findFlutterViewController(in: child) {
+        return flutterVC
+      }
+    }
+    
+    // Check presented view controller
+    if let presented = vc.presentedViewController {
+      if let flutterVC = findFlutterViewController(in: presented) {
+        return flutterVC
+      }
+    }
+    
+    return nil
+  }
+
+  /// Set up all platform channels once the Flutter view controller is ready
+  private func setupPlatformChannels() {
+    guard !platformChannelsSetup else { return }
+    
+    // Try multiple times with increasing delays to ensure Flutter engine is ready
+    var attempts = 0
+    let maxAttempts = 15
+    
+    func trySetup() {
+      attempts += 1
+      
+      // Try to find Flutter view controller (handles Mac Catalyst nested hierarchy)
+      let controller = self.findFlutterViewController(in: self.window?.rootViewController)
+      
+      guard let flutterController = controller else {
+        if attempts < maxAttempts {
+          // Retry with exponential backoff
+          let delay = min(0.1 * Double(attempts), 1.0)
+          DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            trySetup()
+          }
+          if attempts % 3 == 0 {
+            print("⚠️ Flutter view controller not ready yet (attempt \(attempts)/\(maxAttempts)), retrying...")
+            // Debug: Print view hierarchy
+            if let rootVC = self.window?.rootViewController {
+              print("   Root VC: \(type(of: rootVC)), children: \(rootVC.children.count)")
+            }
+          }
+        } else {
+          print("⚠️ Flutter view controller not ready after \(maxAttempts) attempts - platform channels may not work")
+          print("   This is expected on Mac Catalyst - platform channels will be set up when available")
+        }
+        return
+      }
+      
+      // Success! Set up platform channels
+      print("✅ Flutter view controller ready, setting up platform channels...")
+      
+      // Initialize Screen Time platform channel
+      self.setupScreenTimeChannel(controller: flutterController)
+
+      // Initialize iOS Settings platform channel
+      self.setupIOSSettingsChannel(controller: flutterController)
+
+      // Initialize Native Liquid Glass method channel
+      self.setupNativeLiquidGlass(controller: flutterController)
+
+      self.platformChannelsSetup = true
+      print("📱 PUSHIN - Screen Time, iOS Settings, and Native Liquid Glass integration active")
+    }
+    
+    // Start trying immediately
+    DispatchQueue.main.async {
+      trySetup()
+    }
+  }
+
+  /// Fallback: Set up platform channels when app becomes active (ensures window is ready)
+  override func applicationDidBecomeActive(_ application: UIApplication) {
+    super.applicationDidBecomeActive(application)
+    
+    // Retry setup if it hasn't been done yet
+    if !platformChannelsSetup {
+      print("🔄 App became active, retrying platform channel setup...")
+      setupPlatformChannels()
+    }
   }
 
   // MARK: Deep Link Handling
   override func application(_ application: UIApplication,
                            open url: URL,
                            options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
-    return handleDeepLink(url)
+    print("🔗 Deep link received: \(url)")
+    print("🔗   scheme: \(url.scheme ?? "nil")")
+    print("🔗   host: \(url.host ?? "nil")")
+
+    // Handle workout deep links via method channel
+    if handleWorkoutDeepLink(url) {
+      return true
+    }
+
+    // For ALL other deep links (including pushinapp://payment-success),
+    // let Flutter's app_links package handle them by calling super
+    print("🔗 Forwarding to Flutter app_links: \(url)")
+    return super.application(application, open: url, options: options)
   }
 
-  private func handleDeepLink(_ url: URL) -> Bool {
-    print("🔗 Deep link received: \(url)")
+  /// Handle workout-specific deep links (pushin://workout)
+  /// Returns true if handled, false otherwise
+  private func handleWorkoutDeepLink(_ url: URL) -> Bool {
     if url.scheme == "pushin" && url.host == "workout" {
       print("🏋️ Deep link to workout screen detected!")
-      // Signal Flutter to navigate to workout screen
-      guard let controller = window?.rootViewController as? FlutterViewController else {
+      guard let controller = findFlutterViewController(in: window?.rootViewController) else {
         print("❌ Could not get Flutter view controller")
         return false
       }
@@ -139,8 +255,24 @@ class NativeLiquidGlassView: NSObject, FlutterPlatformView {
     return false
   }
 
-  private func setupScreenTimeChannel() {
-    guard let controller = window?.rootViewController as? FlutterViewController else {
+  /// Handle any deep link - for use from notification handlers
+  private func handleDeepLink(_ url: URL) -> Bool {
+    print("🔗 handleDeepLink called: \(url)")
+
+    // Try workout deep link first
+    if handleWorkoutDeepLink(url) {
+      return true
+    }
+
+    // For other deep links, we can't easily forward to app_links from here,
+    // but the notification scenario typically only needs workout links
+    print("🔗 Non-workout deep link from notification: \(url)")
+    return false
+  }
+
+  private func setupScreenTimeChannel(controller: FlutterViewController? = nil) {
+    let flutterController = controller ?? findFlutterViewController(in: window?.rootViewController)
+    guard let controller = flutterController else {
       return
     }
 
@@ -159,8 +291,9 @@ class NativeLiquidGlassView: NSObject, FlutterPlatformView {
     }
   }
 
-  private func setupIOSSettingsChannel() {
-    guard let controller = window?.rootViewController as? FlutterViewController else {
+  private func setupIOSSettingsChannel(controller: FlutterViewController? = nil) {
+    let flutterController = controller ?? findFlutterViewController(in: window?.rootViewController)
+    guard let controller = flutterController else {
       return
     }
 
@@ -214,8 +347,15 @@ class NativeLiquidGlassView: NSObject, FlutterPlatformView {
     }
   }
 
-  private func setupNativeLiquidGlass() {
-    guard let controller = window?.rootViewController as? FlutterViewController else {
+  private func setupNativeLiquidGlass(controller: FlutterViewController? = nil) {
+    // Prevent duplicate registration
+    guard !nativeLiquidGlassRegistered else {
+      print("⚠️ Native Liquid Glass already registered, skipping duplicate registration")
+      return
+    }
+    
+    let flutterController = controller ?? findFlutterViewController(in: window?.rootViewController)
+    guard let controller = flutterController else {
       return
     }
 
@@ -235,6 +375,9 @@ class NativeLiquidGlassView: NSObject, FlutterPlatformView {
     // Register platform view factory
     let factory = NativeLiquidGlassViewFactory(messenger: controller.binaryMessenger)
     controller.registrar(forPlugin: "com.pushin.native_liquid_glass")?.register(factory, withId: "native_liquid_glass")
+    
+    // Mark as registered to prevent duplicates
+    nativeLiquidGlassRegistered = true
 
     print("✨ Native Liquid Glass platform view and method channel registered")
   }

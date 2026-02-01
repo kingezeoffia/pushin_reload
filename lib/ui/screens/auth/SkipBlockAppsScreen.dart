@@ -36,18 +36,10 @@ class _SkipBlockAppsScreenState extends State<SkipBlockAppsScreen> {
       debugPrint('🍎 Presenting iOS app picker and saving tokens...');
       final success = await appController.presentIOSAppPicker();
 
-      if (success) {
-        debugPrint('✅ Apps selected and tokens saved successfully');
-        // Permission granted and apps selected - advance guest setup
-        final authProvider = context.read<AuthStateProvider>();
-        authProvider.advanceGuestSetupStep();
-      } else {
-        // User cancelled or no apps selected
-        debugPrint('❌ No apps selected or permission denied');
-        setState(() {
-          _errorMessage = 'Please select at least one app to continue';
-        });
-      }
+      debugPrint('✅ Proceeding with app selection (success: $success)');
+      // Always advance guest setup regardless of app selection
+      final authProvider = context.read<AuthStateProvider>();
+      authProvider.advanceGuestSetupStep();
     } catch (e) {
       setState(() {
         _errorMessage = 'Screen Time access is required. Please try again.';
@@ -99,7 +91,7 @@ class _SkipBlockAppsScreenState extends State<SkipBlockAppsScreen> {
                         ),
                         const SizedBox(height: 20),
                         const Text(
-                          'Block',
+                          'Block Your',
                           style: TextStyle(
                             fontSize: 44,
                             fontWeight: FontWeight.w800,
@@ -118,7 +110,7 @@ class _SkipBlockAppsScreenState extends State<SkipBlockAppsScreen> {
                           ),
                           blendMode: BlendMode.srcIn,
                           child: Text(
-                            'Distracting Apps',
+                            'Apps',
                             style: TextStyle(
                               fontSize: 44,
                               fontWeight: FontWeight.w800,
@@ -152,7 +144,7 @@ class _SkipBlockAppsScreenState extends State<SkipBlockAppsScreen> {
                       children: [
                         _ValuePoint(
                           icon: Icons.block,
-                          text: 'Block social media and games',
+                          text: 'Block distracting apps',
                         ),
                         SizedBox(height: 16),
                         _ValuePoint(
@@ -162,7 +154,7 @@ class _SkipBlockAppsScreenState extends State<SkipBlockAppsScreen> {
                         SizedBox(height: 16),
                         _ValuePoint(
                           icon: Icons.phone_android,
-                          text: 'Break the scroll habit',
+                          text: 'Break your scrolling habits',
                         ),
                       ],
                     ),

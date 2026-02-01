@@ -114,7 +114,7 @@ class WorkoutSelectionScreen extends StatelessWidget {
 
                           const SizedBox(height: 12),
 
-                          // Squats (Standard+)
+                          // Squats (Pro)
                           _OnboardingWorkoutCard(
                             icon: Icons.airline_seat_legroom_normal,
                             title: 'Squats',
@@ -126,6 +126,23 @@ class WorkoutSelectionScreen extends StatelessWidget {
                                 ? _showUpgradeDialog(context, 'Squats', 'Pro')
                                 : _startWorkout(
                                     context, controller, 'squats', 30),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // Glute Bridge (Pro)
+                          _OnboardingWorkoutCard(
+                            icon: Icons.accessibility_new,
+                            title: 'Glute Bridge',
+                            subtitle: planTier == 'free'
+                                ? 'Pro Plan'
+                                : '25 reps = 13 minutes',
+                            isLocked: planTier == 'free',
+                            onTap: () => planTier == 'free'
+                                ? _showUpgradeDialog(
+                                    context, 'Glute Bridge', 'Pro')
+                                : _startWorkout(
+                                    context, controller, 'glute-bridge', 25),
                           ),
 
                           const SizedBox(height: 12),
@@ -147,36 +164,19 @@ class WorkoutSelectionScreen extends StatelessWidget {
 
                           const SizedBox(height: 12),
 
-                          // Jumping Jacks (Standard+)
-                          _OnboardingWorkoutCard(
-                            icon: Icons.directions_run,
-                            title: 'Jumping Jacks',
-                            subtitle: planTier == 'free'
-                                ? 'Pro Plan'
-                                : '40 reps = 16 minutes',
-                            isLocked: planTier == 'free',
-                            onTap: () => planTier == 'free'
-                                ? _showUpgradeDialog(
-                                    context, 'Jumping Jacks', 'Pro')
-                                : _startWorkout(
-                                    context, controller, 'jumping-jacks', 40),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // Burpees (Advanced)
+                          // Jumping Jacks (Advanced)
                           _OnboardingWorkoutCard(
                             icon: Icons.sports_gymnastics,
-                            title: 'Burpees',
+                            title: 'Jumping Jacks',
                             subtitle: planTier != 'advanced'
                                 ? 'Advanced Plan'
-                                : '15 reps = 12 minutes',
+                                : '40 reps = 16 minutes',
                             isLocked: planTier != 'advanced',
                             onTap: () => planTier != 'advanced'
                                 ? _showUpgradeDialog(
-                                    context, 'Burpees', 'Advanced')
+                                    context, 'Jumping Jacks', 'Advanced')
                                 : _startWorkout(
-                                    context, controller, 'burpees', 15),
+                                    context, controller, 'jumping-jacks', 40),
                           ),
 
                           const SizedBox(height: 24),

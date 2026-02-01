@@ -78,7 +78,7 @@ void main() {
           workoutType: 'push-ups',
           repsCompleted: 20,
         );
-        
+
         final uppercase = calculator.calculateEarnedTime(
           workoutType: 'PUSH-UPS',
           repsCompleted: 20,
@@ -167,38 +167,3 @@ void main() {
     });
   });
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
