@@ -21,10 +21,14 @@ class DeepLinkHandler {
   Function(SubscriptionStatus)? onPaymentSuccess;
   Function()? onPaymentCanceled;
   Function(String token)? onPasswordReset;
+  Function(String? previousPlan)? onSubscriptionCancelled;
 
   // Store the userId from the last checkout for verification
   // This is set by PaywallScreen before launching checkout
   String? pendingCheckoutUserId;
+
+  // Store subscription status before opening portal for comparison
+  SubscriptionStatus? _subscriptionBeforePortal;
 
   // Store the planId for fallback subscription status creation
   String? pendingCheckoutPlanId;
@@ -37,6 +41,7 @@ class DeepLinkHandler {
     this.onPaymentSuccess,
     this.onPaymentCanceled,
     this.onPasswordReset,
+    this.onSubscriptionCancelled,
     this.getCurrentUserId,
   });
 
@@ -137,6 +142,11 @@ class DeepLinkHandler {
         case 'reset-password':
           print('🔗 → Routing to _handlePasswordReset');
           await _handlePasswordReset(uri);
+          break;
+
+        case 'portal-return':
+          print('🔗 → Routing to _handlePortalReturn');
+          await _handlePortalReturn();
           break;
 
         default:
@@ -316,6 +326,76 @@ class DeepLinkHandler {
     print(
         '🧭 Calling onPasswordReset callback with token: ${token.substring(0, 8)}...');
     onPasswordReset?.call(token);
+  }
+
+  /// Set subscription status before opening portal for comparison
+  void setSubscriptionBeforePortal(SubscriptionStatus? status) {
+    _subscriptionBeforePortal = status;
+    print('🔗 Stored subscription before portal: ${status?.planId} (active: ${status?.isActive})');
+  }
+
+  /// Handle portal return
+  Future<void> _handlePortalReturn() async {
+    print('🔗 ═══════════════════════════════════════════════');
+    print('🔗 PORTAL RETURN DEEP LINK RECEIVED');
+    print('🔗 ═══════════════════════════════════════════════');
+
+    // Get current authenticated user ID
+    final currentUserId = getCurrentUserId?.call();
+
+    if (currentUserId == null) {
+      print('🔗 ⚠️ No user ID available - cannot refresh subscription');
+      return;
+    }
+
+    print('🔗 Refreshing subscription status for userId: $currentUserId');
+    print('🔗 Previous subscription: ${_subscriptionBeforePortal?.planId} (active: ${_subscriptionBeforePortal?.isActive})');
+
+    // Refresh subscription status after portal return
+    try {
+      final subscriptionStatus = await stripeService.checkSubscriptionStatus(
+        userId: currentUserId,
+      );
+
+      print('🔗 Current subscription: ${subscriptionStatus?.planId} (active: ${subscriptionStatus?.isActive})');
+
+      // Check if subscription was cancelled
+      final wasActive = _subscriptionBeforePortal?.isActive == true &&
+                        _subscriptionBeforePortal?.planId != 'free';
+      final isNowInactive = subscriptionStatus?.isActive != true ||
+                           subscriptionStatus?.planId == 'free';
+
+      if (wasActive && isNowInactive) {
+        print('🔗 🚨 SUBSCRIPTION CANCELLED DETECTED');
+        print('🔗    From: ${_subscriptionBeforePortal?.planId}');
+        print('🔗    To: ${subscriptionStatus?.planId}');
+
+        // Trigger cancellation callback
+        onSubscriptionCancelled?.call(_subscriptionBeforePortal?.planId);
+
+        // Also update UI with new status
+        if (subscriptionStatus != null) {
+          onPaymentSuccess?.call(subscriptionStatus);
+        }
+      } else if (subscriptionStatus != null && subscriptionStatus.isActive) {
+        print('🔗 ✅ Subscription still active: ${subscriptionStatus.planId}');
+        // Trigger payment success callback to update UI
+        onPaymentSuccess?.call(subscriptionStatus);
+      } else {
+        print('🔗 ⚠️ Subscription is no longer active');
+        // Still trigger callback to update UI (subscription may have been canceled)
+        if (subscriptionStatus != null) {
+          onPaymentSuccess?.call(subscriptionStatus);
+        }
+      }
+
+      // Clear the stored previous status
+      _subscriptionBeforePortal = null;
+    } catch (e) {
+      print('🔗 ❌ Error refreshing subscription status: $e');
+      // Clear the stored previous status even on error
+      _subscriptionBeforePortal = null;
+    }
   }
 
   /// Show error message to user

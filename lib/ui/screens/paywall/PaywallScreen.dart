@@ -12,6 +12,7 @@ import '../../navigation/main_tab_navigation.dart';
 import '../auth/SubscriptionSuccessScreen.dart';
 import '../auth/AdvancedUpgradeWelcomeScreen.dart';
 import '../auth/SignUpScreen.dart';
+import '../subscription/SubscriptionCancelledScreen.dart';
 
 /// Paywall Screen - Free Trial with Pro or Advanced plan
 ///
@@ -58,6 +59,7 @@ class _PaywallScreenState extends State<PaywallScreen>
   late VoidCallback _planTierListener;
   late VoidCallback _paymentSuccessListener;
   late VoidCallback _authStateListener;
+  late VoidCallback _subscriptionCancelledListener;
 
   void _onBillingPeriodChanged(String newPeriod) {
     if (newPeriod == _billingPeriod) return;
@@ -80,6 +82,11 @@ class _PaywallScreenState extends State<PaywallScreen>
     _paymentSuccessListener = _onPaymentSuccess;
     pushinController.paymentSuccessState.addListener(_paymentSuccessListener);
     pushinController.upgradeWelcomeState.addListener(_paymentSuccessListener);
+
+    // Listen for subscription cancellation to show cancellation screen
+    _subscriptionCancelledListener = _onSubscriptionCancelled;
+    pushinController.subscriptionCancelledPlan
+        .addListener(_subscriptionCancelledListener);
 
     // Listen for auth state changes to reset loading state when user signs in
     final authProvider = context.read<AuthStateProvider>();
@@ -296,6 +303,33 @@ class _PaywallScreenState extends State<PaywallScreen>
           _isInitializingPlan = false;
         });
       }
+    }
+  }
+
+  /// Called when subscription is cancelled - navigate to cancellation screen
+  void _onSubscriptionCancelled() {
+    final pushinController = context.read<PushinAppController>();
+    final cancelledPlan = pushinController.subscriptionCancelledPlan.value;
+
+    if (cancelledPlan != null && mounted) {
+      print('😢 PaywallScreen: Subscription cancellation detected');
+      print('   - Cancelled plan: $cancelledPlan');
+
+      // Clear the state immediately
+      pushinController.subscriptionCancelledPlan.value = null;
+
+      // Navigate to cancellation screen
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => SubscriptionCancelledScreen(
+            previousPlan: cancelledPlan,
+            onContinue: () {
+              // Refresh subscription status when user continues
+              _refreshSubscriptionStatus();
+            },
+          ),
+        ),
+      );
     }
   }
 
@@ -1086,6 +1120,15 @@ class _PaywallScreenState extends State<PaywallScreen>
         isTestMode: true,
       );
 
+      // CRITICAL: Store current subscription status before opening portal
+      // This allows us to detect if the user cancels their subscription
+      final currentSubscription = await stripeService.checkSubscriptionStatus(
+        userId: currentUser.id.toString(),
+      );
+
+      final pushinController = context.read<PushinAppController>();
+      await pushinController.setSubscriptionBeforePortal(currentSubscription);
+
       final success = await stripeService.openCustomerPortal(
         userId: currentUser.id.toString(),
       );
@@ -1161,6 +1204,8 @@ class _PaywallScreenState extends State<PaywallScreen>
         .removeListener(_paymentSuccessListener);
     pushinController.upgradeWelcomeState
         .removeListener(_paymentSuccessListener);
+    pushinController.subscriptionCancelledPlan
+        .removeListener(_subscriptionCancelledListener);
     authProvider.removeListener(_authStateListener);
 
     _scrollController.dispose();

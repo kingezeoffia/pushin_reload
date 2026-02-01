@@ -5,6 +5,7 @@ import '../state/auth_state_provider.dart';
 import '../state/pushin_app_controller.dart';
 import '../ui/navigation/main_tab_navigation.dart';
 import '../ui/screens/auth/WelcomeScreen.dart';
+import '../ui/screens/auth/FirstWelcomeScreen.dart';
 import '../ui/screens/auth/NewUserWelcomeScreen.dart';
 import '../ui/screens/auth/SignUpScreen.dart';
 import '../ui/screens/auth/SignInScreen.dart';
@@ -25,11 +26,13 @@ import '../ui/screens/paywall/PaywallScreen.dart';
 ///
 /// ROUTING LOGIC (strict order - no deviations):
 /// 1. App loading
-/// 2. Onboarding (non-guest only)
-/// 3. New user welcome (just registered authenticated users)
-/// 4. Guest setup (incomplete)
-/// 5. Main app access (authenticated OR completed guest)
-/// 6. Auth flow
+/// 2. Sign up/in screens (state-driven)
+/// 3. Unauthenticated non-guest → WelcomeScreen (with Continue as Guest)
+/// 4. New user welcome (just registered authenticated users)
+/// 5. Onboarding (non-guest only)
+/// 6. Guest setup (incomplete)
+/// 6.5. Returning guest (completed setup) → FirstWelcomeScreen (force authentication)
+/// 7. Main app access (authenticated only)
 ///
 /// Key Guarantees:
 /// ✅ NO Navigator.push/pop for primary navigation
@@ -102,10 +105,21 @@ class AppRouter extends StatelessWidget {
 
     // 3. AUTHENTICATED USER CHECKS (only for non-sign-up/sign-in states)
     if (!authProvider.isAuthenticated && !authProvider.isGuestMode) {
-      debugPrint('🧭 Router: Unauthenticated non-guest user → WelcomeScreen');
-      return const WelcomeScreen(
-        key: ValueKey('welcome_screen'),
-      );
+      // If user has used the app before (logged out), show FirstWelcomeScreen (force authentication)
+      // If brand new user (never used app), show WelcomeScreen (with Continue as Guest option)
+      if (authProvider.hasUsedAppBefore) {
+        debugPrint(
+            '🧭 Router: Returning user (logged out) → FirstWelcomeScreen (force authentication)');
+        return const FirstWelcomeScreen(
+          key: ValueKey('first_welcome_screen'),
+        );
+      } else {
+        debugPrint(
+            '🧭 Router: Brand new user → WelcomeScreen (with Continue as Guest)');
+        return const WelcomeScreen(
+          key: ValueKey('welcome_screen'),
+        );
+      }
     }
 
     // 4. NEW USER WELCOME - for authenticated users who just registered
@@ -227,7 +241,16 @@ class AppRouter extends StatelessWidget {
       }
     }
 
-    // 7. MAIN APP ACCESS (authenticated + onboarding completed OR completed guest)
+    // 6.5. RETURNING GUEST USERS - Force authentication (must come BEFORE main app access)
+    if (authProvider.isGuestMode && authProvider.guestCompletedSetup) {
+      debugPrint(
+          '🧭 Router: Returning guest user → FirstWelcomeScreen (force authentication)');
+      return const FirstWelcomeScreen(
+        key: ValueKey('first_welcome_screen'),
+      );
+    }
+
+    // 7. MAIN APP ACCESS (authenticated + onboarding completed)
     debugPrint('🧭 Router: MAIN APP ACCESS - showing MainTabNavigation');
     debugPrint(
         '🧭 Router: Authenticated=${authProvider.isAuthenticated}, OnboardingCompleted=${authProvider.isOnboardingCompleted}, GuestMode=${authProvider.isGuestMode}, GuestSetupCompleted=${authProvider.guestCompletedSetup}');

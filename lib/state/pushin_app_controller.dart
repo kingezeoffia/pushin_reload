@@ -81,6 +81,9 @@ class PushinAppController extends ChangeNotifier {
   // Password reset state (for handling password reset deep links)
   final ValueNotifier<String?> passwordResetToken = ValueNotifier(null);
 
+  // Subscription cancellation state (for showing cancellation screen)
+  final ValueNotifier<String?> subscriptionCancelledPlan = ValueNotifier(null);
+
   // Plan tier (free, pro, advanced)
   String _planTier = 'free';
   String? _previousPlanTier; // Track previous tier to detect upgrades
@@ -348,6 +351,21 @@ class PushinAppController extends ChangeNotifier {
           if (passwordResetToken.value == token) {
             print('🧹 Auto-clearing password reset token');
             passwordResetToken.value = null;
+          }
+        });
+      },
+      onSubscriptionCancelled: (String? previousPlan) {
+        print('🚨 Subscription cancelled callback');
+        print('   Previous plan: $previousPlan');
+
+        // Store the cancelled plan to trigger navigation to SubscriptionCancelledScreen
+        subscriptionCancelledPlan.value = previousPlan;
+
+        // Auto-clear after navigation (will be handled by the screen)
+        Future.delayed(const Duration(seconds: 1), () {
+          if (subscriptionCancelledPlan.value == previousPlan) {
+            print('🧹 Auto-clearing subscription cancelled plan');
+            subscriptionCancelledPlan.value = null;
           }
         });
       },
@@ -1532,6 +1550,13 @@ class PushinAppController extends ChangeNotifier {
   void setPendingCheckoutUserId(String? userId) {
     _deepLinkHandler?.pendingCheckoutUserId = userId;
     print('💳 Set pendingCheckoutUserId: $userId');
+  }
+
+  /// Store subscription status before opening customer portal
+  /// Call this before opening the portal so we can detect if user cancels
+  Future<void> setSubscriptionBeforePortal(SubscriptionStatus? status) async {
+    _deepLinkHandler?.setSubscriptionBeforePortal(status);
+    print('💳 Stored subscription before portal: ${status?.planId}');
   }
 
   /// Set the pending checkout plan ID for payment verification fallback

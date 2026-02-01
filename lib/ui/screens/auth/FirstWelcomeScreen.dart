@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
+import '../../widgets/pill_navigation_bar.dart';
 import 'SignUpScreen.dart';
-import 'package:provider/provider.dart';
-import '../../../state/auth_state_provider.dart';
+import 'SignInScreen.dart';
 
-/// First Welcome Screen - Initial app introduction for brand new users
+/// First Welcome Screen - For users accessing from settings (sign up/logout)
 ///
-/// BMAD V6 Spec:
-/// - App logo at top
-/// - "Welcome to PUSHIN'" title
-/// - Three value proposition points
-/// - Two choice buttons: Sign Up / Continue as Guest
-/// - Purely informational + choice-based, no complex logic
+/// Shows Sign Up and Sign In buttons (no Continue as Guest option)
+/// Used when:
+/// - User presses green sign up button in settings
+/// - User presses red logout button in settings
 class FirstWelcomeScreen extends StatelessWidget {
   const FirstWelcomeScreen({super.key});
 
@@ -25,22 +23,21 @@ class FirstWelcomeScreen extends StatelessWidget {
       body: GOStepsBackground(
         blackRatio: 0.25,
         child: SafeArea(
-          child: Column(
+          child: Stack(
             children: [
               // Scrollable content area
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(height: screenHeight * 0.08),
-
-                      // App Logo
-                      Center(
+              SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Logo Space - PNG logo (approximately 1/2 of screen)
+                    SizedBox(
+                      height: screenHeight * 0.5,
+                      child: Center(
                         child: ShaderMask(
                           shaderCallback: (bounds) => const LinearGradient(
-                            colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
+                            colors: [Colors.white, Color(0xFFB0B8FF)],
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                           ).createShader(
@@ -50,79 +47,55 @@ class FirstWelcomeScreen extends StatelessWidget {
                           blendMode: BlendMode.srcIn,
                           child: Image.asset(
                             'assets/icons/pushin_logo_2.png',
-                            width: 200,
-                            height: 200,
+                            width: 320,
+                            height: 320,
                             fit: BoxFit.contain,
                           ),
                         ),
                       ),
+                    ),
 
-                      SizedBox(height: screenHeight * 0.06),
+                    // Spacer to push title down towards buttons
+                    SizedBox(height: screenHeight * 0.15),
 
-                      // Welcome Title
-                      const Text(
-                        'Welcome to',
+                    // Welcome Title (left-aligned)
+                    const Text(
+                      'Welcome to',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white70,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Colors.white, Color(0xFFB0B8FF)],
+                      ).createShader(
+                        Rect.fromLTWH(0, 0, bounds.width, bounds.height * 1.3),
+                      ),
+                      blendMode: BlendMode.srcIn,
+                      child: const Text(
+                        "PUSHIN'",
                         style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w400,
+                          fontSize: 52,
+                          fontWeight: FontWeight.w800,
                           color: Colors.white,
                           letterSpacing: -0.5,
+                          height: 1.1,
                         ),
                       ),
+                    ),
 
-                      const SizedBox(height: 4),
-
-                      ShaderMask(
-                        shaderCallback: (bounds) => const LinearGradient(
-                          colors: [Color(0xFF6060FF), Color(0xFF9090FF)],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        ).createShader(
-                          Rect.fromLTWH(
-                              0, 0, bounds.width, bounds.height * 1.3),
-                        ),
-                        blendMode: BlendMode.srcIn,
-                        child: const Text(
-                          "PUSHIN'",
-                          style: TextStyle(
-                            fontSize: 52,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            letterSpacing: -0.5,
-                            height: 1.1,
-                          ),
-                        ),
-                      ),
-
-                      SizedBox(height: screenHeight * 0.06),
-
-                      // Value Proposition Points
-                      _ValuePoint(
-                        icon: Icons.key,
-                        text: 'Complete workouts to unlock apps',
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      _ValuePoint(
-                        icon: Icons.timer,
-                        text: 'Earn screen time based on effort',
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      _ValuePoint(
-                        icon: Icons.favorite,
-                        text: 'Build healthy digital habits',
-                      ),
-                    ],
-                  ),
+                    // Add spacing at bottom to prevent content from being hidden by buttons
+                    const SizedBox(height: 200),
+                  ],
                 ),
               ),
 
-              // Fixed bottom buttons - choice-based
-              Padding(
-                padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+              // Fixed bottom buttons - Sign Up and Sign In (no Continue as Guest)
+              BottomActionContainer(
                 child: Column(
                   children: [
                     // Sign Up Button
@@ -140,17 +113,16 @@ class FirstWelcomeScreen extends StatelessWidget {
 
                     const SizedBox(height: 16),
 
-                    // Continue as Guest Button
+                    // Sign In Button
                     _SecondaryButton(
-                      label: 'Continue as Guest',
-                      onTap: () async {
-                        // Set guest mode and navigate to main app
-                        final authProvider = Provider.of<AuthStateProvider>(
-                            context,
-                            listen: false);
-                        authProvider.enterGuestMode();
-
-                        // Navigation handled by AppRouter state change
+                      label: 'Sign In',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SignInScreen(),
+                          ),
+                        );
                       },
                     ),
                   ],
@@ -160,61 +132,6 @@ class FirstWelcomeScreen extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Value proposition point widget
-class _ValuePoint extends StatelessWidget {
-  final IconData icon;
-  final String text;
-
-  const _ValuePoint({
-    required this.icon,
-    required this.text,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.2),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.white.withOpacity(0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Icon(
-            icon,
-            color: const Color(0xFF8080FF),
-            size: 24,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w500,
-              color: Colors.white.withOpacity(0.9),
-              letterSpacing: -0.2,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -263,7 +180,7 @@ class _PrimaryButton extends StatelessWidget {
   }
 }
 
-/// Secondary button for guest mode
+/// Secondary button for sign in
 class _SecondaryButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;

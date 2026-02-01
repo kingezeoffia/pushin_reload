@@ -167,13 +167,15 @@ class AuthStateProvider extends ChangeNotifier {
       isUserAuthenticated = await _authService.isAuthenticated();
       debugPrint('🔐 Authentication check result: $isUserAuthenticated');
     } catch (e) {
-      debugPrint('⚠️ Authentication check failed (likely in test environment): $e');
+      debugPrint(
+          '⚠️ Authentication check failed (likely in test environment): $e');
       isUserAuthenticated = false;
     }
 
     if (isUserAuthenticated) {
       // User is authenticated - restore their user data and onboarding state
-      debugPrint('✅ User is authenticated - restoring user data and onboarding state');
+      debugPrint(
+          '✅ User is authenticated - restoring user data and onboarding state');
       try {
         final user = await _authService.getCurrentUser();
         if (user != null) {
@@ -181,17 +183,22 @@ class AuthStateProvider extends ChangeNotifier {
             id: user.id.toString(),
             email: user.email,
             name: user.firstname,
-            profileImagePath: _profileImagePath, // Now properly restored before this point
+            profileImagePath:
+                _profileImagePath, // Now properly restored before this point
           );
           debugPrint('✅ Restored authenticated user: ${_currentUser!.email}');
 
           // For authenticated users, restore onboarding completion
-          _isOnboardingCompleted = _prefs.getBool(_onboardingCompletedKey) ?? false;
-          _onboardingStep = OnboardingStep.values[_prefs.getInt(_onboardingStepKey) ?? 0];
-          debugPrint('✅ Restored onboarding state: completed=$_isOnboardingCompleted, step=$_onboardingStep');
+          _isOnboardingCompleted =
+              _prefs.getBool(_onboardingCompletedKey) ?? false;
+          _onboardingStep =
+              OnboardingStep.values[_prefs.getInt(_onboardingStepKey) ?? 0];
+          debugPrint(
+              '✅ Restored onboarding state: completed=$_isOnboardingCompleted, step=$_onboardingStep');
         } else {
           // getCurrentUser returned null, treat as not authenticated
-          debugPrint('⚠️ getCurrentUser returned null, treating as not authenticated');
+          debugPrint(
+              '⚠️ getCurrentUser returned null, treating as not authenticated');
           isUserAuthenticated = false;
           _currentUser = null;
         }
@@ -205,7 +212,8 @@ class AuthStateProvider extends ChangeNotifier {
 
     if (!isUserAuthenticated || _currentUser == null) {
       // User is not authenticated - clear guest mode and onboarding state
-      debugPrint('👤 User is not authenticated - clearing guest mode and onboarding state');
+      debugPrint(
+          '👤 User is not authenticated - clearing guest mode and onboarding state');
 
       // CRITICAL: Do NOT restore guest mode on app launch
       // Guest users must authenticate when reopening the app
@@ -218,9 +226,11 @@ class AuthStateProvider extends ChangeNotifier {
       // Clear persistent guest mode data and onboarding data to prevent stale state
       await _prefs.setBool(_guestModeKey, false);
       await _prefs.setBool(_guestSetupCompletedKey, false);
-      await _prefs.setInt(_guestSetupStepKey, GuestSetupStep.appsSelection.index);
+      await _prefs.setInt(
+          _guestSetupStepKey, GuestSetupStep.appsSelection.index);
       await _prefs.setBool(_onboardingCompletedKey, false);
-      await _prefs.setInt(_onboardingStepKey, OnboardingStep.fitnessLevel.index);
+      await _prefs.setInt(
+          _onboardingStepKey, OnboardingStep.fitnessLevel.index);
 
       // IMPORTANT: Clear profile image path for non-authenticated users
       // This prevents showing profile images when no user is logged in

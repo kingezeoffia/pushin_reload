@@ -100,20 +100,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
         '🔘 SignUpScreen: State-driven navigation to SignInScreen triggered');
   }
 
-  void _navigateBack() {
-    debugPrint('🔘 SignUpScreen: Back button tapped');
-
-    // Add haptic feedback for button press
-    HapticFeedback.lightImpact();
-
-    debugPrint(
-        '🔘 SignUpScreen: Clearing sign up screen flag to return to WelcomeScreen...');
-    final authProvider = Provider.of<AuthStateProvider>(context, listen: false);
-    authProvider.clearSignUpFlow();
-    debugPrint(
-        '🔘 SignUpScreen: Sign up screen flag cleared - router will show WelcomeScreen');
-  }
-
   bool _isFormValid() {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
@@ -251,35 +237,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Top navigation bar with back and sign in buttons
+                        // Top navigation bar with Sign In button
                         Padding(
                           padding: const EdgeInsets.only(
-                              top: 16, left: 16, right: 16),
+                              top: 16, left: 32, right: 16),
                           child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              // Back button
-                              IconButton(
-                                onPressed: () {
-                                  debugPrint(
-                                      '🔘 SignUpScreen: Back button TAPPED');
-                                  _navigateBack();
-                                },
-                                icon: const Icon(
-                                  Icons.arrow_back,
-                                  color: Colors.white,
-                                  size: 24,
-                                ),
-                                style: IconButton.styleFrom(
-                                  backgroundColor:
-                                      Colors.white.withOpacity(0.1),
-                                  padding: const EdgeInsets.all(12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                              ),
-
                               // Sign In button
                               TextButton(
                                 onPressed: () {
@@ -290,7 +253,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 style: TextButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 16, vertical: 8),
-                                  backgroundColor: Colors.white,
+                                  backgroundColor:
+                                      Colors.white.withOpacity(0.1),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(20),
                                     side: BorderSide(
@@ -298,8 +262,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                       width: 1,
                                     ),
                                   ),
-                                  shadowColor: Colors.white.withOpacity(0.1),
-                                  elevation: 4,
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -308,17 +270,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                       'Sign In',
                                       style: TextStyle(
                                         fontSize: 14,
-                                        color: const Color(0xFF2A2A6A),
+                                        color: Colors.white.withOpacity(0.9),
                                         fontWeight: FontWeight.w600,
                                         letterSpacing: -0.1,
                                       ),
                                     ),
                                     const SizedBox(width: 6),
                                     Icon(
-                                      Icons.arrow_forward,
+                                      Icons.swap_horiz,
                                       size: 16,
-                                      color: const Color(0xFF2A2A6A)
-                                          .withOpacity(0.7),
+                                      color: Colors.white.withOpacity(0.9),
                                     ),
                                   ],
                                 ),
@@ -327,7 +288,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                         ),
 
-                        SizedBox(height: screenHeight * 0.04),
+                        SizedBox(height: screenHeight * 0.02),
 
                         // Title
                         Padding(

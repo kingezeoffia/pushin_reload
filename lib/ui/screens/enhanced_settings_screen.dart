@@ -22,7 +22,6 @@ import 'settings/EmergencyUnlockSettingsScreen.dart';
 import 'settings/EditNameScreen.dart';
 import 'settings/EditEmailScreen.dart';
 import 'settings/ChangePasswordScreen.dart';
-import 'auth/WelcomeScreen.dart';
 import 'auth/FirstWelcomeScreen.dart';
 
 /// Premium Logout Button - A sleek pill-shaped logout button with interactive feedback
@@ -1214,10 +1213,10 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
             // Small delay to ensure state is fully updated
             await Future.delayed(const Duration(milliseconds: 100));
 
-            // Force navigation back to WelcomeScreen and clear navigation stack
+            // Force navigation back to FirstWelcomeScreen and clear navigation stack
             if (context.mounted) {
               Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => WelcomeScreen()),
+                MaterialPageRoute(builder: (_) => const FirstWelcomeScreen()),
                 (route) => false,
               );
             }
