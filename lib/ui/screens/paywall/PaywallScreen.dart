@@ -13,7 +13,6 @@ import '../auth/SubscriptionSuccessScreen.dart';
 import '../auth/AdvancedUpgradeWelcomeScreen.dart';
 import '../auth/SignUpScreen.dart';
 import '../subscription/SubscriptionCancelledScreen.dart';
-import '../../widgets/SubscriptionCancellationBanner.dart';
 
 /// Paywall Screen - Free Trial with Pro or Advanced plan
 ///
@@ -605,18 +604,6 @@ class _PaywallScreenState extends State<PaywallScreen>
                       ),
                     ),
                   ),
-
-                  // Cancellation Banner (if subscription is set to cancel)
-                  if (_currentSubscriptionStatus?.cancelAtPeriodEnd == true &&
-                      _currentSubscriptionStatus?.currentPeriodEnd != null)
-                    SubscriptionCancellationBanner(
-                      periodEndDate:
-                          _currentSubscriptionStatus!.currentPeriodEnd!,
-                      planName: _currentSubscriptionStatus!.planId == 'pro'
-                          ? 'Pro'
-                          : 'Advanced',
-                      onReactivate: _handleReactivateSubscription,
-                    ),
 
                   // Scrollable Content
                   Expanded(
