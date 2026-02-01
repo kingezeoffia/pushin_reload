@@ -1259,36 +1259,6 @@ class _PaywallScreenState extends State<PaywallScreen>
     }
   }
 
-  /// Show instruction for using Stripe portal
-  void _showPortalInstructionDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.info_outline, color: Colors.blue),
-            SizedBox(width: 12),
-            Text('Important!'),
-          ],
-        ),
-        content: const Text(
-          'After making changes in Stripe:\n\n'
-          '1. Look for the "Return to app" or "Done" button\n'
-          '2. Tap that button to return\n\n'
-          'Do NOT use the app switcher - the changes won\'t be detected!',
-          style: TextStyle(fontSize: 15, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Got it!'),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// Schedule a status check after portal visit (fallback if deep link fails)
   void _scheduleStatusCheckAfterPortal() {
     // Store current status before portal
