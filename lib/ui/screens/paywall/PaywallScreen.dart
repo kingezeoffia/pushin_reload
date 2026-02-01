@@ -761,6 +761,9 @@ class _PaywallScreenState extends State<PaywallScreen>
                             isPopular: _currentSubscriptionPlan !=
                                 'pro', // Only show POPULAR if not current plan
                             isCurrentPlan: _currentSubscriptionPlan == 'pro',
+                            subscriptionStatus: _currentSubscriptionPlan == 'pro'
+                                ? _currentSubscriptionStatus
+                                : null,
                             onTap: _isInitializingPlan
                                 ? null
                                 : _currentSubscriptionPlan == 'pro'
@@ -795,6 +798,10 @@ class _PaywallScreenState extends State<PaywallScreen>
                             isYearly: _billingPeriod == 'yearly',
                             isCurrentPlan:
                                 _currentSubscriptionPlan == 'advanced',
+                            subscriptionStatus:
+                                _currentSubscriptionPlan == 'advanced'
+                                    ? _currentSubscriptionStatus
+                                    : null,
                             features: const [
                               'Unlimited Hours of App Blocking',
                               'Unlimited App Blockages',
@@ -1250,15 +1257,6 @@ class _PaywallScreenState extends State<PaywallScreen>
         print('🏦 ⚠️ IMPORTANT: After cancelling in Stripe, tap "Return to app" button');
         print('🏦 ⚠️ Do NOT manually switch back using app switcher!');
 
-        // Show instruction dialog
-        if (mounted) {
-          Future.delayed(const Duration(seconds: 1), () {
-            if (mounted) {
-              _showPortalInstructionDialog();
-            }
-          });
-        }
-
         // Check status when user returns (fallback if deep link doesn't fire)
         _scheduleStatusCheckAfterPortal();
       }
@@ -1448,6 +1446,8 @@ class _PlanCard extends StatefulWidget {
   final bool isSelected;
   final bool isPopular;
   final bool isCurrentPlan; // Whether this is the user's currently active plan
+  final SubscriptionStatus?
+      subscriptionStatus; // For showing cancellation countdown
   final VoidCallback? onTap;
 
   const _PlanCard({
@@ -1462,6 +1462,7 @@ class _PlanCard extends StatefulWidget {
     required this.isSelected,
     required this.isPopular,
     this.isCurrentPlan = false,
+    this.subscriptionStatus,
     required this.onTap,
   });
 
@@ -1474,6 +1475,28 @@ class _PlanCardState extends State<_PlanCard>
   late AnimationController _controller;
   late Animation<double> _animation;
   bool _isPressed = false;
+
+  /// Get badge text for current plan
+  String _getBadgeText() {
+    // Check if subscription is set to cancel
+    if (widget.subscriptionStatus?.cancelAtPeriodEnd == true &&
+        widget.subscriptionStatus?.currentPeriodEnd != null) {
+      final daysRemaining = widget.subscriptionStatus!.currentPeriodEnd!
+          .difference(DateTime.now())
+          .inDays;
+
+      if (daysRemaining <= 0) {
+        return 'EXPIRES TODAY';
+      } else if (daysRemaining == 1) {
+        return '1 DAY LEFT';
+      } else {
+        return '$daysRemaining DAYS LEFT';
+      }
+    }
+
+    // Default: show current plan
+    return 'CURRENT PLAN';
+  }
 
   @override
   void initState() {
@@ -1581,7 +1604,7 @@ class _PlanCardState extends State<_PlanCard>
                                   letterSpacing: -0.5,
                                 ),
                               ),
-                              // Current Plan badge (takes priority over Popular)
+                              // Current Plan badge or Days Left countdown
                               if (widget.isCurrentPlan) ...[
                                 const SizedBox(width: 10),
                                 Container(
@@ -1590,12 +1613,18 @@ class _PlanCardState extends State<_PlanCard>
                                     vertical: 3,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF6060FF),
+                                    color: widget.subscriptionStatus
+                                                    ?.cancelAtPeriodEnd ==
+                                                true
+                                        ? Colors.orange
+                                            .shade600 // Orange for cancelling
+                                        : const Color(
+                                            0xFF6060FF), // Blue for active
                                     borderRadius: BorderRadius.circular(100),
                                   ),
-                                  child: const Text(
-                                    'CURRENT PLAN',
-                                    style: TextStyle(
+                                  child: Text(
+                                    _getBadgeText(),
+                                    style: const TextStyle(
                                       fontSize: 9,
                                       fontWeight: FontWeight.w700,
                                       color: Colors.white,
