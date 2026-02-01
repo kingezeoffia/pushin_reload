@@ -373,24 +373,43 @@ class _PaywallScreenState extends State<PaywallScreen>
     if (!mounted) return;
 
     try {
-      // Re-check subscription status
+      print('🔄 Paywall: Refreshing subscription status from server...');
+
+      // Re-check subscription status from server (not just cache)
       final stripeService = StripeCheckoutService(
         baseUrl: 'https://pushin-production.up.railway.app/api',
         isTestMode: true,
       );
 
-      final cachedStatus = await stripeService.getCachedSubscriptionStatus();
+      final authProvider = context.read<AuthStateProvider>();
+      final currentUser = authProvider.currentUser;
+
+      SubscriptionStatus? freshStatus;
+
+      if (currentUser != null) {
+        // Fetch fresh status from server
+        freshStatus = await stripeService.checkSubscriptionStatus(
+          userId: currentUser.id.toString(),
+        );
+      } else {
+        // Fall back to cached for unauthenticated
+        freshStatus = await stripeService.getCachedSubscriptionStatus();
+      }
+
       String? updatedPlan;
 
-      if (cachedStatus != null && cachedStatus.isActive) {
-        updatedPlan = cachedStatus.planId;
-        print('🔄 Paywall: Refreshed subscription status - plan: $updatedPlan');
+      if (freshStatus != null && freshStatus.isActive) {
+        updatedPlan = freshStatus.planId;
+        print('🔄 Paywall: Refreshed subscription status');
+        print('   - Plan: $updatedPlan');
+        print('   - cancelAtPeriodEnd: ${freshStatus.cancelAtPeriodEnd}');
       }
 
       // Update state
       if (mounted) {
         setState(() {
           _currentSubscriptionPlan = updatedPlan;
+          _currentSubscriptionStatus = freshStatus;
           // Only update selected plan if user hasn't manually selected one AND no plan was pre-selected
           if (!_hasUserManuallySelectedPlan && !_hasPreSelectedPlan) {
             _selectedPlan = _getNextBestPlanSync(updatedPlan);
@@ -1230,6 +1249,18 @@ class _PaywallScreenState extends State<PaywallScreen>
         print('🏦 ✅ Portal opened successfully');
         print('🏦 ⚠️ IMPORTANT: After cancelling in Stripe, tap "Return to app" button');
         print('🏦 ⚠️ Do NOT manually switch back using app switcher!');
+
+        // Show instruction dialog
+        if (mounted) {
+          Future.delayed(const Duration(seconds: 1), () {
+            if (mounted) {
+              _showPortalInstructionDialog();
+            }
+          });
+        }
+
+        // Check status when user returns (fallback if deep link doesn't fire)
+        _scheduleStatusCheckAfterPortal();
       }
     } catch (e) {
       print('❌ Error opening customer portal: $e');
@@ -1241,6 +1272,46 @@ class _PaywallScreenState extends State<PaywallScreen>
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  /// Show instruction for using Stripe portal
+  void _showPortalInstructionDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline, color: Colors.blue),
+            SizedBox(width: 12),
+            Text('Important!'),
+          ],
+        ),
+        content: const Text(
+          'After making changes in Stripe:\n\n'
+          '1. Look for the "Return to app" or "Done" button\n'
+          '2. Tap that button to return\n\n'
+          'Do NOT use the app switcher - the changes won\'t be detected!',
+          style: TextStyle(fontSize: 15, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it!'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Schedule a status check after portal visit (fallback if deep link fails)
+  void _scheduleStatusCheckAfterPortal() {
+    // Check status 3 seconds after portal opens (in case user quickly returns)
+    Future.delayed(const Duration(seconds: 3), () async {
+      if (!mounted) return;
+      print('🔄 Scheduled portal check: Refreshing subscription status...');
+      await _refreshSubscriptionStatus();
+    });
   }
 
   void _showRestorePurchasesDialog() async {
