@@ -510,6 +510,48 @@ app.post('/api/stripe/cancel-subscription', async (req, res) => {
   }
 });
 
+// 4b. Reactivate Subscription (undo cancellation)
+app.post('/api/stripe/reactivate-subscription', async (req, res) => {
+  try {
+    const { userId, anonymousId, subscriptionId } = req.body;
+
+    console.log('Reactivating subscription:', { userId, anonymousId, subscriptionId });
+
+    if ((!userId && !anonymousId) || !subscriptionId) {
+      return res.status(400).json({
+        error: 'Missing required fields: either userId or anonymousId, and subscriptionId'
+      });
+    }
+
+    // Remove cancel_at_period_end flag
+    const subscription = await stripe.subscriptions.update(subscriptionId, {
+      cancel_at_period_end: false,
+    });
+
+    // Update database to mark as active
+    const tableName = anonymousId ? 'anonymous_subscriptions' : 'subscriptions';
+    await pool.query(
+      `UPDATE ${tableName} SET is_active = true, updated_at = $1 WHERE subscription_id = $2`,
+      [new Date(), subscriptionId]
+    );
+
+    console.log('✅ Subscription reactivated - will continue renewing');
+
+    res.json({
+      success: true,
+      subscription: {
+        id: subscription.id,
+        status: subscription.status,
+        cancelAtPeriodEnd: subscription.cancel_at_period_end,
+        currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('❌ Error reactivating subscription:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 5. Create Customer Portal Session
 app.post('/api/stripe/create-portal-session', async (req, res) => {
   try {

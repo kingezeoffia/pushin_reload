@@ -13,6 +13,7 @@ import '../auth/SubscriptionSuccessScreen.dart';
 import '../auth/AdvancedUpgradeWelcomeScreen.dart';
 import '../auth/SignUpScreen.dart';
 import '../subscription/SubscriptionCancelledScreen.dart';
+import '../../widgets/SubscriptionCancellationBanner.dart';
 
 /// Paywall Screen - Free Trial with Pro or Advanced plan
 ///
@@ -54,6 +55,7 @@ class _PaywallScreenState extends State<PaywallScreen>
       false; // Track if user manually selected a plan
   bool _pendingPurchaseAfterAuth =
       false; // Track if user was trying to purchase before auth
+  SubscriptionStatus? _currentSubscriptionStatus; // Current subscription details
 
   // Listen for plan tier changes from PushinAppController
   late VoidCallback _planTierListener;
@@ -286,6 +288,7 @@ class _PaywallScreenState extends State<PaywallScreen>
       if (mounted) {
         setState(() {
           _currentSubscriptionPlan = currentPlan;
+          _currentSubscriptionStatus = subscriptionStatus;
           _selectedPlan = nextBestPlan;
           _isInitializingPlan = false;
         });
@@ -293,6 +296,7 @@ class _PaywallScreenState extends State<PaywallScreen>
         print('📦 PaywallScreen: Initialized');
         print('   - Current plan: $_currentSubscriptionPlan');
         print('   - Selected plan: $_selectedPlan');
+        print('   - Cancel at period end: ${_currentSubscriptionStatus?.cancelAtPeriodEnd}');
       }
     } catch (e) {
       print('Error initializing selected plan: $e');
@@ -582,6 +586,18 @@ class _PaywallScreenState extends State<PaywallScreen>
                       ),
                     ),
                   ),
+
+                  // Cancellation Banner (if subscription is set to cancel)
+                  if (_currentSubscriptionStatus?.cancelAtPeriodEnd == true &&
+                      _currentSubscriptionStatus?.currentPeriodEnd != null)
+                    SubscriptionCancellationBanner(
+                      periodEndDate:
+                          _currentSubscriptionStatus!.currentPeriodEnd!,
+                      planName: _currentSubscriptionStatus!.planId == 'pro'
+                          ? 'Pro'
+                          : 'Advanced',
+                      onReactivate: _handleReactivateSubscription,
+                    ),
 
                   // Scrollable Content
                   Expanded(
@@ -1100,6 +1116,67 @@ class _PaywallScreenState extends State<PaywallScreen>
         onDismiss: () => Navigator.pop(context),
       ),
     );
+  }
+
+  Future<void> _handleReactivateSubscription() async {
+    try {
+      final authProvider = context.read<AuthStateProvider>();
+      final currentUser = authProvider.currentUser;
+
+      if (currentUser == null ||
+          _currentSubscriptionStatus?.subscriptionId == null) {
+        print('❌ Cannot reactivate: missing user or subscription');
+        _showErrorDialog('Unable to reactivate subscription.');
+        return;
+      }
+
+      print('🔄 ═══════════════════════════════════════════════');
+      print('🔄 REACTIVATING SUBSCRIPTION');
+      print('🔄 ═══════════════════════════════════════════════');
+
+      setState(() => _isLoading = true);
+
+      final stripeService = StripeCheckoutService(
+        baseUrl: 'https://pushin-production.up.railway.app/api',
+        isTestMode: true,
+      );
+
+      final success = await stripeService.reactivateSubscription(
+        userId: currentUser.id.toString(),
+        subscriptionId: _currentSubscriptionStatus!.subscriptionId!,
+      );
+
+      if (success && mounted) {
+        print('✅ Subscription reactivated - refreshing status...');
+
+        // Refresh subscription status
+        await _refreshSubscriptionStatus();
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              '✅ Subscription reactivated! You\'ll continue to be billed.',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: Colors.green.shade600,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else if (mounted) {
+        _showErrorDialog('Unable to reactivate subscription. Please try again.');
+      }
+    } catch (e) {
+      print('❌ Error reactivating subscription: $e');
+      if (mounted) {
+        _showErrorDialog('An error occurred: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   Future<void> _handleManageSubscription() async {

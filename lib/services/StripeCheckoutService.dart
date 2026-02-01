@@ -352,6 +352,43 @@ class StripeCheckoutService implements PaymentService {
     }
   }
 
+  /// Reactivate subscription (remove cancellation)
+  /// Requires authenticated user - userId must be provided
+  Future<bool> reactivateSubscription({
+    required String userId,
+    String? anonymousId,
+    required String subscriptionId,
+  }) async {
+    try {
+      print('🔄 Reactivating subscription: $subscriptionId');
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/stripe/reactivate-subscription'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'userId': userId,
+          if (anonymousId != null) 'anonymousId': anonymousId,
+          'subscriptionId': subscriptionId,
+        }),
+      );
+
+      print('📡 Reactivate response: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        print('✅ Subscription reactivated successfully');
+        return true;
+      } else {
+        print('❌ Failed to reactivate: ${response.body}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Error reactivating subscription: $e');
+      return false;
+    }
+  }
+
   /// Open Stripe Customer Portal for subscription management
   /// Requires authenticated user - userId must be provided
   Future<bool> openCustomerPortal({

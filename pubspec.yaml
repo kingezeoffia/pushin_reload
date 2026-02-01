@@ -54,6 +54,9 @@ dependencies:
   # Stripe Payment Integration
   http: ^1.1.0
   url_launcher: ^6.2.2
+
+  # Date formatting
+  intl: ^0.18.1
   app_links: ^6.3.2
   
   # iOS Screen Time (when available)
