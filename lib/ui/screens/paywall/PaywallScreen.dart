@@ -1306,11 +1306,42 @@ class _PaywallScreenState extends State<PaywallScreen>
 
   /// Schedule a status check after portal visit (fallback if deep link fails)
   void _scheduleStatusCheckAfterPortal() {
+    // Store current status before portal
+    final beforePortalStatus = _currentSubscriptionStatus;
+
     // Check status 3 seconds after portal opens (in case user quickly returns)
     Future.delayed(const Duration(seconds: 3), () async {
       if (!mounted) return;
       print('🔄 Scheduled portal check: Refreshing subscription status...');
+      print('   - Before: cancelAtPeriodEnd = ${beforePortalStatus?.cancelAtPeriodEnd}');
+
       await _refreshSubscriptionStatus();
+
+      // Check if cancellation happened
+      final afterPortalStatus = _currentSubscriptionStatus;
+      print('   - After: cancelAtPeriodEnd = ${afterPortalStatus?.cancelAtPeriodEnd}');
+
+      final wasNotCancelling = beforePortalStatus?.cancelAtPeriodEnd != true &&
+                                beforePortalStatus?.isActive == true;
+      final isNowCancelling = afterPortalStatus?.cancelAtPeriodEnd == true;
+
+      if (wasNotCancelling && isNowCancelling && mounted) {
+        print('🚨 FALLBACK: Cancellation detected via status check!');
+        print('   - Previous plan: ${beforePortalStatus?.planId}');
+
+        // Navigate to cancellation screen
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => SubscriptionCancelledScreen(
+              previousPlan: beforePortalStatus?.planId,
+              onContinue: () {
+                // Refresh when user continues
+                _refreshSubscriptionStatus();
+              },
+            ),
+          ),
+        );
+      }
     });
   }
 
