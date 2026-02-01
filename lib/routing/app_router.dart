@@ -241,14 +241,11 @@ class AppRouter extends StatelessWidget {
       }
     }
 
-    // 6.5. RETURNING GUEST USERS - Force authentication (must come BEFORE main app access)
-    if (authProvider.isGuestMode && authProvider.guestCompletedSetup) {
-      debugPrint(
-          '🧭 Router: Returning guest user → FirstWelcomeScreen (force authentication)');
-      return const FirstWelcomeScreen(
-        key: ValueKey('first_welcome_screen'),
-      );
-    }
+    // 6.5. RETURNING GUEST USERS - CHECK REMOVED
+    // Previously, we forced authentication here. 
+    // Now, we allow the fall-through to Step 7 (Main App Access) so guests can actually use the app after setup.
+    // Note: On app restart, isGuestMode resets to false, so returning users will naturally hit Step 3 above.
+
 
     // 7. MAIN APP ACCESS (authenticated + onboarding completed)
     debugPrint('🧭 Router: MAIN APP ACCESS - showing MainTabNavigation');

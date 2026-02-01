@@ -31,3 +31,7 @@ Thumbs.db
 
 # BMAD Method
 .cursor/
+
+# Local setup
+.local_cache/
+.local_cocoapods/

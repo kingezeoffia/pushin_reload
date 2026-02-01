@@ -17,6 +17,7 @@ import '../theme/enhanced_settings_design_tokens.dart';
 import '../../../state/auth_state_provider.dart';
 import '../../../state/pushin_app_controller.dart';
 import '../../../services/platform/ScreenTimeMonitor.dart';
+import '../../../services/StripeCheckoutService.dart';
 import 'paywall/PaywallScreen.dart';
 import 'settings/EmergencyUnlockSettingsScreen.dart';
 import 'settings/EditNameScreen.dart';
@@ -377,33 +378,77 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                         title: 'Edit Subscription',
                         subtitle: 'Upgrade or downgrade your plan',
                         iconColor: const Color(0xFFFFEB3B), // yellow color
-                        onTap: () {
+                        onTap: () async {
                           HapticFeedback.lightImpact();
-                          Navigator.of(context).push(
-                            PageRouteBuilder(
-                              pageBuilder:
-                                  (context, animation, secondaryAnimation) =>
-                                      const PaywallScreen(),
-                              transitionsBuilder: (context, animation,
-                                  secondaryAnimation, child) {
-                                // Smooth slide transition from bottom
-                                const begin = Offset(0.0, 1.0);
-                                const end = Offset.zero;
-                                const curve = Curves.easeOutCubic;
 
-                                var tween = Tween(begin: begin, end: end)
-                                    .chain(CurveTween(curve: curve));
-                                var offsetAnimation = animation.drive(tween);
+                          final controller = Provider.of<PushinAppController>(
+                              context,
+                              listen: false);
+                          final planTier = controller.planTier;
 
-                                return SlideTransition(
-                                  position: offsetAnimation,
-                                  child: child,
-                                );
-                              },
-                              transitionDuration:
-                                  const Duration(milliseconds: 400),
-                            ),
-                          );
+                          // For free users, show paywall as before
+                          if (planTier == 'free') {
+                            Navigator.of(context).push(
+                              PageRouteBuilder(
+                                pageBuilder:
+                                    (context, animation, secondaryAnimation) =>
+                                        const PaywallScreen(),
+                                transitionsBuilder: (context, animation,
+                                    secondaryAnimation, child) {
+                                  // Smooth slide transition from bottom
+                                  const begin = Offset(0.0, 1.0);
+                                  const end = Offset.zero;
+                                  const curve = Curves.easeOutCubic;
+
+                                  var tween = Tween(begin: begin, end: end)
+                                      .chain(CurveTween(curve: curve));
+                                  var offsetAnimation = animation.drive(tween);
+
+                                  return SlideTransition(
+                                    position: offsetAnimation,
+                                    child: child,
+                                  );
+                                },
+                                transitionDuration:
+                                    const Duration(milliseconds: 400),
+                              ),
+                            );
+                          } else {
+                            // For paid users (pro/advanced), open Stripe Customer Portal
+                            final authProvider = Provider.of<AuthStateProvider>(
+                                context,
+                                listen: false);
+                            final userId = authProvider.currentUser?.id;
+
+                            if (userId != null) {
+                              // Show simple loading feedback
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                      'Opening subscription management...'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+
+                              final stripeService = StripeCheckoutService(
+                                baseUrl:
+                                    'https://pushin-production.up.railway.app/api',
+                                isTestMode: true,
+                              );
+
+                              // Open portal
+                              await stripeService.openCustomerPortal(
+                                userId: userId,
+                              );
+                            } else {
+                              // Fallback if no user ID (shouldn't happen for paid users normally)
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                    builder: (context) =>
+                                        const PaywallScreen()),
+                              );
+                            }
+                          }
                         },
                         showDivider: false,
                       ),

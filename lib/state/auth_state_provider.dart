@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_cropper/image_cropper.dart';
@@ -44,6 +45,26 @@ class AuthUser {
     this.name,
     this.profileImagePath,
   });
+
+  /// Create AuthUser from JSON
+  factory AuthUser.fromJson(Map<String, dynamic> json) {
+    return AuthUser(
+      id: json['id'] as String,
+      email: json['email'] as String?,
+      name: json['name'] as String?,
+      profileImagePath: json['profile_image_path'] as String?,
+    );
+  }
+
+  /// Convert AuthUser to JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'email': email,
+      'name': name,
+      'profile_image_path': profileImagePath,
+    };
+  }
 }
 
 /// Production-ready authentication state provider
@@ -70,6 +91,7 @@ class AuthStateProvider extends ChangeNotifier {
   static const String _showSignInScreenKey = 'show_sign_in_screen';
   static const String _profileImagePathKey = 'profile_image_path';
   static const String _hasUsedAppBeforeKey = 'has_used_app_before';
+  static const String _currentUserKey = 'current_user_data';
 
   final SharedPreferences _prefs;
   final AuthenticationService _authService = AuthenticationService();
@@ -164,8 +186,31 @@ class AuthStateProvider extends ChangeNotifier {
     // Then check if user is authenticated
     bool isUserAuthenticated = false;
     try {
-      isUserAuthenticated = await _authService.isAuthenticated();
-      debugPrint('🔐 Authentication check result: $isUserAuthenticated');
+      // STARTUP OPTIMIZATION: Try to load user from local cache first
+      final userJson = _prefs.getString(_currentUserKey);
+      if (userJson != null) {
+        try {
+          final Map<String, dynamic> userMap =
+              Map<String, dynamic>.from(json.decode(userJson) as Map);
+          _currentUser = AuthUser.fromJson(userMap);
+          isUserAuthenticated = true;
+          debugPrint(
+              '🚀 FAST START: Loaded cached user: ${_currentUser?.email}');
+        } catch (e) {
+          debugPrint('⚠️ Error parsing cached user data: $e');
+        }
+      }
+
+      // If we have a cached user, we can consider them authenticated initially
+      // But we still need to verify with the server in the background
+      if (_currentUser != null) {
+        // Trigger background refresh but don't await it
+        _refreshUserData();
+      } else {
+        // Fallback to traditional check if no cache
+        isUserAuthenticated = await _authService.isAuthenticated();
+        debugPrint('🔐 Authentication check result: $isUserAuthenticated');
+      }
     } catch (e) {
       debugPrint(
           '⚠️ Authentication check failed (likely in test environment): $e');
@@ -177,15 +222,23 @@ class AuthStateProvider extends ChangeNotifier {
       debugPrint(
           '✅ User is authenticated - restoring user data and onboarding state');
       try {
-        final user = await _authService.getCurrentUser();
-        if (user != null) {
-          _currentUser = AuthUser(
-            id: user.id.toString(),
-            email: user.email,
-            name: user.firstname,
-            profileImagePath:
-                _profileImagePath, // Now properly restored before this point
-          );
+        // Only fetch from server if we didn't just load from cache
+        if (_currentUser == null) {
+          final user = await _authService.getCurrentUser();
+          if (user != null) {
+            _currentUser = AuthUser(
+              id: user.id.toString(),
+              email: user.email,
+              name: user.firstname,
+              profileImagePath:
+                  _profileImagePath, // Now properly restored before this point
+            );
+            // Save to cache for next time
+            _saveCurrentUser(_currentUser!);
+          }
+        }
+
+        if (_currentUser != null) {
           debugPrint('✅ Restored authenticated user: ${_currentUser!.email}');
 
           // For authenticated users, restore onboarding completion
@@ -201,6 +254,7 @@ class AuthStateProvider extends ChangeNotifier {
               '⚠️ getCurrentUser returned null, treating as not authenticated');
           isUserAuthenticated = false;
           _currentUser = null;
+          await _prefs.remove(_currentUserKey);
         }
       } catch (e) {
         debugPrint('❌ Error restoring authenticated user: $e');
@@ -235,6 +289,7 @@ class AuthStateProvider extends ChangeNotifier {
       // IMPORTANT: Clear profile image path for non-authenticated users
       // This prevents showing profile images when no user is logged in
       _profileImagePath = null;
+      await _prefs.remove(_currentUserKey);
       debugPrint('🧹 Cleared profile image path for non-authenticated user');
     }
     final onboardingStepIndex = _prefs.getInt(_onboardingStepKey) ?? 0;
@@ -269,6 +324,55 @@ class AuthStateProvider extends ChangeNotifier {
     debugPrint('   - showSignInScreen: $_showSignInScreen (transient)');
 
     notifyListeners();
+  }
+
+  /// Background refresh of user data
+  Future<void> _refreshUserData() async {
+    debugPrint('🔄 Background refreshing user data...');
+    try {
+      final user = await _authService.getCurrentUser();
+      if (user != null) {
+        final updatedUser = AuthUser(
+          id: user.id.toString(),
+          email: user.email,
+          name: user.firstname,
+          profileImagePath: _profileImagePath,
+        );
+
+        // Check if anything changed before notifying
+        // Basic check on id/email/name
+        bool changed = _currentUser?.id != updatedUser.id ||
+            _currentUser?.email != updatedUser.email ||
+            _currentUser?.name != updatedUser.name;
+
+        if (changed) {
+          _currentUser = updatedUser;
+          await _saveCurrentUser(updatedUser);
+          debugPrint(
+              '✅ User data updated in background: ${_currentUser?.email}');
+          notifyListeners();
+        } else {
+          debugPrint('✓ User data is up to date');
+        }
+      } else {
+        // Token might be invalid if getCurrentUser returns null
+        debugPrint('⚠️ Background refresh failed: user is null');
+        // Ideally we should maybe logout here?
+        // For now, let's just log it to avoid abrupt experience
+      }
+    } catch (e) {
+      debugPrint('❌ Error refreshing user data in background: $e');
+    }
+  }
+
+  /// Helper to save current user to preferences
+  Future<void> _saveCurrentUser(AuthUser user) async {
+    try {
+      final jsonStr = json.encode(user.toJson());
+      await _prefs.setString(_currentUserKey, jsonStr);
+    } catch (e) {
+      debugPrint('❌ Error saving user to cache: $e');
+    }
   }
 
   /// Mark onboarding as completed and persist
@@ -407,6 +511,9 @@ class AuthStateProvider extends ChangeNotifier {
           name: updatedUser.firstname,
           profileImagePath: _profileImagePath,
         );
+        
+        // Update cache
+        await _saveCurrentUser(_currentUser!);
 
         _isLoading = false;
         debugPrint(
@@ -711,6 +818,9 @@ class AuthStateProvider extends ChangeNotifier {
           name: user.firstname,
           profileImagePath: _profileImagePath,
         );
+
+        // Save to cache
+        await _saveCurrentUser(_currentUser!);
 
         // Exit guest mode if user was previously a guest
         if (_isGuestMode) {
@@ -1365,6 +1475,7 @@ class AuthStateProvider extends ChangeNotifier {
         name: _currentUser!.name,
         profileImagePath: path,
       );
+      await _saveCurrentUser(_currentUser!);
     }
 
     debugPrint('🔄 Profile image path updated: $path');
