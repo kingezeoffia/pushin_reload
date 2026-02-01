@@ -97,7 +97,7 @@ class _SubscriptionCancelledScreenState
                       ),
                       child: const Center(
                         child: Text(
-                          '😢',
+                          '👋',
                           style: TextStyle(fontSize: 64),
                         ),
                       ),
@@ -107,7 +107,7 @@ class _SubscriptionCancelledScreenState
 
                     // Heading
                     const Text(
-                      'Sad to See You Go',
+                      'Thank you for your support!',
                       style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.w900,
@@ -122,7 +122,7 @@ class _SubscriptionCancelledScreenState
 
                     // Subtitle
                     Text(
-                      'Your $_planName subscription has been cancelled.\nYou\'ve been moved to the Free plan.',
+                      'You successfully cancelled your $_planName subscription.\nYou\'ve been moved to the Free plan.',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,

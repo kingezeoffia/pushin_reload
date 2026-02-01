@@ -73,6 +73,13 @@ class _PaywallScreenState extends State<PaywallScreen>
     super.initState();
     _initializeSelectedPlan();
 
+    // Refresh subscription status when screen is shown (in case user returns from portal)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _refreshSubscriptionStatus();
+      }
+    });
+
     // Listen for plan tier changes from PushinAppController
     // This ensures the paywall updates when subscription status changes after payment
     final pushinController = context.read<PushinAppController>();
@@ -404,6 +411,12 @@ class _PaywallScreenState extends State<PaywallScreen>
         print('   - cancelAtPeriodEnd: ${freshStatus.cancelAtPeriodEnd}');
       }
 
+      // Check if subscription was just cancelled
+      final previousStatus = _currentSubscriptionStatus;
+      final wasNotCancelling = previousStatus?.cancelAtPeriodEnd != true &&
+                                previousStatus?.isActive == true;
+      final isNowCancelling = freshStatus?.cancelAtPeriodEnd == true;
+
       // Update state
       if (mounted) {
         setState(() {
@@ -414,6 +427,28 @@ class _PaywallScreenState extends State<PaywallScreen>
             _selectedPlan = _getNextBestPlanSync(updatedPlan);
           }
         });
+
+        // Show cancellation screen if subscription was just cancelled
+        if (wasNotCancelling && isNowCancelling) {
+          print('🚨 CANCELLATION DETECTED in _refreshSubscriptionStatus!');
+          print('   - Previous plan: ${previousStatus?.planId}');
+
+          // Small delay to ensure state update completes
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => SubscriptionCancelledScreen(
+                    previousPlan: previousStatus?.planId,
+                    onContinue: () {
+                      _refreshSubscriptionStatus();
+                    },
+                  ),
+                ),
+              );
+            }
+          });
+        }
       }
     } catch (e) {
       print('Error refreshing subscription status: $e');
@@ -1263,11 +1298,15 @@ class _PaywallScreenState extends State<PaywallScreen>
   void _scheduleStatusCheckAfterPortal() {
     // Store current status before portal
     final beforePortalStatus = _currentSubscriptionStatus;
+    bool cancellationScreenShown = false;
 
-    // Check status 3 seconds after portal opens (in case user quickly returns)
-    Future.delayed(const Duration(seconds: 3), () async {
-      if (!mounted) return;
-      print('🔄 Scheduled portal check: Refreshing subscription status...');
+    // Helper to check for cancellation and show screen
+    Future<void> checkForCancellation(int delaySeconds) async {
+      await Future.delayed(Duration(seconds: delaySeconds));
+
+      if (!mounted || cancellationScreenShown) return;
+
+      print('🔄 Scheduled portal check (${delaySeconds}s delay): Refreshing subscription status...');
       print('   - Before: cancelAtPeriodEnd = ${beforePortalStatus?.cancelAtPeriodEnd}');
 
       await _refreshSubscriptionStatus();
@@ -1280,8 +1319,15 @@ class _PaywallScreenState extends State<PaywallScreen>
                                 beforePortalStatus?.isActive == true;
       final isNowCancelling = afterPortalStatus?.cancelAtPeriodEnd == true;
 
-      if (wasNotCancelling && isNowCancelling && mounted) {
-        print('🚨 FALLBACK: Cancellation detected via status check!');
+      print('🔍 Cancellation check (${delaySeconds}s):');
+      print('   - wasNotCancelling: $wasNotCancelling');
+      print('   - isNowCancelling: $isNowCancelling');
+      print('   - mounted: $mounted');
+      print('   - cancellationScreenShown: $cancellationScreenShown');
+
+      if (wasNotCancelling && isNowCancelling && mounted && !cancellationScreenShown) {
+        cancellationScreenShown = true;
+        print('🚨 FALLBACK: Cancellation detected via status check (${delaySeconds}s)!');
         print('   - Previous plan: ${beforePortalStatus?.planId}');
 
         // Navigate to cancellation screen
@@ -1297,7 +1343,12 @@ class _PaywallScreenState extends State<PaywallScreen>
           ),
         );
       }
-    });
+    }
+
+    // Check at multiple intervals to catch the cancellation whenever Stripe updates
+    checkForCancellation(5);  // First check at 5 seconds
+    checkForCancellation(10); // Second check at 10 seconds
+    checkForCancellation(15); // Third check at 15 seconds (in case Stripe is slow)
   }
 
   void _showRestorePurchasesDialog() async {
@@ -1573,8 +1624,8 @@ class _PlanCardState extends State<_PlanCard>
                                     color: widget.subscriptionStatus
                                                     ?.cancelAtPeriodEnd ==
                                                 true
-                                        ? Colors.orange
-                                            .shade600 // Orange for cancelling
+                                        ? Colors.red
+                                            .shade600 // Red for cancelling
                                         : const Color(
                                             0xFF6060FF), // Blue for active
                                     borderRadius: BorderRadius.circular(100),
