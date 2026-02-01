@@ -288,7 +288,7 @@ class _PaywallScreenState extends State<PaywallScreen>
       if (mounted) {
         setState(() {
           _currentSubscriptionPlan = currentPlan;
-          _currentSubscriptionStatus = subscriptionStatus;
+          _currentSubscriptionStatus = cachedStatus;
           _selectedPlan = nextBestPlan;
           _isInitializingPlan = false;
         });
