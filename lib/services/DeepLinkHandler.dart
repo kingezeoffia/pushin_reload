@@ -357,18 +357,19 @@ class DeepLinkHandler {
         userId: currentUserId,
       );
 
-      print('🔗 Current subscription: ${subscriptionStatus?.planId} (active: ${subscriptionStatus?.isActive})');
+      print('🔗 Current subscription: ${subscriptionStatus?.planId} (active: ${subscriptionStatus?.isActive}, cancelAtPeriodEnd: ${subscriptionStatus?.cancelAtPeriodEnd})');
 
-      // Check if subscription was cancelled
-      final wasActive = _subscriptionBeforePortal?.isActive == true &&
-                        _subscriptionBeforePortal?.planId != 'free';
-      final isNowInactive = subscriptionStatus?.isActive != true ||
-                           subscriptionStatus?.planId == 'free';
+      // Check if subscription was cancelled (set to cancel at period end)
+      final wasNotCancelling = _subscriptionBeforePortal?.cancelAtPeriodEnd != true &&
+                                _subscriptionBeforePortal?.isActive == true &&
+                                _subscriptionBeforePortal?.planId != 'free';
+      final isNowCancelling = subscriptionStatus?.cancelAtPeriodEnd == true;
 
-      if (wasActive && isNowInactive) {
-        print('🔗 🚨 SUBSCRIPTION CANCELLED DETECTED');
-        print('🔗    From: ${_subscriptionBeforePortal?.planId}');
-        print('🔗    To: ${subscriptionStatus?.planId}');
+      if (wasNotCancelling && isNowCancelling) {
+        print('🔗 🚨 SUBSCRIPTION CANCELLATION DETECTED (cancel_at_period_end)');
+        print('🔗    Plan: ${_subscriptionBeforePortal?.planId}');
+        print('🔗    Before: cancelAtPeriodEnd = ${_subscriptionBeforePortal?.cancelAtPeriodEnd}');
+        print('🔗    After: cancelAtPeriodEnd = ${subscriptionStatus?.cancelAtPeriodEnd}');
 
         // Trigger cancellation callback
         onSubscriptionCancelled?.call(_subscriptionBeforePortal?.planId);

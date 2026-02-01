@@ -148,6 +148,7 @@ class StripeCheckoutService implements PaymentService {
               ? DateTime.parse(data['currentPeriodEnd'] as String)
               : null,
           cachedUserId: userId, // Always associate with the authenticated user
+          cancelAtPeriodEnd: data['cancelAtPeriodEnd'] as bool? ?? false,
         );
 
         // Store locally with user ID for validation
@@ -203,12 +204,14 @@ class StripeCheckoutService implements PaymentService {
               ? DateTime.parse(data['currentPeriodEnd'] as String)
               : null,
           cachedUserId: userId, // Always associate with the authenticated user
+          cancelAtPeriodEnd: data['cancelAtPeriodEnd'] as bool? ?? false,
         );
 
         // Update local cache with user ID for validation
         await _saveSubscriptionStatus(status);
 
         print('✅ Subscription cache updated with cachedUserId: $userId');
+        print('   - cancelAtPeriodEnd: ${status.cancelAtPeriodEnd}');
 
         return status;
       } else if (response.statusCode == 404) {
@@ -574,6 +577,7 @@ class SubscriptionStatus {
   final String? subscriptionId;
   final DateTime? currentPeriodEnd;
   final String? cachedUserId; // User ID this subscription belongs to
+  final bool cancelAtPeriodEnd; // True if subscription is set to cancel
 
   SubscriptionStatus({
     required this.isActive,
@@ -582,11 +586,13 @@ class SubscriptionStatus {
     this.subscriptionId,
     this.currentPeriodEnd,
     this.cachedUserId,
+    this.cancelAtPeriodEnd = false,
   });
 
   bool get isPaid => planId != 'free' && isActive;
   bool get isPro => planId == 'pro' && isActive;
   bool get isAdvanced => planId == 'advanced' && isActive;
+  bool get isCancelling => cancelAtPeriodEnd && isActive; // Active but will cancel
 
   String get displayName {
     switch (planId) {

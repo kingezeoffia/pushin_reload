@@ -1113,6 +1113,10 @@ class _PaywallScreenState extends State<PaywallScreen>
         return;
       }
 
+      print('🏦 ═══════════════════════════════════════════════');
+      print('🏦 OPENING STRIPE CUSTOMER PORTAL');
+      print('🏦 ═══════════════════════════════════════════════');
+
       setState(() => _isLoading = true);
 
       final stripeService = StripeCheckoutService(
@@ -1122,20 +1126,33 @@ class _PaywallScreenState extends State<PaywallScreen>
 
       // CRITICAL: Store current subscription status before opening portal
       // This allows us to detect if the user cancels their subscription
+      print('🏦 Fetching current subscription status...');
       final currentSubscription = await stripeService.checkSubscriptionStatus(
         userId: currentUser.id.toString(),
       );
 
+      print('🏦 Current subscription before portal:');
+      print('   - Plan: ${currentSubscription?.planId}');
+      print('   - Active: ${currentSubscription?.isActive}');
+      print('   - Customer ID: ${currentSubscription?.customerId}');
+
       final pushinController = context.read<PushinAppController>();
       await pushinController.setSubscriptionBeforePortal(currentSubscription);
 
+      print('🏦 Opening portal...');
       final success = await stripeService.openCustomerPortal(
         userId: currentUser.id.toString(),
       );
 
+      print('🏦 Portal open result: $success');
+
       if (!success && mounted) {
         _showErrorDialog(
             'Unable to open subscription management. Please try again.');
+      } else {
+        print('🏦 ✅ Portal opened successfully');
+        print('🏦 ⚠️ IMPORTANT: After cancelling in Stripe, tap "Return to app" button');
+        print('🏦 ⚠️ Do NOT manually switch back using app switcher!');
       }
     } catch (e) {
       print('❌ Error opening customer portal: $e');

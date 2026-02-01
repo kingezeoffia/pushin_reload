@@ -446,6 +446,7 @@ app.get('/api/stripe/subscription-status', async (req, res) => {
     const subscription = await stripe.subscriptions.retrieve(subscriptionData.subscription_id);
 
     const isActive = subscription.status === 'active';
+    const willCancelAtPeriodEnd = subscription.cancel_at_period_end || false;
 
     // Update database with latest status
     const tableName = isAnonymous ? 'anonymous_subscriptions' : 'subscriptions';
@@ -455,6 +456,7 @@ app.get('/api/stripe/subscription-status', async (req, res) => {
     );
 
     console.log('Subscription status:', subscription.status);
+    console.log('Cancel at period end:', willCancelAtPeriodEnd);
 
     res.json({
       isActive,
@@ -464,6 +466,7 @@ app.get('/api/stripe/subscription-status', async (req, res) => {
       currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
       isAnonymous: isAnonymous,
       recoveryToken: isAnonymous ? subscriptionData.recovery_token : null,
+      cancelAtPeriodEnd: willCancelAtPeriodEnd,
     });
   } catch (error) {
     console.error('❌ Error checking subscription:', error);
