@@ -211,7 +211,7 @@ class _CurrentStatusCardState extends State<CurrentStatusCard>
                                       letterSpacing: -0.3,
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
+                                  const SizedBox(height: 2),
                                   Text(
                                     config.description,
                                     style: TextStyle(
