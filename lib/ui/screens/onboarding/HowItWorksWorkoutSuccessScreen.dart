@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../../../state/auth_state_provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/pill_navigation_bar.dart';
@@ -241,20 +243,13 @@ class _HowItWorksWorkoutSuccessScreenState extends State<HowItWorksWorkoutSucces
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: _ContinueButton(
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    _NoSwipeBackRoute(
-                      builder: (context) => HowItWorksEmergencyUnlockScreen(
-                        fitnessLevel: fitnessLevel,
-                        goals: goals,
-                        otherGoal: otherGoal,
-                        workoutHistory: workoutHistory,
-                        blockedApps: blockedApps,
-                        selectedWorkout: workoutType,
-                        unlockDuration: 15, // Default 15 minutes
-                      ),
-                    ),
-                  );
+                  final authProvider = context.read<AuthStateProvider>();
+                  debugPrint('🔄 HowItWorksWorkoutSuccessScreen: Advancing from success...');
+                  if (authProvider.isGuestMode) {
+                    authProvider.advanceGuestSetupStep();
+                  } else {
+                    authProvider.advanceOnboardingStep();
+                  }
                 },
               ),
             ),

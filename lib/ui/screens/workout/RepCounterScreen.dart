@@ -102,8 +102,8 @@ class _RepCounterScreenState extends State<RepCounterScreen>
 
     if (!mounted) return;
 
-    // Navigate to completion screen
-    Navigator.pushReplacement(
+    // Navigate to completion screen (use push instead of pushReplacement to keep RepCounterScreen in stack)
+    Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => WorkoutCompletionScreen(

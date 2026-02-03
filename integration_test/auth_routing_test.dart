@@ -38,6 +38,7 @@ void main() {
         blockingService: MockAppBlockingService(),
         blockTargets: const [],
         usageTracker: usageTracker,
+        authProvider: authProvider,
         // Skip deep link handler initialization for test
       );
     });

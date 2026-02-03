@@ -119,7 +119,8 @@ async function initDatabase() {
         password_hash VARCHAR(255),
         apple_id VARCHAR(255) UNIQUE,
         google_id VARCHAR(255) UNIQUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -354,8 +355,8 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
              is_active = EXCLUDED.is_active,
              updated_at = EXCLUDED.updated_at`,
           [anonymousId, session.customer_details.email, session.customer, subscription.id, session.metadata.planId,
-           new Date(subscription.current_period_end * 1000), true, recoveryToken,
-           new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), new Date()] // 1 year expiry
+            new Date(subscription.current_period_end * 1000), true, recoveryToken,
+            new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), new Date()] // 1 year expiry
         );
       } else {
         // Regular authenticated subscription
@@ -369,7 +370,7 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
              is_active = EXCLUDED.is_active,
              updated_at = EXCLUDED.updated_at`,
           [userId, session.customer, subscription.id, session.metadata.planId,
-           new Date(subscription.current_period_end * 1000), true, new Date()]
+            new Date(subscription.current_period_end * 1000), true, new Date()]
         );
       }
 
@@ -556,7 +557,7 @@ app.post('/api/stripe/reactivate-subscription', async (req, res) => {
 app.post('/api/stripe/create-portal-session', async (req, res) => {
   try {
     const { userId, anonymousId } = req.body;
-    
+
     console.log('Creating portal session:', { userId, anonymousId });
 
     if (!userId && !anonymousId) {
@@ -654,7 +655,7 @@ app.post('/api/stripe/link-anonymous-subscription', async (req, res) => {
       `INSERT INTO subscriptions (user_id, customer_id, subscription_id, plan_id, current_period_end, is_active, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [userId, anonymousSub.customer_id, anonymousSub.subscription_id, anonymousSub.plan_id,
-       anonymousSub.current_period_end, anonymousSub.is_active, anonymousSub.created_at, new Date()]
+        anonymousSub.current_period_end, anonymousSub.is_active, anonymousSub.created_at, new Date()]
     );
 
     console.log('✅ Anonymous subscription linked to user account');
@@ -874,7 +875,7 @@ app.post('/api/stripe/restore-by-email', restorePurchasesLimiter, async (req, re
 
     // Prioritize: authenticated over anonymous
     let selectedSubscription = allSubscriptions.find(sub => sub.subscription_type === 'authenticated')
-                              || allSubscriptions[0];
+      || allSubscriptions[0];
 
     console.log(`💳 Found subscription - verifying with Stripe...`);
     console.log(`   - Subscription ID: ${selectedSubscription.subscription_id}`);
@@ -888,8 +889,8 @@ app.post('/api/stripe/restore-by-email', restorePurchasesLimiter, async (req, re
       if (stripeSubscription.status !== 'active') {
         // Update database to reflect actual status
         const tableName = selectedSubscription.subscription_type === 'authenticated'
-                         ? 'subscriptions'
-                         : 'anonymous_subscriptions';
+          ? 'subscriptions'
+          : 'anonymous_subscriptions';
         await pool.query(
           `UPDATE ${tableName} SET is_active = false, updated_at = NOW() WHERE subscription_id = $1`,
           [selectedSubscription.subscription_id]
@@ -905,8 +906,8 @@ app.post('/api/stripe/restore-by-email', restorePurchasesLimiter, async (req, re
 
       // Update local database with latest info from Stripe
       const tableName = selectedSubscription.subscription_type === 'authenticated'
-                       ? 'subscriptions'
-                       : 'anonymous_subscriptions';
+        ? 'subscriptions'
+        : 'anonymous_subscriptions';
       await pool.query(
         `UPDATE ${tableName} SET current_period_end = $1, updated_at = NOW() WHERE subscription_id = $2`,
         [new Date(stripeSubscription.current_period_end * 1000), selectedSubscription.subscription_id]
@@ -964,20 +965,20 @@ app.post('/api/stripe/restore-by-email', restorePurchasesLimiter, async (req, re
 });
 
 // 6. Webhook Handler (CRITICAL for production)
-app.post('/api/stripe/webhook', 
-  bodyParser.raw({ type: 'application/json' }), 
+app.post('/api/stripe/webhook',
+  bodyParser.raw({ type: 'application/json' }),
   async (req, res) => {
     const sig = req.headers['stripe-signature'];
-    
+
     let event;
-    
+
     try {
       event = stripe.webhooks.constructEvent(
         req.body,
         sig,
         process.env.STRIPE_WEBHOOK_SECRET
       );
-      
+
       console.log('✅ Webhook signature verified:', event.type);
     } catch (err) {
       console.error('❌ Webhook signature verification failed:', err.message);
@@ -992,39 +993,39 @@ app.post('/api/stripe/webhook',
           console.log('💰 Checkout completed:', session.id);
           // Update user subscription in database
           break;
-          
+
         case 'customer.subscription.created':
           const newSub = event.data.object;
           console.log('🆕 Subscription created:', newSub.id);
           break;
-          
+
         case 'customer.subscription.updated':
           const updatedSub = event.data.object;
           console.log('🔄 Subscription updated:', updatedSub.id);
-          
+
           // Update database
           const status = updatedSub.status;
           const isActive = status === 'active';
-          
+
           // Update subscriptions table
           await pool.query(
             `UPDATE subscriptions SET is_active = $1, current_period_end = $2, updated_at = $3 WHERE subscription_id = $4`,
             [isActive, new Date(updatedSub.current_period_end * 1000), new Date(), updatedSub.id]
           );
-          
+
           // Update anonymous_subscriptions table
           await pool.query(
             `UPDATE anonymous_subscriptions SET is_active = $1, current_period_end = $2, updated_at = $3 WHERE subscription_id = $4`,
             [isActive, new Date(updatedSub.current_period_end * 1000), new Date(), updatedSub.id]
           );
-          
+
           console.log(`✅ Subscription ${updatedSub.id} updated - status: ${status}`);
           break;
-          
+
         case 'customer.subscription.deleted':
           const deletedSub = event.data.object;
           console.log('❌ Subscription canceled:', deletedSub.id);
-          
+
           // Mark as inactive in both tables
           await pool.query(
             'UPDATE subscriptions SET is_active = false, updated_at = $1 WHERE subscription_id = $2',
@@ -1034,21 +1035,21 @@ app.post('/api/stripe/webhook',
             'UPDATE anonymous_subscriptions SET is_active = false, updated_at = $1 WHERE subscription_id = $2',
             [new Date(), deletedSub.id]
           );
-          
+
           console.log(`✅ Subscription ${deletedSub.id} marked as inactive`);
           break;
-          
+
         case 'invoice.payment_succeeded':
           const invoice = event.data.object;
           console.log('✅ Payment succeeded:', invoice.id);
           break;
-          
+
         case 'invoice.payment_failed':
           const failedInvoice = event.data.object;
           console.log('⚠️ Payment failed:', failedInvoice.id);
           // Notify user
           break;
-          
+
         default:
           console.log('Unhandled event type:', event.type);
       }

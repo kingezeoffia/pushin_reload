@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../domain/PushinState.dart';
 import '../domain/Workout.dart';
@@ -24,6 +25,7 @@ import '../services/WorkoutHistoryService.dart';
 import '../ui/widgets/AppBlockOverlay.dart';
 import '../controller/PushinController.dart';
 import 'auth_state_provider.dart';
+import '../services/rating_service.dart';
 
 /// Enhanced PUSHIN controller integrating:
 /// - Core state machine (PushinController)
@@ -66,6 +68,22 @@ class PushinAppController extends ChangeNotifier {
 
   // Intent navigation callback (set by UI layer)
   Function(String? blockedApp)? onStartWorkoutFromIntent;
+
+  // Rating check callback (set by UI layer to trigger rating after workout)
+  VoidCallback? onCheckWorkoutRating;
+
+  // Tab navigation request (used to switch tabs from deep screens)
+  int? _requestedTabIndex;
+  int? get requestedTabIndex => _requestedTabIndex;
+
+  void requestTabChange(int index) {
+    _requestedTabIndex = index;
+    notifyListeners();
+  }
+
+  void consumeTabRequest() {
+    _requestedTabIndex = null;
+  }
 
   // Track previous state to detect transitions
   PushinState? _previousState;
@@ -111,6 +129,11 @@ class PushinAppController extends ChangeNotifier {
 
   // Pending workout navigation (from iOS shield action)
   bool _pendingWorkoutNavigation = false;
+
+  // iOS Token Getters
+  List<String> get iosAppTokens => _iosAppTokens;
+  List<String> get iosCategoryTokens => _iosCategoryTokens;
+  bool get hasIOSBlockingConfigured => _iosBlockingConfigured;
 
   // Default blocked apps (common distracting apps)
   static const List<Map<String, String>> defaultBlockedApps = [
@@ -230,6 +253,13 @@ class PushinAppController extends ChangeNotifier {
     // Check for pending emergency unlocks initiated from shield
     await _checkForPendingEmergencyUnlock();
 
+    // Increment app launch count for rating prompting
+    try {
+      await RatingService.create().then((s) => s.incrementLaunchCount());
+    } catch (e) {
+      print('⚠️ Error incrementing launch count: $e');
+    }
+
     // Initialize Stripe service first (needed for subscription check)
     final stripeService = StripeCheckoutService(
       baseUrl: 'https://pushin-production.up.railway.app/api',
@@ -305,6 +335,9 @@ class PushinAppController extends ChangeNotifier {
         } catch (e) {
           print('❌ Error updating usage tracker: $e');
         }
+
+        // Sync emergency unlock with plan tier
+        _syncEmergencyUnlockWithPlanTier();
 
         if (isUpgradeToAdvanced) {
           // User upgraded from PRO to ADVANCED - show upgrade welcome screen
@@ -901,6 +934,9 @@ class PushinAppController extends ChangeNotifier {
         print('⚠️ No current workout found for history recording');
       }
 
+      // Record workout completion for streak and rating
+      await recordWorkoutCompletion();
+
       // Complete workout in core - this transitions to UNLOCKED state
       _core.completeWorkout(now);
 
@@ -944,6 +980,25 @@ class PushinAppController extends ChangeNotifier {
 
       // Record workout for streak tracking
       await recordWorkoutCompletion();
+
+      // Increment workout count for rating prompts (first workout trigger)
+      try {
+        final ratingService = await RatingService.create();
+        await ratingService.incrementWorkoutCount();
+        debugPrint('⭐ Workout count incremented to ${ratingService.workoutCount}');
+        
+        // Trigger rating check callback after increment completes
+        // This ensures the UI can check the rating conditions with the updated count
+        if (onCheckWorkoutRating != null) {
+          debugPrint('⭐ Calling onCheckWorkoutRating callback');
+          // Use post-frame callback to ensure UI is ready
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            onCheckWorkoutRating?.call();
+          });
+        }
+      } catch (e) {
+        debugPrint('⚠️ Error updating rating service: $e');
+      }
 
       notifyListeners();
     }
@@ -1105,10 +1160,6 @@ class PushinAppController extends ChangeNotifier {
       return true; // Return true to not block the unlock flow
     }
   }
-
-  /// Check if iOS has Screen Time tokens configured
-  bool get hasIOSBlockingConfigured =>
-      _iosAppTokens.isNotEmpty || _iosCategoryTokens.isNotEmpty;
 
   /// Check if iOS blocking is currently active
   bool get isIOSBlockingActive => _iosBlockingActive;
@@ -1307,6 +1358,17 @@ class PushinAppController extends ChangeNotifier {
   /// Record workout completion (should be called when workout finishes)
   Future<void> recordWorkoutCompletion() async {
     await _streakTracker.recordWorkoutCompletion();
+
+    // Increment workout count for rating prompts
+    try {
+      final s = await RatingService.create();
+      await s.incrementWorkoutCount();
+      debugPrint(
+          '⭐ RatingService: Workout count incremented via recordWorkoutCompletion');
+    } catch (e) {
+      debugPrint('⚠️ RatingService: Error incrementing workout count: $e');
+    }
+
     notifyListeners();
   }
 
@@ -1518,6 +1580,9 @@ class PushinAppController extends ChangeNotifier {
       print('⚠️ Using fallback plan tier: $_planTier');
     }
 
+    // Sync emergency unlock with plan tier after any tier change
+    _syncEmergencyUnlockWithPlanTier();
+
     notifyListeners();
   }
 
@@ -1529,6 +1594,15 @@ class PushinAppController extends ChangeNotifier {
     notifyListeners();
     print('   - Plan tier after clear: $_planTier (should remain advanced)');
   }
+
+  /// Clear the subscription cancelled state
+  void clearSubscriptionCancelled() {
+    print('🧹 Clearing subscription cancelled state');
+    subscriptionCancelledPlan.value = null;
+    notifyListeners();
+  }
+
+
 
   /// Get workout reward description for UI
   String getWorkoutRewardDescription(String workoutType, int reps) {
@@ -1589,6 +1663,10 @@ class PushinAppController extends ChangeNotifier {
   bool get hasEmergencyUnlockAccess =>
       _planTier == 'pro' || _planTier == 'advanced';
 
+  /// Whether user can use emergency unlock (has access AND it's enabled)
+  bool get canUseEmergencyUnlock =>
+      hasEmergencyUnlockAccess && _emergencyUnlockEnabled;
+
   /// Minutes per emergency unlock session
   int get emergencyUnlockMinutes => _emergencyUnlockMinutes;
 
@@ -1623,7 +1701,7 @@ class PushinAppController extends ChangeNotifier {
   List<String> get blockedApps {
     // For iOS, if user has completed iOS setup, return the iOS tokens (even if empty)
     if (!kIsWeb && Platform.isIOS && hasIOSBlockingBeenConfigured) {
-      return List.unmodifiable(_iosAppTokens);
+      return List.unmodifiable([..._iosAppTokens, ..._iosCategoryTokens]);
     }
     // For iOS without setup completed, return empty list (no apps blocked)
     if (!kIsWeb && Platform.isIOS) {
@@ -1636,12 +1714,37 @@ class PushinAppController extends ChangeNotifier {
   // ============ Emergency Unlock Setters ============
 
   /// Enable or disable emergency unlock feature
+  /// Note: Only Pro and Advanced users can enable this feature
   void setEmergencyUnlockEnabled(bool enabled) {
+    // Prevent free/guest users from enabling emergency unlock
+    if (enabled && !hasEmergencyUnlockAccess) {
+      debugPrint('❌ Cannot enable emergency unlock - requires Pro or Advanced plan');
+      return;
+    }
+
     _emergencyUnlockEnabled = enabled;
     notifyListeners();
 
     // Save to iOS UserDefaults for extension access
     IOSSettingsBridge.instance.setEmergencyUnlockEnabled(enabled);
+  }
+
+  /// Sync emergency unlock state with plan tier
+  /// Automatically enables for pro/advanced, disables for free/guest
+  void _syncEmergencyUnlockWithPlanTier() {
+    final shouldBeEnabled = hasEmergencyUnlockAccess;
+    
+    if (_emergencyUnlockEnabled != shouldBeEnabled) {
+      debugPrint('🔄 Syncing emergency unlock with plan tier: $_planTier');
+      debugPrint('   - Was: $_emergencyUnlockEnabled, Now: $shouldBeEnabled');
+      
+      _emergencyUnlockEnabled = shouldBeEnabled;
+      
+      // Save to iOS UserDefaults for extension access
+      IOSSettingsBridge.instance.setEmergencyUnlockEnabled(shouldBeEnabled);
+      
+      debugPrint('✅ Emergency unlock synced to plan tier');
+    }
   }
 
   /// Set duration for emergency unlock (in minutes)

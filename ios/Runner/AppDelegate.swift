@@ -1,6 +1,7 @@
 import UIKit
 import Flutter
 import UserNotifications
+import StoreKit
 
 // MARK: - Native Liquid Glass Platform View
 class NativeLiquidGlassViewFactory: NSObject, FlutterPlatformViewFactory {
@@ -197,8 +198,11 @@ class NativeLiquidGlassView: NSObject, FlutterPlatformView {
       // Initialize Native Liquid Glass method channel
       self.setupNativeLiquidGlass(controller: flutterController)
 
+      // Initialize Rating platform channel
+      self.setupRatingChannel(controller: flutterController)
+
       self.platformChannelsSetup = true
-      print("📱 PUSHIN - Screen Time, iOS Settings, and Native Liquid Glass integration active")
+      print("📱 PUSHIN - Screen Time, iOS Settings, Native Liquid Glass, and Rating integration active")
     }
     
     // Start trying immediately
@@ -380,6 +384,41 @@ class NativeLiquidGlassView: NSObject, FlutterPlatformView {
     nativeLiquidGlassRegistered = true
 
     print("✨ Native Liquid Glass platform view and method channel registered")
+  }
+
+  private func setupRatingChannel(controller: FlutterViewController? = nil) {
+    let flutterController = controller ?? findFlutterViewController(in: window?.rootViewController)
+    guard let controller = flutterController else {
+      return
+    }
+
+    let channel = FlutterMethodChannel(name: "pushin.app/rating", binaryMessenger: controller.binaryMessenger)
+
+    channel.setMethodCallHandler { (call, result) in
+      switch call.method {
+      case "requestReview":
+        // Request native iOS rating dialog
+        if #available(iOS 14.0, *) {
+          if let windowScene = self.window?.windowScene {
+            SKStoreReviewController.requestReview(in: windowScene)
+            print("⭐ Requested native iOS rating dialog (iOS 14+)")
+            result(true)
+          } else {
+            print("⚠️ Could not get window scene for rating")
+            result(false)
+          }
+        } else {
+          // iOS 13 and earlier
+          SKStoreReviewController.requestReview()
+          print("⭐ Requested native iOS rating dialog (iOS 13)")
+          result(true)
+        }
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
+    print("✨ Rating method channel registered")
   }
 
   // MARK: - UNUserNotificationCenterDelegate

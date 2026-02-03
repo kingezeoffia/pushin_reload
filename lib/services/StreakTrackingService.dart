@@ -10,8 +10,8 @@ class StreakTrackingService {
   static const String _totalWorkoutsKey = 'total_workouts';
   static const String _lastWorkoutDateKey = 'last_workout_date';
 
-  late Box<int> _streakBox;
-  late Box<String> _dateBox;
+  Box<int>? _streakBox;
+  Box<String>? _dateBox;
 
   /// Initialize Hive storage.
   /// Must be called before any other methods.
@@ -23,15 +23,20 @@ class StreakTrackingService {
   /// Record a workout completion for today.
   /// This should be called when a workout is successfully completed.
   Future<void> recordWorkoutCompletion() async {
+    if (_streakBox == null || _dateBox == null) {
+      print('⚠️ StreakTrackingService.recordWorkoutCompletion() - Boxes not initialized');
+      return;
+    }
+
     final today = DateTime.now();
     final todayKey = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
 
-    final lastWorkoutDateStr = _dateBox.get(_lastWorkoutDateKey);
+    final lastWorkoutDateStr = _dateBox!.get(_lastWorkoutDateKey);
     final lastWorkoutDate = lastWorkoutDateStr != null ? DateTime.parse(lastWorkoutDateStr) : null;
 
-    int currentStreak = _streakBox.get(_currentStreakKey) ?? 0;
-    int bestStreak = _streakBox.get(_bestStreakKey) ?? 0;
-    int totalWorkouts = _streakBox.get(_totalWorkoutsKey) ?? 0;
+    int currentStreak = _streakBox!.get(_currentStreakKey) ?? 0;
+    int bestStreak = _streakBox!.get(_bestStreakKey) ?? 0;
+    int totalWorkouts = _streakBox!.get(_totalWorkoutsKey) ?? 0;
 
     print('🔥 StreakTrackingService.recordWorkoutCompletion() - BEFORE:');
     print('   todayKey: $todayKey');
@@ -72,10 +77,10 @@ class StreakTrackingService {
     totalWorkouts += 1;
 
     // Save updated values
-    await _streakBox.put(_currentStreakKey, currentStreak);
-    await _streakBox.put(_bestStreakKey, bestStreak);
-    await _streakBox.put(_totalWorkoutsKey, totalWorkouts);
-    await _dateBox.put(_lastWorkoutDateKey, todayKey);
+    await _streakBox!.put(_currentStreakKey, currentStreak);
+    await _streakBox!.put(_bestStreakKey, bestStreak);
+    await _streakBox!.put(_totalWorkoutsKey, totalWorkouts);
+    await _dateBox!.put(_lastWorkoutDateKey, todayKey);
 
     print('🔥 StreakTrackingService.recordWorkoutCompletion() - AFTER:');
     print('   currentStreak: $currentStreak');
@@ -86,28 +91,44 @@ class StreakTrackingService {
 
   /// Get the current streak (consecutive days).
   int getCurrentStreak() {
-    final value = _streakBox.get(_currentStreakKey) ?? 0;
+    if (_streakBox == null) {
+      print('⚠️ StreakTrackingService.getCurrentStreak() - Box not initialized, returning 0');
+      return 0;
+    }
+    final value = _streakBox!.get(_currentStreakKey) ?? 0;
     print('🔥 StreakTrackingService.getCurrentStreak() -> $value');
     return value;
   }
 
   /// Get the best streak ever achieved.
   int getBestStreak() {
-    final value = _streakBox.get(_bestStreakKey) ?? 0;
+    if (_streakBox == null) {
+      print('⚠️ StreakTrackingService.getBestStreak() - Box not initialized, returning 0');
+      return 0;
+    }
+    final value = _streakBox!.get(_bestStreakKey) ?? 0;
     print('🔥 StreakTrackingService.getBestStreak() -> $value');
     return value;
   }
 
   /// Get the total number of workouts completed.
   int getTotalWorkouts() {
-    final value = _streakBox.get(_totalWorkoutsKey) ?? 0;
+    if (_streakBox == null) {
+      print('⚠️ StreakTrackingService.getTotalWorkouts() - Box not initialized, returning 0');
+      return 0;
+    }
+    final value = _streakBox!.get(_totalWorkoutsKey) ?? 0;
     print('🔥 StreakTrackingService.getTotalWorkouts() -> $value');
     return value;
   }
 
   /// Check if today's workout is completed.
   bool isTodayCompleted() {
-    final lastWorkoutDateStr = _dateBox.get(_lastWorkoutDateKey);
+    if (_dateBox == null) {
+      print('⚠️ StreakTrackingService.isTodayCompleted() - Box not initialized, returning false');
+      return false;
+    }
+    final lastWorkoutDateStr = _dateBox!.get(_lastWorkoutDateKey);
     if (lastWorkoutDateStr == null) return false;
 
     final today = DateTime.now();
@@ -118,7 +139,11 @@ class StreakTrackingService {
 
   /// Reset streaks (for testing or user request).
   Future<void> resetStreaks() async {
-    await _streakBox.clear();
-    await _dateBox.clear();
+    if (_streakBox == null || _dateBox == null) {
+      print('⚠️ StreakTrackingService.resetStreaks() - Boxes not initialized');
+      return;
+    }
+    await _streakBox!.clear();
+    await _dateBox!.clear();
   }
 }

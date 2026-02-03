@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../state/pushin_app_controller.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
+import '../paywall/PaywallScreen.dart';
 
 /// Emergency Unlock Settings Screen
 ///
@@ -130,7 +131,35 @@ class EmergencyUnlockSettingsScreen extends StatelessWidget {
                           value: controller.emergencyUnlockEnabled,
                           onChanged: (value) {
                             HapticFeedback.lightImpact();
-                            controller.setEmergencyUnlockEnabled(value);
+                            
+                            // Check if user has access (Pro or Advanced plan)
+                            if (value && !controller.hasEmergencyUnlockAccess) {
+                              // Redirect to paywall for free users
+                              Navigator.of(context).push(
+                                PageRouteBuilder(
+                                  pageBuilder: (context, animation, secondaryAnimation) =>
+                                      const PaywallScreen(preSelectedPlan: 'pro'),
+                                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                    const begin = Offset(0.0, 1.0);
+                                    const end = Offset.zero;
+                                    const curve = Curves.easeOutCubic;
+
+                                    var tween = Tween(begin: begin, end: end)
+                                        .chain(CurveTween(curve: curve));
+                                    var offsetAnimation = animation.drive(tween);
+
+                                    return SlideTransition(
+                                      position: offsetAnimation,
+                                      child: child,
+                                    );
+                                  },
+                                  transitionDuration: const Duration(milliseconds: 400),
+                                ),
+                              );
+                            } else {
+                              // Pro/Advanced users can toggle
+                              controller.setEmergencyUnlockEnabled(value);
+                            }
                           },
                         ),
 

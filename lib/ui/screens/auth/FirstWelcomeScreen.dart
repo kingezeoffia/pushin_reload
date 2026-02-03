@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../../state/auth_state_provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/pill_navigation_bar.dart';
-import 'SignUpScreen.dart';
-import 'SignInScreen.dart';
 
 /// First Welcome Screen - For users accessing from settings (sign up/logout)
 ///
@@ -102,12 +102,7 @@ class FirstWelcomeScreen extends StatelessWidget {
                     _PrimaryButton(
                       label: 'Sign Up',
                       onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SignUpScreen(),
-                          ),
-                        );
+                        context.read<AuthStateProvider>().triggerSignUpFlow();
                       },
                     ),
 
@@ -117,12 +112,7 @@ class FirstWelcomeScreen extends StatelessWidget {
                     _SecondaryButton(
                       label: 'Sign In',
                       onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SignInScreen(),
-                          ),
-                        );
+                        context.read<AuthStateProvider>().triggerSignInFlow();
                       },
                     ),
                   ],

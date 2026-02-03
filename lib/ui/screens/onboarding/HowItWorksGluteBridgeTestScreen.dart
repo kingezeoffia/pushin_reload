@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'dart:async';
+import 'package:provider/provider.dart';
+import '../../../state/auth_state_provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../../services/CameraWorkoutService.dart';
@@ -274,19 +276,15 @@ class _HowItWorksGluteBridgeTestScreenState extends State<HowItWorksGluteBridgeT
   }
 
   void _showSuccessScreen() {
-    Navigator.push(
-      context,
-      _NoSwipeBackRoute(
-        builder: (context) => HowItWorksWorkoutSuccessScreen(
-          fitnessLevel: widget.fitnessLevel,
-          goals: widget.goals,
-          otherGoal: widget.otherGoal,
-          workoutHistory: widget.workoutHistory,
-          blockedApps: widget.blockedApps,
-          workoutType: 'Glute Bridge',
-        ),
-      ),
-    );
+    if (mounted) {
+      final authProvider = context.read<AuthStateProvider>();
+      debugPrint('🔄 HowItWorksGluteBridgeTestScreen: Advancing to success screen...');
+      if (authProvider.isGuestMode) {
+        authProvider.advanceGuestSetupStep();
+      } else {
+        authProvider.advanceOnboardingStep();
+      }
+    }
   }
 
   void _manualRepCount() async {
@@ -702,21 +700,8 @@ class _HowItWorksGluteBridgeTestScreenState extends State<HowItWorksGluteBridgeT
                                 ? _ManualCountButton(onTap: _manualRepCount)
                                 : _SkipWorkoutButton(
                                     onTap: () {
-                                      // Navigate to success screen, skipping the workout
-                                      Navigator.push(
-                                        context,
-                                        _NoSwipeBackRoute(
-                                          builder: (context) =>
-                                              HowItWorksWorkoutSuccessScreen(
-                                            fitnessLevel: widget.fitnessLevel,
-                                            goals: widget.goals,
-                                            otherGoal: widget.otherGoal,
-                                            workoutHistory: widget.workoutHistory,
-                                            blockedApps: widget.blockedApps,
-                                            workoutType: 'Glute Bridge',
-                                          ),
-                                        ),
-                                      );
+                                      // Advance to success screen via state
+                                      _showSuccessScreen();
                                     },
                                   ),
                           ),

@@ -257,6 +257,7 @@ class _HowItWorksExerciseScreenState extends State<HowItWorksExerciseScreen> {
             ),
           ],
         ),
+      ),
     );
   }
 }

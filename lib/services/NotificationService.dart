@@ -45,9 +45,9 @@ class NotificationService {
 
     // Initialize settings for iOS
     final DarwinInitializationSettings iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
       notificationCategories: [workoutCategory],
     );
 
@@ -62,18 +62,19 @@ class NotificationService {
       onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationTapped,
     );
 
-    // Request permissions on iOS
-    if (Platform.isIOS) {
-      await _requestIOSPermissions();
-    }
+    // Note: Permissions are now requested explicitly via requestPermissions()
+    // This allows the app to request permissions at the appropriate time in onboarding
 
     debugPrint('✅ NotificationService initialized');
 
     debugPrint('✅ Notification service initialized');
   }
 
-  /// Request iOS notification permissions
-  Future<bool> _requestIOSPermissions() async {
+  /// Request notification permissions (iOS only, Android permissions are implicitly granted at install/runtime in newer versions but handled by local_notifications)
+  /// This should be called explicitly from the UI when appropriate
+  Future<bool> requestPermissions() async {
+    if (!Platform.isIOS) return true; // Assume granted/handled for Android for now
+
     final bool? granted = await _flutterLocalNotificationsPlugin
         .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
         ?.requestPermissions(

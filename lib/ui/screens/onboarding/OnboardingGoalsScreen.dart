@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../../../state/auth_state_provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/SelectionButton.dart';
@@ -202,19 +204,15 @@ class _OnboardingGoalsScreenState extends State<OnboardingGoalsScreen> {
             // Next Button - positioned at navigation pill level
             BottomActionContainer(
               child: _NextButton(
-                enabled: _canProceed,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    _NoSwipeBackRoute(
-                      builder: (context) => OnboardingWorkoutHistoryScreen(
-                        fitnessLevel: widget.fitnessLevel,
-                        goals: _selectedGoals.toList(),
-                        otherGoal: '', // No text input needed
-                      ),
-                    ),
-                  );
-                },
+                  enabled: _canProceed,
+                  onTap: () {
+                    if (_selectedGoals.isNotEmpty) {
+                      final authProvider = context.read<AuthStateProvider>();
+                      authProvider.setGoals(_selectedGoals.toList());
+                      debugPrint('🔄 OnboardingGoalsScreen: Advancing step...');
+                      authProvider.advanceOnboardingStep();
+                    }
+                  },
               ),
             ),
           ],

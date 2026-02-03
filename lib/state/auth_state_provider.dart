@@ -8,12 +8,15 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/AuthenticationService.dart';
 import '../services/StripeCheckoutService.dart';
+import '../services/TokenManager.dart';
 
 /// Guest setup steps for state-driven navigation
 enum GuestSetupStep {
+  notificationPermission,
   appsSelection,
   exerciseSelection,
   pushUpTest,
+  workoutSuccess,
   emergencyUnlock,
   completed,
 }
@@ -24,9 +27,11 @@ enum OnboardingStep {
   goals,
   otherGoal,
   workoutHistory,
+  notificationPermission,
   blockApps,
   exercise,
   pushUpTest,
+  workoutSuccess,
   emergencyUnlock,
   paywall,
   completed,
@@ -92,6 +97,7 @@ class AuthStateProvider extends ChangeNotifier {
   static const String _profileImagePathKey = 'profile_image_path';
   static const String _hasUsedAppBeforeKey = 'has_used_app_before';
   static const String _currentUserKey = 'current_user_data';
+  static const String _notificationPermissionRequestedKey = 'notification_permission_requested';
 
   final SharedPreferences _prefs;
   final AuthenticationService _authService = AuthenticationService();
@@ -110,6 +116,7 @@ class AuthStateProvider extends ChangeNotifier {
   GuestSetupStep _guestSetupStep = GuestSetupStep.appsSelection;
   OnboardingStep _onboardingStep = OnboardingStep.fitnessLevel;
   bool _isOnboardingCompleted = false;
+  bool _notificationPermissionRequested = false;
   String? _errorMessage;
   AuthUser? _currentUser;
 
@@ -129,6 +136,14 @@ class AuthStateProvider extends ChangeNotifier {
   List<String> _blockedApps = [];
   String? _selectedWorkout;
   int? _unlockDuration;
+
+  /// Set blocked apps list (used by guest setup)
+  void setBlockedApps(List<String> apps) {
+    _blockedApps = apps;
+    _prefs.setStringList('blocked_apps', apps);
+    debugPrint('📝 AuthStateProvider.setBlockedApps: updated ${apps.length} apps');
+    notifyListeners();
+  }
 
   AuthStateProvider(this._prefs) {
     debugPrint('🏗️ AuthStateProvider created');
@@ -153,6 +168,7 @@ class AuthStateProvider extends ChangeNotifier {
   GuestSetupStep get guestSetupStep => _guestSetupStep;
   OnboardingStep get onboardingStep => _onboardingStep;
   bool get isOnboardingCompleted => _isOnboardingCompleted;
+  bool get notificationPermissionRequested => _notificationPermissionRequested;
   String? get errorMessage => _errorMessage;
   AuthUser? get currentUser => _currentUser;
 
@@ -201,14 +217,54 @@ class AuthStateProvider extends ChangeNotifier {
         }
       }
 
-      // If we have a cached user, we can consider them authenticated initially
+      // If no cached user, try optimistic auth via JWT token
+      if (!isUserAuthenticated) {
+        try {
+          final tokenManager = TokenManager();
+          final payload = await tokenManager.getCurrentTokenPayload();
+          
+          if (payload != null) {
+            // Extract minimal user info we can get from token
+            final id = payload['id']?.toString() ?? payload['sub']?.toString() ?? '0';
+            final email = payload['email']?.toString();
+            final name = payload['name']?.toString();
+            
+            if (email != null) {
+              _currentUser = AuthUser(
+                id: id,
+                email: email,
+                name: name,
+                profileImagePath: _profileImagePath,
+              );
+              isUserAuthenticated = true;
+              debugPrint('🚀 OPTIMISTIC START: Restored user from token: $email');
+            }
+          }
+        } catch (e) {
+          debugPrint('⚠️ Optimistic auth check failed: $e');
+        }
+      }
+
+      // If we have a cached/optimistic user, we can consider them authenticated
       // But we still need to verify with the server in the background
-      if (_currentUser != null) {
+      if (isUserAuthenticated && _currentUser != null) {
         // Trigger background refresh but don't await it
         _refreshUserData();
       } else {
-        // Fallback to traditional check if no cache
-        isUserAuthenticated = await _authService.isAuthenticated();
+        // Fallback to traditional check if no cache/token - with TIMEOUT
+        // This prevents the infinite loading screen if network is flaky
+        try {
+          isUserAuthenticated = await _authService.isAuthenticated().timeout(
+            const Duration(seconds: 3),
+            onTimeout: () {
+              debugPrint('⚠️ Auth check timed out - assuming not authenticated');
+              return false;
+            },
+          );
+        } catch (e) {
+           debugPrint('⚠️ Auth check error: $e');
+           isUserAuthenticated = false;
+        }
         debugPrint('🔐 Authentication check result: $isUserAuthenticated');
       }
     } catch (e) {
@@ -222,19 +278,31 @@ class AuthStateProvider extends ChangeNotifier {
       debugPrint(
           '✅ User is authenticated - restoring user data and onboarding state');
       try {
-        // Only fetch from server if we didn't just load from cache
+        // Only fetch from server if we don't have user data yet
         if (_currentUser == null) {
-          final user = await _authService.getCurrentUser();
-          if (user != null) {
-            _currentUser = AuthUser(
-              id: user.id.toString(),
-              email: user.email,
-              name: user.firstname,
-              profileImagePath:
-                  _profileImagePath, // Now properly restored before this point
+          try {
+             // Add timeout to this critical path call too
+             final user = await _authService.getCurrentUser().timeout(
+              const Duration(seconds: 3),
+              onTimeout: () {
+                debugPrint('⚠️ GetCurrentUser timed out during init');
+                return null;
+              },
             );
-            // Save to cache for next time
-            _saveCurrentUser(_currentUser!);
+            
+            if (user != null) {
+              _currentUser = AuthUser(
+                id: user.id.toString(),
+                email: user.email,
+                name: user.firstname,
+                profileImagePath:
+                    _profileImagePath, // Now properly restored before this point
+              );
+              // Save to cache for next time
+              _saveCurrentUser(_currentUser!);
+            }
+          } catch (e) {
+             debugPrint('⚠️ Error fetching user during init: $e');
           }
         }
 
@@ -249,12 +317,12 @@ class AuthStateProvider extends ChangeNotifier {
           debugPrint(
               '✅ Restored onboarding state: completed=$_isOnboardingCompleted, step=$_onboardingStep');
         } else {
-          // getCurrentUser returned null, treat as not authenticated
+          // If we still don't have a user after all attempts, fail safe
           debugPrint(
-              '⚠️ getCurrentUser returned null, treating as not authenticated');
+              '⚠️ Failed to restore user data, treating as not authenticated');
           isUserAuthenticated = false;
           _currentUser = null;
-          await _prefs.remove(_currentUserKey);
+          // Don't remove key yet, maybe next time it works
         }
       } catch (e) {
         debugPrint('❌ Error restoring authenticated user: $e');
@@ -264,38 +332,39 @@ class AuthStateProvider extends ChangeNotifier {
       }
     }
 
+    // 4. Fallback for failed authentication check
     if (!isUserAuthenticated || _currentUser == null) {
-      // User is not authenticated - clear guest mode and onboarding state
-      debugPrint(
-          '👤 User is not authenticated - clearing guest mode and onboarding state');
+      // User appears not to be authenticated confirmed
+      debugPrint('👤 State: Not authenticated or failed to restore user');
 
-      // CRITICAL: Do NOT restore guest mode on app launch
-      // Guest users must authenticate when reopening the app
-      _isGuestMode = false; // Always start as false to force authentication
-      _guestCompletedSetup = false; // Clear guest setup completion
-      _guestSetupStep = GuestSetupStep.appsSelection; // Reset to first step
-      _isOnboardingCompleted = false; // Clear onboarding completion for guests
-      _onboardingStep = OnboardingStep.fitnessLevel; // Reset onboarding step
+      // CRITICAL CHANGE: Do NOT aggressively clear user data here
+      // Network issues or timeouts shouldn't log the user out
+      // Only clear if we explicitly want to (like in logout)
 
-      // Clear persistent guest mode data and onboarding data to prevent stale state
-      await _prefs.setBool(_guestModeKey, false);
-      await _prefs.setBool(_guestSetupCompletedKey, false);
-      await _prefs.setInt(
-          _guestSetupStepKey, GuestSetupStep.appsSelection.index);
-      await _prefs.setBool(_onboardingCompletedKey, false);
-      await _prefs.setInt(
-          _onboardingStepKey, OnboardingStep.fitnessLevel.index);
+      // If we really definitely KNOW they are not authenticated (e.g. 401 response),
+      // that logic should happen in the service layer or logout method.
+      // For initialization, if we fail to confirm, we should just NOT set current user
+      // but keep the cache in case it was just a network error.
 
-      // IMPORTANT: Clear profile image path for non-authenticated users
-      // This prevents showing profile images when no user is logged in
-      _profileImagePath = null;
-      await _prefs.remove(_currentUserKey);
-      debugPrint('🧹 Cleared profile image path for non-authenticated user');
+      // However, for the UI state, we still default to the "Safe" unauthenticated state
+      // so the app doesn't crash.
+
+      // We still clear guest mode for new sessions
+      _isGuestMode = false;
+      _guestCompletedSetup = false;
+      _guestSetupStep = GuestSetupStep.appsSelection;
+
+      // Note: We do NOT remove _currentUserKey here anymore.
+      // This protects against "App opens offline -> Auth check fails -> User data deleted -> Welcome screen"
     }
     final onboardingStepIndex = _prefs.getInt(_onboardingStepKey) ?? 0;
     _onboardingStep = OnboardingStep.values[onboardingStepIndex];
 
     // Restore guest mode state
+
+    // Restore notification permission state
+    _notificationPermissionRequested = _prefs.getBool(_notificationPermissionRequestedKey) ?? false;
+
 
     // Restore returning user state
     _hasUsedAppBefore = _prefs.getBool(_hasUsedAppBeforeKey) ?? false;
@@ -420,7 +489,7 @@ class AuthStateProvider extends ChangeNotifier {
   Future<void> enterGuestMode() async {
     _isGuestMode = true;
     _guestCompletedSetup = false;
-    _guestSetupStep = GuestSetupStep.appsSelection; // Start from first step
+    _guestSetupStep = GuestSetupStep.notificationPermission; // Start from first step
     // Guest mode skips onboarding - guest setup IS the onboarding
     _isOnboardingCompleted = true;
 
@@ -433,7 +502,7 @@ class AuthStateProvider extends ChangeNotifier {
     await _prefs.setBool(
         _guestModeKey, false); // Explicitly set to false for clarity
     await _prefs.setBool(_guestSetupCompletedKey, false);
-    await _prefs.setInt(_guestSetupStepKey, GuestSetupStep.appsSelection.index);
+    await _prefs.setInt(_guestSetupStepKey, GuestSetupStep.notificationPermission.index);
     await _prefs.setBool(_onboardingCompletedKey, true);
 
     // Don't persist transient navigation flags - they should always start as false
@@ -558,19 +627,28 @@ class AuthStateProvider extends ChangeNotifier {
     debugPrint('📝 Workout history set: $history');
   }
 
-  void setBlockedApps(List<String> apps) {
-    _blockedApps = apps;
-    debugPrint('📝 Blocked apps set: $apps');
-  }
+
 
   void setSelectedWorkout(String workout) {
     _selectedWorkout = workout;
     debugPrint('📝 Selected workout set: $workout');
+    notifyListeners();
   }
 
-  void setUnlockDuration(int duration) {
-    _unlockDuration = duration;
-    debugPrint('📝 Unlock duration set: $duration');
+  void setUnlockDuration(int newDuration) {
+    _unlockDuration = newDuration;
+    debugPrint('📝 Unlock duration set: $newDuration');
+    notifyListeners();
+  }
+
+  /// Mark notification permission as requested (flow completed)
+  Future<void> markNotificationPermissionRequested() async {
+    if (_notificationPermissionRequested) return;
+    
+    _notificationPermissionRequested = true;
+    await _prefs.setBool(_notificationPermissionRequestedKey, true);
+    debugPrint('📝 Notification permission requested marked as true');
+    notifyListeners();
   }
 
   /// Mark guest setup as completed and persist

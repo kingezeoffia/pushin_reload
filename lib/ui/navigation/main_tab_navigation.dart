@@ -34,7 +34,26 @@ class _MainTabNavigationState extends State<MainTabNavigation> {
       _checkForNewUserReset();
       _checkPendingWorkoutNavigation();
       _setupWorkoutIntentCallback();
+      _setupTabChangeRequestObserver();
     });
+  }
+
+  void _setupTabChangeRequestObserver() {
+    final controller = Provider.of<PushinAppController>(context, listen: false);
+    controller.addListener(_onControllerChanged);
+  }
+
+  void _onControllerChanged() {
+    final controller = Provider.of<PushinAppController>(context, listen: false);
+    final requestedIndex = controller.requestedTabIndex;
+
+    if (requestedIndex != null && requestedIndex != _selectedIndex) {
+      debugPrint('🔄 MainTabNavigation: Switching to tab $requestedIndex');
+      setState(() {
+        _selectedIndex = requestedIndex;
+      });
+      controller.consumeTabRequest();
+    }
   }
 
   void _checkForNewUserReset() {
@@ -70,6 +89,8 @@ class _MainTabNavigationState extends State<MainTabNavigation> {
 
   @override
   void dispose() {
+    final controller = Provider.of<PushinAppController>(context, listen: false);
+    controller.removeListener(_onControllerChanged);
     super.dispose();
   }
 

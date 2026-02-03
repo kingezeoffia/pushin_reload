@@ -377,7 +377,8 @@ class _CameraRepCounterScreenState extends State<CameraRepCounterScreen>
 
     if (!mounted) return;
 
-    Navigator.pushReplacement(
+    // Use push instead of pushReplacement to keep CameraRepCounterScreen in stack
+    Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => WorkoutCompletionScreen(

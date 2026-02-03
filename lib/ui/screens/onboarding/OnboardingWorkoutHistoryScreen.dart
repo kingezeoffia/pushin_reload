@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../../../state/auth_state_provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/SelectionButton.dart';
@@ -192,21 +194,14 @@ class _OnboardingWorkoutHistoryScreenState
             BottomActionContainer(
               child: _NextButton(
                 enabled: _selectedHistory != null,
-                onTap: () {
-                  if (_selectedHistory != null) {
-                    Navigator.push(
-                      context,
-                      _NoSwipeBackRoute(
-                        builder: (context) => HowItWorksBlockAppsScreen(
-                          fitnessLevel: widget.fitnessLevel,
-                          goals: widget.goals,
-                          otherGoal: widget.otherGoal,
-                          workoutHistory: _selectedHistory!,
-                        ),
-                      ),
-                    );
-                  }
-                },
+                    onTap: () {
+                      if (_selectedHistory != null) {
+                        final authProvider = context.read<AuthStateProvider>();
+                        authProvider.setWorkoutHistory(_selectedHistory!);
+                        debugPrint('🔄 OnboardingWorkoutHistoryScreen: Advancing step...');
+                        authProvider.advanceOnboardingStep();
+                      }
+                    },
               ),
             ),
           ],

@@ -9,17 +9,23 @@ import '../ui/screens/auth/FirstWelcomeScreen.dart';
 import '../ui/screens/auth/NewUserWelcomeScreen.dart';
 import '../ui/screens/auth/SignUpScreen.dart';
 import '../ui/screens/auth/SignInScreen.dart';
+import '../ui/screens/auth/SkipNotificationPermissionScreen.dart';
 import '../ui/screens/auth/SkipBlockAppsScreen.dart';
-import '../ui/screens/auth/SkipExerciseScreen.dart';
-import '../ui/screens/auth/SkipPushUpTestScreen.dart';
-import '../ui/screens/auth/SkipEmergencyUnlockScreen.dart';
+
+
 import '../ui/screens/onboarding/OnboardingFitnessLevelScreen.dart';
 import '../ui/screens/onboarding/OnboardingGoalsScreen.dart';
 import '../ui/screens/onboarding/OnboardingWorkoutHistoryScreen.dart';
 import '../ui/screens/onboarding/HowItWorksBlockAppsScreen.dart';
-import '../ui/screens/onboarding/HowItWorksExerciseSelectionScreen.dart';
+import '../ui/screens/onboarding/HowItWorksNotificationPermissionScreen.dart';
+import '../ui/screens/onboarding/HowItWorksChooseWorkoutScreen.dart';
 import '../ui/screens/onboarding/HowItWorksPushUpTestScreen.dart';
+import '../ui/screens/onboarding/HowItWorksSquatTestScreen.dart';
+import '../ui/screens/onboarding/HowItWorksGluteBridgeTestScreen.dart';
+import '../ui/screens/onboarding/HowItWorksPlankTestScreen.dart';
+import '../ui/screens/onboarding/HowItWorksJumpingJackTestScreen.dart';
 import '../ui/screens/onboarding/HowItWorksEmergencyUnlockScreen.dart';
+import '../ui/screens/onboarding/HowItWorksWorkoutSuccessScreen.dart';
 import '../ui/screens/paywall/PaywallScreen.dart';
 
 /// Production-ready state-driven router
@@ -75,6 +81,7 @@ class AppRouter extends StatelessWidget {
     debugPrint(
         '  - isOnboardingCompleted: ${authProvider.isOnboardingCompleted}');
     debugPrint('  - onboardingStep: ${authProvider.onboardingStep}');
+    debugPrint('  - guestSetupStep: ${authProvider.guestSetupStep}');
     debugPrint('  - showSignUpScreen: ${authProvider.showSignUpScreen}');
     debugPrint('  - showSignInScreen: ${authProvider.showSignInScreen}');
     debugPrint('  - justRegistered: ${authProvider.justRegistered}');
@@ -158,6 +165,14 @@ class AppRouter extends StatelessWidget {
             goals: authProvider.goals,
             otherGoal: authProvider.otherGoal,
           );
+        case OnboardingStep.notificationPermission:
+          return HowItWorksNotificationPermissionScreen(
+            key: const ValueKey('onboarding_notification_permission_screen'),
+            fitnessLevel: authProvider.fitnessLevel ?? '',
+            goals: authProvider.goals,
+            otherGoal: authProvider.otherGoal,
+            workoutHistory: authProvider.workoutHistory,
+          );
         case OnboardingStep.blockApps:
           return HowItWorksBlockAppsScreen(
             key: const ValueKey('onboarding_block_apps_screen'),
@@ -167,7 +182,7 @@ class AppRouter extends StatelessWidget {
             workoutHistory: authProvider.workoutHistory,
           );
         case OnboardingStep.exercise:
-          return HowItWorksExerciseSelectionScreen(
+          return HowItWorksChooseWorkoutScreen(
             key: const ValueKey('onboarding_exercise_screen'),
             fitnessLevel: authProvider.fitnessLevel ?? '',
             goals: authProvider.goals,
@@ -176,13 +191,20 @@ class AppRouter extends StatelessWidget {
             blockedApps: authProvider.blockedApps,
           );
         case OnboardingStep.pushUpTest:
-          return HowItWorksPushUpTestScreen(
+          return _buildWorkoutTestScreen(
+            context,
+            authProvider,
             key: const ValueKey('onboarding_pushup_test_screen'),
+          );
+        case OnboardingStep.workoutSuccess:
+          return HowItWorksWorkoutSuccessScreen(
+            key: const ValueKey('onboarding_workout_success_screen'),
             fitnessLevel: authProvider.fitnessLevel ?? '',
             goals: authProvider.goals,
             otherGoal: authProvider.otherGoal,
             workoutHistory: authProvider.workoutHistory,
             blockedApps: authProvider.blockedApps,
+            workoutType: authProvider.selectedWorkout ?? 'Push-Ups',
           );
         case OnboardingStep.emergencyUnlock:
           debugPrint(
@@ -213,27 +235,45 @@ class AppRouter extends StatelessWidget {
     if (authProvider.isGuestMode && !authProvider.guestCompletedSetup) {
       debugPrint('🧭 Router: Guest setup incomplete → guest screens');
       switch (authProvider.guestSetupStep) {
+        case GuestSetupStep.notificationPermission:
+          return const SkipNotificationPermissionScreen(
+            key: ValueKey('guest_notification_permission_screen'),
+          );
         case GuestSetupStep.appsSelection:
           return const SkipBlockAppsScreen(
             key: ValueKey('guest_apps_screen'),
           );
         case GuestSetupStep.exerciseSelection:
-          return SkipExerciseScreen(
+          return HowItWorksChooseWorkoutScreen(
             key: const ValueKey('guest_exercise_screen'),
             blockedApps: authProvider.blockedApps,
           );
         case GuestSetupStep.pushUpTest:
-          return SkipPushUpTestScreen(
+          return _buildWorkoutTestScreen(
+            context,
+            authProvider,
             key: const ValueKey('guest_pushup_test_screen'),
+          );
+        case GuestSetupStep.workoutSuccess:
+          return HowItWorksWorkoutSuccessScreen(
+            key: const ValueKey('guest_workout_success_screen'),
+            fitnessLevel: '',
+            goals: const [],
+            otherGoal: '',
+            workoutHistory: '',
             blockedApps: authProvider.blockedApps,
-            selectedWorkout: authProvider.selectedWorkout ?? '',
+            workoutType: authProvider.selectedWorkout ?? 'Push-Ups',
           );
         case GuestSetupStep.emergencyUnlock:
-          return SkipEmergencyUnlockScreen(
+          return HowItWorksEmergencyUnlockScreen(
             key: const ValueKey('guest_emergency_screen'),
+            fitnessLevel: '',
+            goals: const [],
+            otherGoal: '',
+            workoutHistory: '',
             blockedApps: authProvider.blockedApps,
-            selectedWorkout: authProvider.selectedWorkout ?? '',
-            unlockDuration: authProvider.unlockDuration ?? 30,
+            selectedWorkout: authProvider.selectedWorkout ?? 'Push-Ups',
+            unlockDuration: authProvider.unlockDuration ?? 15,
           );
         case GuestSetupStep.completed:
           // Should not reach here due to outer condition
@@ -251,8 +291,96 @@ class AppRouter extends StatelessWidget {
     debugPrint('🧭 Router: MAIN APP ACCESS - showing MainTabNavigation');
     debugPrint(
         '🧭 Router: Authenticated=${authProvider.isAuthenticated}, OnboardingCompleted=${authProvider.isOnboardingCompleted}, GuestMode=${authProvider.isGuestMode}, GuestSetupCompleted=${authProvider.guestCompletedSetup}');
+    
+    // Check for notification permissions for returning users
+    if (!authProvider.notificationPermissionRequested) {
+      debugPrint('🧭 Router: Returning user missing notification permissions → HowItWorksNotificationPermissionScreen');
+      return HowItWorksNotificationPermissionScreen(
+        key: const ValueKey('returning_user_notification_permission_screen'),
+        // Pass empty/dummy data as it won't be used for next steps logic in this mode
+        fitnessLevel: '',
+        goals: const [],
+        otherGoal: '',
+        workoutHistory: '',
+        isReturningUser: true,
+      );
+    }
+
     return const MainTabNavigation(
       key: ValueKey('main_tab_navigation'),
     );
+  }
+
+  /// Helper to build the correct workout test screen based on selection
+  Widget _buildWorkoutTestScreen(
+    BuildContext context,
+    AuthStateProvider authProvider, {
+    required ValueKey key,
+  }) {
+    final workout = authProvider.selectedWorkout ?? 'Push-Ups';
+    final fitnessLevel = authProvider.fitnessLevel ?? '';
+    final goals = authProvider.goals;
+    final otherGoal = authProvider.otherGoal;
+    final workoutHistory = authProvider.workoutHistory;
+    final blockedApps = authProvider.blockedApps;
+
+    debugPrint('🧭 Router: Building workout test screen for: $workout');
+
+    switch (workout) {
+      case 'Push-Ups':
+        return HowItWorksPushUpTestScreen(
+          key: key,
+          fitnessLevel: fitnessLevel,
+          goals: goals,
+          otherGoal: otherGoal,
+          workoutHistory: workoutHistory,
+          blockedApps: blockedApps,
+        );
+      case 'Squats':
+        return HowItWorksSquatTestScreen(
+          key: key,
+          fitnessLevel: fitnessLevel,
+          goals: goals,
+          otherGoal: otherGoal,
+          workoutHistory: workoutHistory,
+          blockedApps: blockedApps,
+        );
+      case 'Glute Bridge':
+        return HowItWorksGluteBridgeTestScreen(
+          key: key,
+          fitnessLevel: fitnessLevel,
+          goals: goals,
+          otherGoal: otherGoal,
+          workoutHistory: workoutHistory,
+          blockedApps: blockedApps,
+        );
+      case 'Plank':
+        return HowItWorksPlankTestScreen(
+          key: key,
+          fitnessLevel: fitnessLevel,
+          goals: goals,
+          otherGoal: otherGoal,
+          workoutHistory: workoutHistory,
+          blockedApps: blockedApps,
+        );
+      case 'Jumping Jacks':
+        return HowItWorksJumpingJackTestScreen(
+          key: key,
+          fitnessLevel: fitnessLevel,
+          goals: goals,
+          otherGoal: otherGoal,
+          workoutHistory: workoutHistory,
+          blockedApps: blockedApps,
+        );
+      default:
+        return HowItWorksPushUpTestScreen(
+          key: key,
+          fitnessLevel: fitnessLevel,
+          goals: goals,
+          otherGoal: otherGoal,
+          workoutHistory: workoutHistory,
+          blockedApps: blockedApps,
+        );
+    }
   }
 }

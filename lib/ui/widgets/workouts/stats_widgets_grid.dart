@@ -144,7 +144,7 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid>
         }
       }
     } catch (e) {
-      print('StatsWidgetsGrid: Error checking permission: $e');
+      debugPrint('StatsWidgetsGrid: Error checking permission: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -164,7 +164,7 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid>
         });
       }
     } catch (e) {
-      print('StatsWidgetsGrid: Error loading workout history: $e');
+      debugPrint('StatsWidgetsGrid: Error loading workout history: $e');
       if (mounted) {
         setState(() {
           _workoutsLoading = false;
@@ -184,7 +184,7 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid>
         });
       }
     } catch (e) {
-      print('StatsWidgetsGrid: Error loading health data: $e');
+      debugPrint('StatsWidgetsGrid: Error loading health data: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -212,7 +212,7 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid>
         });
       }
     } catch (e) {
-      print('StatsWidgetsGrid: Error requesting permission: $e');
+      debugPrint('StatsWidgetsGrid: Error requesting permission: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -236,9 +236,9 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid>
       // Start monitoring to collect data (safe to call multiple times)
       try {
         await _screenTimeService.startScreenTimeMonitoring();
-        print('✅ StatsWidgetsGrid: Started screen time monitoring');
+        debugPrint('✅ StatsWidgetsGrid: Started screen time monitoring');
       } catch (e) {
-        print(
+        debugPrint(
             '⚠️ StatsWidgetsGrid: Could not start monitoring (may need permission): $e');
       }
 
@@ -259,13 +259,13 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid>
       }
 
       if (_screenTimeIsMockData) {
-        print(
+        debugPrint(
             '⚠️ StatsWidgetsGrid: Using mock screen time data - DeviceActivityReport extension needs to be added to Xcode');
       } else {
-        print('✅ StatsWidgetsGrid: Loaded real screen time data');
+        debugPrint('✅ StatsWidgetsGrid: Loaded real screen time data');
       }
     } catch (e) {
-      print('StatsWidgetsGrid: Error loading screen time data: $e');
+      debugPrint('StatsWidgetsGrid: Error loading screen time data: $e');
       if (mounted) {
         setState(() {
           _screenTimeLoading = false;
@@ -858,7 +858,7 @@ class _MostUsedAppsWidgetState extends State<MostUsedAppsWidget>
         ),
         const SizedBox(width: 10),
         const Text(
-          'Most Used Apps',
+          'Most Used Apps (soon)',
           style: TextStyle(
             color: Colors.white,
             fontSize: 15,

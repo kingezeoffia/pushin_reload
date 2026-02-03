@@ -78,11 +78,12 @@ const tables = [
         apple_id VARCHAR(255) UNIQUE,
         google_id VARCHAR(255) UNIQUE,
   
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `
   },
-  
+
   {
     name: 'refresh_tokens',
     sql: `
@@ -205,11 +206,11 @@ async function createAllTables() {
   try {
     console.log('');
     console.log('🔄 Connecting to PostgreSQL database...');
-    
+
     // Test connection with timeout
     client = await pool.connect();
     console.log('✅ Connected successfully!');
-    
+
     // Verify connection with a simple query
     const result = await client.query('SELECT NOW() as current_time, version() as pg_version');
     console.log('⏰ Server time:', result.rows[0].current_time);
@@ -226,7 +227,7 @@ async function createAllTables() {
     console.log('');
     console.log('🎉 SUCCESS! All tables created/verified!');
     console.log('');
-    
+
     // Show table summary
     const tablesQuery = await client.query(`
       SELECT table_name 
@@ -236,19 +237,19 @@ async function createAllTables() {
     `);
     console.log('📊 Tables in database:');
     tablesQuery.rows.forEach(row => console.log(`   - ${row.table_name}`));
-    
+
   } catch (err) {
     console.error('');
     console.error('❌ DATABASE ERROR:');
     console.error('Message:', err.message);
     console.error('');
-    
+
     // Show full stack trace for debugging
     if (err.stack) {
       console.error('Stack trace:');
       console.error(err.stack);
     }
-    
+
     // Specific error hints
     if (err.message.includes('ENOTFOUND') || err.message.includes('ECONNREFUSED')) {
       console.error('');
@@ -260,7 +261,7 @@ async function createAllTables() {
       console.error('');
       console.error('💡 Hint: SSL connection issue. Use DATABASE_PRIVATE_URL for Railway internal connection');
     }
-    
+
     process.exit(1);
   } finally {
     if (client) {

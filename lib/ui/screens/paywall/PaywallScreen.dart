@@ -124,10 +124,10 @@ class _PaywallScreenState extends State<PaywallScreen>
 
   /// Continue purchase flow after user authentication
   Future<void> _continuePurchaseAfterAuth() async {
-    print('🔄 Continuing purchase after authentication...');
+    debugPrint('🔄 Continuing purchase after authentication...');
 
     try {
-      print('🟡 Creating StripeCheckoutService...');
+      debugPrint('🟡 Creating StripeCheckoutService...');
       final stripeService = StripeCheckoutService(
         baseUrl: 'https://pushin-production.up.railway.app/api',
         isTestMode: true,
@@ -140,7 +140,7 @@ class _PaywallScreenState extends State<PaywallScreen>
 
       // At this point user should be authenticated
       if (!isAuthenticated || currentUser == null) {
-        print('❌ User not authenticated after auth flow - aborting');
+        debugPrint('❌ User not authenticated after auth flow - aborting');
         setState(() => _isLoading = false);
         return;
       }
@@ -149,11 +149,11 @@ class _PaywallScreenState extends State<PaywallScreen>
       String userId = currentUser.id.toString();
       String userEmail = currentUser.email ?? 'user@example.com';
 
-      print('🛒 Continuing checkout for authenticated user');
-      print('   - userId: $userId');
-      print('   - userEmail: $userEmail');
-      print('   - planId: $_selectedPlan');
-      print('   - billingPeriod: $_billingPeriod');
+      debugPrint('🛒 Continuing checkout for authenticated user');
+      debugPrint('   - userId: $userId');
+      debugPrint('   - userEmail: $userEmail');
+      debugPrint('   - planId: $_selectedPlan');
+      debugPrint('   - billingPeriod: $_billingPeriod');
 
       // Set the pending checkout userId so DeepLinkHandler can verify the payment
       final pushinController = context.read<PushinAppController>();
@@ -175,7 +175,7 @@ class _PaywallScreenState extends State<PaywallScreen>
         // For real mode, plan tier will be updated via deep link handler
         // For test mode, simulate payment success immediately since no deep link is triggered
         if (stripeService.isTestMode) {
-          print(
+          debugPrint(
               'TEST MODE: Checkout simulated successfully - triggering payment success flow');
           // Simulate payment success by creating a subscription status and triggering the callback
           final simulatedStatus = SubscriptionStatus(
@@ -193,7 +193,7 @@ class _PaywallScreenState extends State<PaywallScreen>
 
           // Trigger the payment success callback to update UI state
           pushinController.paymentSuccessState.value = simulatedStatus;
-          print(
+          debugPrint(
               'TEST MODE: Payment success state updated, UI should reflect new plan tier');
         }
       } else {
@@ -216,13 +216,13 @@ class _PaywallScreenState extends State<PaywallScreen>
     final hasUpgradeWelcome = pushinController.upgradeWelcomeState.value;
 
     if ((paymentStatus != null || hasUpgradeWelcome) && mounted) {
-      print('🎉 PaywallScreen: Payment success detected');
-      print('   - hasUpgradeWelcome: $hasUpgradeWelcome');
-      print('   - hasPaymentSuccess: ${paymentStatus != null}');
+      debugPrint('🎉 PaywallScreen: Payment success detected');
+      debugPrint('   - hasUpgradeWelcome: $hasUpgradeWelcome');
+      debugPrint('   - hasPaymentSuccess: ${paymentStatus != null}');
 
       // Navigate to the appropriate success screen
       if (hasUpgradeWelcome) {
-        print('🎉 PaywallScreen: Showing AdvancedUpgradeWelcomeScreen');
+        debugPrint('🎉 PaywallScreen: Showing AdvancedUpgradeWelcomeScreen');
         // Clear the upgrade welcome state immediately
         final pushinController = context.read<PushinAppController>();
         pushinController.upgradeWelcomeState.value = false;
@@ -234,7 +234,7 @@ class _PaywallScreenState extends State<PaywallScreen>
           ),
         );
       } else if (paymentStatus != null) {
-        print(
+        debugPrint(
             '🎉 PaywallScreen: Showing SubscriptionSuccessScreen for ${paymentStatus.planId}');
         // Clear the payment success state immediately
         final pushinController = context.read<PushinAppController>();
@@ -265,7 +265,7 @@ class _PaywallScreenState extends State<PaywallScreen>
 
       if (cachedStatus != null && cachedStatus.isActive) {
         currentPlan = cachedStatus.planId;
-        print(
+        debugPrint(
             '📦 PaywallScreen: Found cached subscription - plan: $currentPlan');
       }
 
@@ -281,9 +281,9 @@ class _PaywallScreenState extends State<PaywallScreen>
                 true; // Set flag to scroll after layout
           });
 
-          print('📦 PaywallScreen: Pre-selected plan');
-          print('   - Current plan: $_currentSubscriptionPlan');
-          print('   - Selected plan: $_selectedPlan');
+          debugPrint('📦 PaywallScreen: Pre-selected plan');
+          debugPrint('   - Current plan: $_currentSubscriptionPlan');
+          debugPrint('   - Selected plan: $_selectedPlan');
         }
         return;
       }
@@ -299,13 +299,13 @@ class _PaywallScreenState extends State<PaywallScreen>
           _isInitializingPlan = false;
         });
 
-        print('📦 PaywallScreen: Initialized');
-        print('   - Current plan: $_currentSubscriptionPlan');
-        print('   - Selected plan: $_selectedPlan');
-        print('   - Cancel at period end: ${_currentSubscriptionStatus?.cancelAtPeriodEnd}');
+        debugPrint('📦 PaywallScreen: Initialized');
+        debugPrint('   - Current plan: $_currentSubscriptionPlan');
+        debugPrint('   - Selected plan: $_selectedPlan');
+        debugPrint('   - Cancel at period end: ${_currentSubscriptionStatus?.cancelAtPeriodEnd}');
       }
     } catch (e) {
-      print('Error initializing selected plan: $e');
+      debugPrint('Error initializing selected plan: $e');
       // Default to 'pro' on error
       if (mounted) {
         setState(() {
@@ -322,11 +322,11 @@ class _PaywallScreenState extends State<PaywallScreen>
     final cancelledPlan = pushinController.subscriptionCancelledPlan.value;
 
     if (cancelledPlan != null && mounted) {
-      print('😢 PaywallScreen: Subscription cancellation detected');
-      print('   - Cancelled plan: $cancelledPlan');
+      debugPrint('😢 PaywallScreen: Subscription cancellation detected');
+      debugPrint('   - Cancelled plan: $cancelledPlan');
 
       // Clear the state immediately
-      pushinController.subscriptionCancelledPlan.value = null;
+      pushinController.clearSubscriptionCancelled();
 
       // Navigate to cancellation screen
       Navigator.of(context).push(
@@ -351,7 +351,7 @@ class _PaywallScreenState extends State<PaywallScreen>
 
     // Only update if the plan tier actually changed from what we know
     if (_currentSubscriptionPlan != newPlanTier && mounted) {
-      print(
+      debugPrint(
           '🔄 Paywall: Plan tier changed from $_currentSubscriptionPlan to $newPlanTier');
 
       // If a plan was pre-selected (e.g., from dashboard) or manually selected by user,
@@ -379,7 +379,7 @@ class _PaywallScreenState extends State<PaywallScreen>
     if (!mounted) return;
 
     try {
-      print('🔄 Paywall: Refreshing subscription status from server...');
+      debugPrint('🔄 Paywall: Refreshing subscription status from server...');
 
       // Re-check subscription status from server (not just cache)
       final stripeService = StripeCheckoutService(
@@ -406,9 +406,9 @@ class _PaywallScreenState extends State<PaywallScreen>
 
       if (freshStatus != null && freshStatus.isActive) {
         updatedPlan = freshStatus.planId;
-        print('🔄 Paywall: Refreshed subscription status');
-        print('   - Plan: $updatedPlan');
-        print('   - cancelAtPeriodEnd: ${freshStatus.cancelAtPeriodEnd}');
+        debugPrint('🔄 Paywall: Refreshed subscription status');
+        debugPrint('   - Plan: $updatedPlan');
+        debugPrint('   - cancelAtPeriodEnd: ${freshStatus.cancelAtPeriodEnd}');
       }
 
       // Check if subscription was just cancelled
@@ -430,8 +430,8 @@ class _PaywallScreenState extends State<PaywallScreen>
 
         // Show cancellation screen if subscription was just cancelled
         if (wasNotCancelling && isNowCancelling) {
-          print('🚨 CANCELLATION DETECTED in _refreshSubscriptionStatus!');
-          print('   - Previous plan: ${previousStatus?.planId}');
+          debugPrint('🚨 CANCELLATION DETECTED in _refreshSubscriptionStatus!');
+          debugPrint('   - Previous plan: ${previousStatus?.planId}');
 
           // Small delay to ensure state update completes
           Future.delayed(const Duration(milliseconds: 500), () {
@@ -451,7 +451,7 @@ class _PaywallScreenState extends State<PaywallScreen>
         }
       }
     } catch (e) {
-      print('Error refreshing subscription status: $e');
+      debugPrint('Error refreshing subscription status: $e');
     }
   }
 
@@ -470,9 +470,9 @@ class _PaywallScreenState extends State<PaywallScreen>
   }
 
   void _scrollToSelectedPlan() {
-    print('🔄 _scrollToSelectedPlan called for plan: $_selectedPlan');
+    debugPrint('🔄 _scrollToSelectedPlan called for plan: $_selectedPlan');
     if (!mounted) {
-      print('❌ Scroll cancelled: not mounted');
+      debugPrint('❌ Scroll cancelled: not mounted');
       return;
     }
 
@@ -483,11 +483,11 @@ class _PaywallScreenState extends State<PaywallScreen>
       targetKey = _advancedPlanKey;
     }
 
-    print(
+    debugPrint(
         '🎯 Target key: $targetKey, currentContext: ${targetKey?.currentContext}');
 
     if (targetKey?.currentContext != null) {
-      print('✅ Found context, scheduling scroll');
+      debugPrint('✅ Found context, scheduling scroll');
 
       // Use Scrollable.ensureVisible which handles all the coordinate transformations
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -499,14 +499,14 @@ class _PaywallScreenState extends State<PaywallScreen>
               curve: Curves.easeOutCubic,
               alignment: 0.1, // Position 10% from top of viewport
             );
-            print('📜 Scrollable.ensureVisible called');
+            debugPrint('📜 Scrollable.ensureVisible called');
           } catch (e) {
-            print('❌ Error during scroll: $e');
+            debugPrint('❌ Error during scroll: $e');
           }
         }
       });
     } else {
-      print('❌ No context found for target key');
+      debugPrint('❌ No context found for target key');
     }
   }
 
@@ -539,7 +539,7 @@ class _PaywallScreenState extends State<PaywallScreen>
 
       if (currentUser != null) {
         final subscriptionStatus = await stripeService.checkSubscriptionStatus(
-          userId: currentUser.id,
+          userId: currentUser.id.toString(),
         );
 
         if (subscriptionStatus != null && subscriptionStatus.isActive) {
@@ -562,7 +562,7 @@ class _PaywallScreenState extends State<PaywallScreen>
       // Default for unauthenticated users or no active subscription
       return 'pro';
     } catch (e) {
-      print('Error checking subscription status for plan selection: $e');
+      debugPrint('Error checking subscription status for plan selection: $e');
       return 'pro'; // Default fallback on error
     }
   }
@@ -904,12 +904,11 @@ class _PaywallScreenState extends State<PaywallScreen>
                   const SizedBox(height: 12),
                   GestureDetector(
                     onTap: _skipTrial,
-                    child: FutureBuilder<String>(
-                      future: _getCurrentPlanDisplayName(),
-                      builder: (context, snapshot) {
+                    child: Builder(
+                      builder: (context) {
                         final authProvider = context.read<AuthStateProvider>();
                         final isAuthenticated = authProvider.isAuthenticated;
-                        final displayText = snapshot.data ?? 'Free Plan';
+                        final displayText = _getCurrentPlanDisplayName();
                         return Text(
                           isAuthenticated
                               ? 'Continue with $displayText'
@@ -981,47 +980,27 @@ class _PaywallScreenState extends State<PaywallScreen>
     }
   }
 
-  Future<String> _getCurrentPlanDisplayName() async {
-    try {
-      // Get current user
-      final authProvider = context.read<AuthStateProvider>();
-      final currentUser = authProvider.currentUser;
-
-      if (currentUser != null) {
-        // Check subscription status using Stripe service
-        final stripeService = StripeCheckoutService(
-          baseUrl: 'https://pushin-production.up.railway.app/api',
-          isTestMode: true,
-        );
-
-        final subscriptionStatus = await stripeService.checkSubscriptionStatus(
-          userId: currentUser.id,
-        );
-
-        if (subscriptionStatus != null && subscriptionStatus.isActive) {
-          switch (subscriptionStatus.planId) {
-            case 'pro':
-              return 'Pro Plan';
-            case 'advanced':
-              return 'Advanced Plan';
-            case 'free':
-            default:
-              return 'Free Plan';
-          }
-        }
+  String _getCurrentPlanDisplayName() {
+    // Use the cached _currentSubscriptionPlan state instead of making API calls
+    // This ensures Pro/Advanced users see their correct plan when pressing continue
+    if (_currentSubscriptionPlan != null) {
+      switch (_currentSubscriptionPlan) {
+        case 'pro':
+          return 'Pro Plan';
+        case 'advanced':
+          return 'Advanced Plan';
+        case 'free':
+        default:
+          return 'Free Plan';
       }
-
-      // Unauthenticated users are on Free Plan (must sign up to purchase)
-      return 'Free Plan';
-    } catch (e) {
-      print('Error checking subscription status: $e');
-      // Default to Free Plan on error
-      return 'Free Plan';
     }
+
+    // Default to Free Plan if no cached plan
+    return 'Free Plan';
   }
 
   void _handleSubscribe(BuildContext context) async {
-    print('🔴🔴🔴 _handleSubscribe CALLED! 🔴🔴🔴');
+    debugPrint('🔴🔴🔴 _handleSubscribe CALLED! 🔴🔴🔴');
 
     // Handle free plan selection - skip trial
     if (_selectedPlan == 'free') {
@@ -1031,14 +1010,14 @@ class _PaywallScreenState extends State<PaywallScreen>
 
     // Safety check: Prevent purchasing the current plan
     if (_selectedPlan == _currentSubscriptionPlan) {
-      print('⚠️ Attempted to purchase current plan - blocked');
+      debugPrint('⚠️ Attempted to purchase current plan - blocked');
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      print('🟡 Creating StripeCheckoutService...');
+      debugPrint('🟡 Creating StripeCheckoutService...');
       final stripeService = StripeCheckoutService(
         baseUrl: 'https://pushin-production.up.railway.app/api',
         isTestMode: true,
@@ -1051,7 +1030,7 @@ class _PaywallScreenState extends State<PaywallScreen>
 
       // Check if user is authenticated - if not, prompt to sign up first
       if (!authProvider.isAuthenticated) {
-        print(
+        debugPrint(
             '🚫 Unauthenticated user attempting purchase - navigating to sign up screen');
         // Mark that user was trying to purchase, so we can continue after auth
         setState(() => _pendingPurchaseAfterAuth = true);
@@ -1087,11 +1066,11 @@ class _PaywallScreenState extends State<PaywallScreen>
       final userId = currentUser.id.toString();
       final userEmail = currentUser.email ?? 'user@example.com';
 
-      print('🛒 PaywallScreen: Starting checkout');
-      print('   - userId: $userId');
-      print('   - userEmail: $userEmail');
-      print('   - planId: $_selectedPlan');
-      print('   - billingPeriod: $_billingPeriod');
+      debugPrint('🛒 PaywallScreen: Starting checkout');
+      debugPrint('   - userId: $userId');
+      debugPrint('   - userEmail: $userEmail');
+      debugPrint('   - planId: $_selectedPlan');
+      debugPrint('   - billingPeriod: $_billingPeriod');
 
       // Set the pending checkout userId so DeepLinkHandler can verify the payment
       final pushinController = context.read<PushinAppController>();
@@ -1103,7 +1082,7 @@ class _PaywallScreenState extends State<PaywallScreen>
       // Set the planId for fallback subscription status creation (CRITICAL for fallback)
       // MUST await this to ensure it's persisted before launching checkout
       await pushinController.setPendingCheckoutPlanId(backendPlanId);
-      print(
+      debugPrint(
           '💳 PaywallScreen: Set and persisted pending checkout plan: $backendPlanId');
 
       final success = await stripeService.launchCheckout(
@@ -1119,7 +1098,7 @@ class _PaywallScreenState extends State<PaywallScreen>
         // For real mode, plan tier will be updated via deep link handler
         // For test mode, simulate payment success immediately since no deep link is triggered
         if (stripeService.isTestMode) {
-          print(
+          debugPrint(
               'TEST MODE: Checkout simulated successfully - triggering payment success flow');
           // Simulate payment success by creating a subscription status and triggering the callback
           final simulatedStatus = SubscriptionStatus(
@@ -1138,7 +1117,7 @@ class _PaywallScreenState extends State<PaywallScreen>
           // Trigger the payment success callback to update UI state
           final pushinController = context.read<PushinAppController>();
           pushinController.paymentSuccessState.value = simulatedStatus;
-          print(
+          debugPrint(
               'TEST MODE: Payment success state updated, UI should reflect new plan tier');
         }
       } else {
@@ -1173,14 +1152,14 @@ class _PaywallScreenState extends State<PaywallScreen>
 
       if (currentUser == null ||
           _currentSubscriptionStatus?.subscriptionId == null) {
-        print('❌ Cannot reactivate: missing user or subscription');
+        debugPrint('❌ Cannot reactivate: missing user or subscription');
         _showErrorDialog('Unable to reactivate subscription.');
         return;
       }
 
-      print('🔄 ═══════════════════════════════════════════════');
-      print('🔄 REACTIVATING SUBSCRIPTION');
-      print('🔄 ═══════════════════════════════════════════════');
+      debugPrint('🔄 ═══════════════════════════════════════════════');
+      debugPrint('🔄 REACTIVATING SUBSCRIPTION');
+      debugPrint('🔄 ═══════════════════════════════════════════════');
 
       setState(() => _isLoading = true);
 
@@ -1195,7 +1174,7 @@ class _PaywallScreenState extends State<PaywallScreen>
       );
 
       if (success && mounted) {
-        print('✅ Subscription reactivated - refreshing status...');
+        debugPrint('✅ Subscription reactivated - refreshing status...');
 
         // Refresh subscription status
         await _refreshSubscriptionStatus();
@@ -1216,7 +1195,7 @@ class _PaywallScreenState extends State<PaywallScreen>
         _showErrorDialog('Unable to reactivate subscription. Please try again.');
       }
     } catch (e) {
-      print('❌ Error reactivating subscription: $e');
+      debugPrint('❌ Error reactivating subscription: $e');
       if (mounted) {
         _showErrorDialog('An error occurred: $e');
       }
@@ -1233,14 +1212,14 @@ class _PaywallScreenState extends State<PaywallScreen>
       final currentUser = authProvider.currentUser;
 
       if (currentUser == null) {
-        print('❌ Cannot open portal: user not authenticated');
+        debugPrint('❌ Cannot open portal: user not authenticated');
         _showErrorDialog('Please sign in to manage your subscription.');
         return;
       }
 
-      print('🏦 ═══════════════════════════════════════════════');
-      print('🏦 OPENING STRIPE CUSTOMER PORTAL');
-      print('🏦 ═══════════════════════════════════════════════');
+      debugPrint('🏦 ═══════════════════════════════════════════════');
+      debugPrint('🏦 OPENING STRIPE CUSTOMER PORTAL');
+      debugPrint('🏦 ═══════════════════════════════════════════════');
 
       setState(() => _isLoading = true);
 
@@ -1251,39 +1230,39 @@ class _PaywallScreenState extends State<PaywallScreen>
 
       // CRITICAL: Store current subscription status before opening portal
       // This allows us to detect if the user cancels their subscription
-      print('🏦 Fetching current subscription status...');
+      debugPrint('🏦 Fetching current subscription status...');
       final currentSubscription = await stripeService.checkSubscriptionStatus(
         userId: currentUser.id.toString(),
       );
 
-      print('🏦 Current subscription before portal:');
-      print('   - Plan: ${currentSubscription?.planId}');
-      print('   - Active: ${currentSubscription?.isActive}');
-      print('   - Customer ID: ${currentSubscription?.customerId}');
+      debugPrint('🏦 Current subscription before portal:');
+      debugPrint('   - Plan: ${currentSubscription?.planId}');
+      debugPrint('   - Active: ${currentSubscription?.isActive}');
+      debugPrint('   - Customer ID: ${currentSubscription?.customerId}');
 
       final pushinController = context.read<PushinAppController>();
       await pushinController.setSubscriptionBeforePortal(currentSubscription);
 
-      print('🏦 Opening portal...');
+      debugPrint('🏦 Opening portal...');
       final success = await stripeService.openCustomerPortal(
         userId: currentUser.id.toString(),
       );
 
-      print('🏦 Portal open result: $success');
+      debugPrint('🏦 Portal open result: $success');
 
       if (!success && mounted) {
         _showErrorDialog(
             'Unable to open subscription management. Please try again.');
       } else {
-        print('🏦 ✅ Portal opened successfully');
-        print('🏦 ⚠️ IMPORTANT: After cancelling in Stripe, tap "Return to app" button');
-        print('🏦 ⚠️ Do NOT manually switch back using app switcher!');
+        debugPrint('🏦 ✅ Portal opened successfully');
+        debugPrint('🏦 ⚠️ IMPORTANT: After cancelling in Stripe, tap "Return to app" button');
+        debugPrint('🏦 ⚠️ Do NOT manually switch back using app switcher!');
 
         // Check status when user returns (fallback if deep link doesn't fire)
         _scheduleStatusCheckAfterPortal();
       }
     } catch (e) {
-      print('❌ Error opening customer portal: $e');
+      debugPrint('❌ Error opening customer portal: $e');
       if (mounted) {
         _showErrorDialog('An error occurred: $e');
       }
@@ -1306,29 +1285,29 @@ class _PaywallScreenState extends State<PaywallScreen>
 
       if (!mounted || cancellationScreenShown) return;
 
-      print('🔄 Scheduled portal check (${delaySeconds}s delay): Refreshing subscription status...');
-      print('   - Before: cancelAtPeriodEnd = ${beforePortalStatus?.cancelAtPeriodEnd}');
+      debugPrint('🔄 Scheduled portal check (${delaySeconds}s delay): Refreshing subscription status...');
+      debugPrint('   - Before: cancelAtPeriodEnd = ${beforePortalStatus?.cancelAtPeriodEnd}');
 
       await _refreshSubscriptionStatus();
 
       // Check if cancellation happened
       final afterPortalStatus = _currentSubscriptionStatus;
-      print('   - After: cancelAtPeriodEnd = ${afterPortalStatus?.cancelAtPeriodEnd}');
+      debugPrint('   - After: cancelAtPeriodEnd = ${afterPortalStatus?.cancelAtPeriodEnd}');
 
       final wasNotCancelling = beforePortalStatus?.cancelAtPeriodEnd != true &&
                                 beforePortalStatus?.isActive == true;
       final isNowCancelling = afterPortalStatus?.cancelAtPeriodEnd == true;
 
-      print('🔍 Cancellation check (${delaySeconds}s):');
-      print('   - wasNotCancelling: $wasNotCancelling');
-      print('   - isNowCancelling: $isNowCancelling');
-      print('   - mounted: $mounted');
-      print('   - cancellationScreenShown: $cancellationScreenShown');
+      debugPrint('🔍 Cancellation check (${delaySeconds}s):');
+      debugPrint('   - wasNotCancelling: $wasNotCancelling');
+      debugPrint('   - isNowCancelling: $isNowCancelling');
+      debugPrint('   - mounted: $mounted');
+      debugPrint('   - cancellationScreenShown: $cancellationScreenShown');
 
       if (wasNotCancelling && isNowCancelling && mounted && !cancellationScreenShown) {
         cancellationScreenShown = true;
-        print('🚨 FALLBACK: Cancellation detected via status check (${delaySeconds}s)!');
-        print('   - Previous plan: ${beforePortalStatus?.planId}');
+        debugPrint('🚨 FALLBACK: Cancellation detected via status check (${delaySeconds}s)!');
+        debugPrint('   - Previous plan: ${beforePortalStatus?.planId}');
 
         // Navigate to cancellation screen
         Navigator.of(context).push(

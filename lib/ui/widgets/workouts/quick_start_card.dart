@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../domain/models/workout_mode.dart';
 import '../../screens/workouts/screen_time_selection_screen.dart';
 import '../../animations/liquid_animation_utils.dart';
+import '../../../services/rating_service.dart';
 
 /// Enhanced QuickStartCard with smooth slide animations
 /// Uses the same animation pattern as PaywallScreen price transitions
@@ -177,11 +178,12 @@ class _QuickStartCardState extends State<QuickStartCard>
     super.dispose();
   }
 
-  void _navigateToScreenTimeSelection(BuildContext context) {
+  Future<void> _navigateToScreenTimeSelection(BuildContext context) async {
     ModeHaptics.selectionFeedback(widget.selectedMode);
-    Navigator.push(
+    await Navigator.push(
       context,
       PageRouteBuilder(
+        settings: const RouteSettings(name: 'QuickStart'),
         pageBuilder: (context, animation, secondaryAnimation) =>
             ScreenTimeSelectionScreen(selectedMode: widget.selectedMode),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
@@ -200,6 +202,14 @@ class _QuickStartCardState extends State<QuickStartCard>
         transitionDuration: const Duration(milliseconds: 350),
       ),
     );
+
+    // Trigger rating check after returning from workout flow
+    if (context.mounted) {
+      final RatingService s = await RatingService.create();
+      if (context.mounted) {
+        await s.checkWorkoutRating(context);
+      }
+    }
   }
 
   /// Determines slide direction based on mode order

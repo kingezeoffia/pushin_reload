@@ -182,30 +182,29 @@ class HowItWorksEmergencyUnlockScreen extends StatelessWidget {
                 child: _ContinueButton(
                   onTap: () async {
                     try {
+                      final authProvider = context.read<AuthStateProvider>();
                       debugPrint(
-                          '🎯 Continue to Paywall button pressed - manual navigation to paywall');
+                          '🎯 EmergencyUnlockScreen: Continue tapped - isGuestMode=${authProvider.isGuestMode}');
 
-                      // Manual navigation to paywall screen
-                      if (context.mounted) {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => PaywallScreen(
-                              onboardingData: {
-                                'fitnessLevel': fitnessLevel,
-                                'goals': goals,
-                                'otherGoal': otherGoal,
-                                'workoutHistory': workoutHistory,
-                                'blockedApps': blockedApps,
-                                'selectedWorkout': selectedWorkout,
-                                'unlockDuration': unlockDuration,
-                              },
-                            ),
-                          ),
-                        );
+                      if (authProvider.isGuestMode) {
+                        // For guests, complete the setup and go to main app
+                        debugPrint('👤 Guest flow: Completing guest setup');
+                        authProvider.setGuestCompletedSetup();
+                        
+                        // Clear the navigation stack to return to the root where the AppRouter 
+                        // will now show the MainTabNavigation
+                        if (context.mounted) {
+                          Navigator.of(context).popUntil((route) => route.isFirst);
+                        }
+                      } else {
+                        // For authenticated users, advance to the next step (Paywall)
+                        debugPrint('👤 Authenticated flow: Advancing to paywall');
+                        authProvider.advanceOnboardingStep();
                       }
+                      
+                      // Note: Navigation is handled by AppRouter based on state change
                     } catch (e) {
-                      debugPrint('❌ Error navigating to paywall: $e');
-                      // Show error to user
+                      debugPrint('❌ Error advancing setup: $e');
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(

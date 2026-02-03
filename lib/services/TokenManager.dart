@@ -99,9 +99,16 @@ class TokenManager {
       if (refreshed) {
         accessToken = await getAccessToken();
       } else {
-        // Refresh failed, clear tokens
-        await clearTokens();
-        return null;
+        // Refresh failed (e.g. network error, or server down)
+        // DO NOT clear tokens here. Just return null.
+        // This allows the app to fallback to the existing (expired) token
+        // for "optimistic offline" scenarios if the caller chooses,
+        // or just handle the "not authenticated" state without wiping data.
+        
+        // If the server explicitly rejected the token (401/403), 
+        // refreshToken() itself handles the clearing logic (if we wanted it to).
+        // But for network errors, we must preserve the token.
+        return null; 
       }
     }
 
@@ -149,5 +156,33 @@ class TokenManager {
   /// Clear guest mode flag
   Future<void> clearGuestMode() async {
     await _storage.delete(key: _guestModeKey);
+  }
+
+  /// Decode payload from token without validation
+  /// Useful for extracting user info quickly
+  Map<String, dynamic>? getPayloadFromToken(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+
+      final payload = json
+          .decode(utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))));
+
+      return payload as Map<String, dynamic>;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Get current access token payload
+  Future<Map<String, dynamic>?> getCurrentTokenPayload() async {
+    // Try to get a valid token first (handles refresh if needed)
+    String? accessToken = await getValidAccessToken();
+    
+    // Fallback to raw token if validation fails (better than nothing for offline start)
+    accessToken ??= await _storage.read(key: _accessTokenKey);
+
+    if (accessToken == null) return null;
+    return getPayloadFromToken(accessToken);
   }
 }

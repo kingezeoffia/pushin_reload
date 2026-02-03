@@ -5,7 +5,7 @@ import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/pill_navigation_bar.dart';
 import '../../../state/pushin_app_controller.dart';
 import '../../../state/auth_state_provider.dart';
-import 'HowItWorksExerciseSelectionScreen.dart';
+import 'HowItWorksChooseWorkoutScreen.dart';
 
 /// Custom route that disables swipe back gesture on iOS
 class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
@@ -72,40 +72,46 @@ class _HowItWorksBlockAppsScreenState extends State<HowItWorksBlockAppsScreen> {
         throw Exception('Focus mode service not available');
       }
 
-      // Request permission and immediately show picker
-      await focusModeService.requestScreenTimePermission();
-
       // Present native FamilyActivityPicker
-      final selectionResult = await focusModeService.presentAppPicker();
+        try {
+          await focusModeService.requestScreenTimePermission().timeout(const Duration(seconds: 5));
+          
+          debugPrint('🍎 HowItWorksBlockAppsScreen: Presenting app picker (with 60s timeout)...');
+          final selectionResult = await focusModeService.presentAppPicker().timeout(
+            const Duration(seconds: 60),
+            onTimeout: () {
+              debugPrint('⏳ HowItWorksBlockAppsScreen: App picker timed out');
+              return null; // Return null so we can proceed
+            },
+          );
+          
+          // Save the selected apps to the controller
+          final appTokens = selectionResult?.appTokens ?? [];
+          debugPrint('✅ HowItWorksBlockAppsScreen: Selection result: ${appTokens.length} apps');
+          await appController.updateBlockedApps(appTokens);
+          
+          // Also update auth provider for navigation state
+          final authProvider = context.read<AuthStateProvider>();
+          authProvider.setBlockedApps(appTokens);
+        } catch (e) {
+          debugPrint('⚠️ HowItWorksBlockAppsScreen: Screen Time setup failed (non-fatal): $e');
+          // Proceed even if picker fails (e.g. on Simulator or due to XPC crash)
+        }
 
-      // Always advance onboarding regardless of app selection
-      final authProvider = context.read<AuthStateProvider>();
-      authProvider.advanceOnboardingStep();
-
-      // Save the selected apps to the controller (empty list if none selected)
-      final appTokens = selectionResult?.appTokens ?? [];
-      await appController.updateBlockedApps(appTokens);
-
-      // Navigate to next screen
+      // Always advance onboarding regardless of app selection success
       if (mounted) {
-        Navigator.push(
-          context,
-          _NoSwipeBackRoute(
-            builder: (context) => HowItWorksExerciseSelectionScreen(
-              fitnessLevel: widget.fitnessLevel,
-              goals: widget.goals,
-              otherGoal: widget.otherGoal,
-              workoutHistory: widget.workoutHistory,
-              blockedApps: [], // No longer needed - tokens are persisted in service
-            ),
-          ),
-        );
+        final authProvider = context.read<AuthStateProvider>();
+        debugPrint('🚀 HowItWorksBlockAppsScreen: Advancing onboarding step...');
+        authProvider.advanceOnboardingStep();
+        debugPrint('✅ HowItWorksBlockAppsScreen: Onboarding step advanced to: ${authProvider.onboardingStep}');
       }
     } catch (e) {
+      // Only critical errors that prevent proceeding block here
+      // But we try to proceed as much as possible above
       setState(() {
         _errorMessage = 'Screen Time access is required. Please try again.';
       });
-      debugPrint('❌ Screen Time setup failed: $e');
+      debugPrint('❌ HowItWorksBlockAppsScreen: Screen Time setup critical error: $e');
     } finally {
       if (mounted) {
         setState(() {

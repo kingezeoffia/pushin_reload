@@ -21,6 +21,11 @@ class AuthenticationService {
   AuthenticationService._internal() {
     // For physical devices, use Mac's local IP address
     // For simulators/emulators: iOS uses 127.0.0.1, Android uses 10.0.2.2
+    // Use production URL for all platforms as we are moving to production
+    // You can uncomment the local logic below for development if needed
+    baseUrl = 'https://pushin-production.up.railway.app/api';
+    
+    /*
     if (Platform.isIOS) {
       baseUrl =
           'http://192.168.1.107:3000/api'; // Mac's local IP for physical iPhone
@@ -29,6 +34,7 @@ class AuthenticationService {
     } else {
       baseUrl = 'http://localhost:3000/api';
     }
+    */
     _httpClient = _createHttpClient();
   }
 

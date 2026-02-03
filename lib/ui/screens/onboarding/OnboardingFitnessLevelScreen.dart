@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../state/auth_state_provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/SelectionButton.dart';
 import '../../widgets/pill_navigation_bar.dart';
-import 'OnboardingGoalsScreen.dart';
 
 /// Custom route that disables swipe back gesture on iOS
 class _NoSwipeBackRoute<T> extends MaterialPageRoute<T> {
@@ -194,14 +192,10 @@ class _OnboardingFitnessLevelScreenState
                 enabled: _selectedLevel != null,
                 onTap: () {
                   if (_selectedLevel != null) {
-                    Navigator.push(
-                      context,
-                      _NoSwipeBackRoute(
-                        builder: (context) => OnboardingGoalsScreen(
-                          fitnessLevel: _selectedLevel!,
-                        ),
-                      ),
-                    );
+                    final authProvider = context.read<AuthStateProvider>();
+                    authProvider.setFitnessLevel(_selectedLevel!);
+                    debugPrint('🔄 OnboardingFitnessLevelScreen: Advancing step...');
+                    authProvider.advanceOnboardingStep();
                   }
                 },
               ),

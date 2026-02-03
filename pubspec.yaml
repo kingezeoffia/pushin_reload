@@ -13,6 +13,7 @@ flutter:
   # Assets
   assets:
     - assets/images/
+    - assets/images/reviews/
     - assets/icons/
     - assets/icons/AppIcons/
     - assets/icons/AppIcons/Color SM Icon Pack/

@@ -13,6 +13,7 @@ import 'enhanced_settings_screen.dart';
 import 'paywall/PaywallScreen.dart';
 import 'workout/RepCounterScreen.dart';
 import 'workout/WorkoutSelectionScreen.dart';
+import '../../services/rating_service.dart';
 
 /// Home screen showing current state and actions.
 ///
@@ -51,6 +52,21 @@ class _HomeScreenState extends State<HomeScreen>
         // Navigate to workout selection screen
         _navigateWithSlideAnimation(context, const WorkoutSelectionScreen());
       };
+    });
+
+    // Set up rating check callback to be called after workout completion
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final controller = context.read<PushinAppController>();
+      controller.onCheckWorkoutRating = () {
+        if (context.mounted) {
+          RatingService.create().then((s) => s.checkWorkoutRating(context));
+        }
+      };
+    });
+
+    // Check for "Second App Launch" rating trigger
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      RatingService.create().then((s) => s.checkAppLaunchRating(context));
     });
   }
 
@@ -158,9 +174,24 @@ class _HomeScreenState extends State<HomeScreen>
                               isTestMode: true,
                             );
 
+                            final currentId = authProvider.currentUser?.id;
+                            if (currentId == null) {
+                              // Show paywall for guest users trying to use emergency unlock
+                              HapticFeedback.mediumImpact();
+                              if (context.mounted) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const PaywallScreen(),
+                                  ),
+                                );
+                              }
+                              return;
+                            }
+
                             final subscriptionStatus =
                                 await stripeService.checkSubscriptionStatus(
-                              userId: authProvider.currentUser?.id,
+                              userId: currentId,
                             );
 
                             final isPaidUser =
@@ -293,10 +324,13 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  void _navigateWithSlideAnimation(BuildContext context, Widget screen) {
-    Navigator.push(
+  Future<void> _navigateWithSlideAnimation(
+      BuildContext context, Widget screen,
+      [RouteSettings? settings]) async {
+    await Navigator.push(
       context,
       PageRouteBuilder(
+        settings: settings,
         pageBuilder: (context, animation, secondaryAnimation) => screen,
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(0.0, 1.0);
@@ -409,14 +443,15 @@ class _LockedStateViewState extends State<_LockedStateView> {
                 title: 'Push-Ups',
                 subtitle: widget.controller
                     .getWorkoutRewardDescription('push-ups', 20),
-                onTap: () {
-                  _navigateWithSlideAnimation(
+                onTap: () async {
+                  await _navigateWithSlideAnimation(
                       context,
                       const RepCounterScreen(
                         workoutType: 'push-ups',
                         targetReps: 20,
                         desiredScreenTimeMinutes: 10,
-                      ));
+                      ),
+                      const RouteSettings(name: 'QuickStart'));
                 },
               ),
             ),
@@ -427,9 +462,11 @@ class _LockedStateViewState extends State<_LockedStateView> {
             Padding(
               padding: const EdgeInsets.fromLTRB(32, 16, 32, 16),
               child: PressAnimationButton(
-                onTap: () {
-                  _navigateWithSlideAnimation(
-                      context, const WorkoutSelectionScreen());
+                onTap: () async {
+                  await _navigateWithSlideAnimation(
+                      context,
+                      const WorkoutSelectionScreen(),
+                      const RouteSettings(name: 'WorkoutSelection'));
                 },
                 child: Container(
                   width: double.infinity,
@@ -479,10 +516,13 @@ class _LockedStateViewState extends State<_LockedStateView> {
     );
   }
 
-  void _navigateWithSlideAnimation(BuildContext context, Widget screen) {
-    Navigator.push(
+  Future<void> _navigateWithSlideAnimation(
+      BuildContext context, Widget screen,
+      [RouteSettings? settings]) async {
+    await Navigator.push(
       context,
       PageRouteBuilder(
+        settings: settings,
         pageBuilder: (context, animation, secondaryAnimation) => screen,
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(0.0, 1.0);
@@ -998,10 +1038,13 @@ class _UnlockedStateViewState extends State<_UnlockedStateView> {
     );
   }
 
-  void _navigateWithSlideAnimation(BuildContext context, Widget screen) {
-    Navigator.push(
+  Future<void> _navigateWithSlideAnimation(
+      BuildContext context, Widget screen,
+      [RouteSettings? settings]) async {
+    await Navigator.push(
       context,
       PageRouteBuilder(
+        settings: settings,
         pageBuilder: (context, animation, secondaryAnimation) => screen,
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(0.0, 1.0);
@@ -1350,11 +1393,16 @@ class _PaymentSuccessOverlay extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
                 child: PressAnimationButton(
-                  onTap: () {
+                  onTap: () async {
                     context
                         .read<PushinAppController>()
                         .paymentSuccessState
                         .value = null;
+                        
+                    // Check for rating trigger (new subscription)
+                    if (context.mounted) {
+                      RatingService.create().then((s) => s.checkSubscriptionRating(context));
+                    }
                   },
                   child: Container(
                     width: double.infinity,

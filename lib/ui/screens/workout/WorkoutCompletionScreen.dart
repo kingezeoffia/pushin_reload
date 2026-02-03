@@ -1,8 +1,11 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
+import '../../../services/rating_service.dart';
+import '../../../state/pushin_app_controller.dart';
 
 /// Workout Completion Screen - Celebrate success with stunning visuals
 ///
@@ -333,8 +336,12 @@ class _WorkoutCompletionScreenState extends State<WorkoutCompletionScreen>
                             child: PressAnimationButton(
                               onTap: () {
                                 HapticFeedback.mediumImpact();
-                                Navigator.popUntil(
-                                    context, (route) => route.isFirst);
+                                
+                                if (context.mounted) {
+                                  // Unwind stack to WorkoutSelection (if available) or Home (for QuickStart)
+                                  Navigator.of(context).popUntil((route) => 
+                                      route.settings.name == 'WorkoutSelection' || route.isFirst);
+                                }
                               },
                               child: Container(
                                 width: double.infinity,

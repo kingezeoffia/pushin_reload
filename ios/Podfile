@@ -45,4 +45,15 @@ post_install do |installer|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
     end
   end
+
+  # Fix for "Command PhaseScriptExecution failed with a nonzero exit code"
+  # This removes the -f flag from readlink in the generated framework scripts
+  # because readlink on macOS (BSD) does not support -f.
+  puts "Fixing readlink -f issue in Pods scripts..."
+  Dir.glob(File.join("Pods", "Target Support Files", "Pods-*", "Pods-*-frameworks.sh")).each do |f|
+    puts "Patching #{f}"
+    text = File.read(f)
+    new_contents = text.gsub('source="$(readlink -f "${source}")"', 'source="$(readlink "${source}")"')
+    File.open(f, "w") { |file| file.puts new_contents }
+  end
 end

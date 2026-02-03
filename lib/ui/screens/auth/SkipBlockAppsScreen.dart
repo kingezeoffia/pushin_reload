@@ -31,20 +31,44 @@ class _SkipBlockAppsScreenState extends State<SkipBlockAppsScreen> {
 
     try {
       final appController = context.read<PushinAppController>();
+      try {
+        // Use the controller's method which properly saves tokens
+        debugPrint('🍎 SkipBlockAppsScreen: Presenting iOS app picker (with 60s timeout)...');
+        final success = await appController.presentIOSAppPicker().timeout(
+          const Duration(seconds: 60),
+          onTimeout: () {
+            debugPrint('⏳ SkipBlockAppsScreen: App picker timed out');
+            return false;
+          },
+        );
+        
+        debugPrint('✅ SkipBlockAppsScreen: App selection result (success: $success)');
+      } catch (e) {
+        debugPrint('⚠️ SkipBlockAppsScreen: Screen Time setup failed (non-fatal): $e');
+        // Proceed anyway
+      }
 
-      // Use the controller's method which properly saves tokens
-      debugPrint('🍎 Presenting iOS app picker and saving tokens...');
-      final success = await appController.presentIOSAppPicker();
-
-      debugPrint('✅ Proceeding with app selection (success: $success)');
       // Always advance guest setup regardless of app selection
-      final authProvider = context.read<AuthStateProvider>();
-      authProvider.advanceGuestSetupStep();
+      if (mounted) {
+        final authProvider = context.read<AuthStateProvider>();
+        
+        // Sync blocked apps to AuthStateProvider for router access
+        debugPrint('🔄 SkipBlockAppsScreen: Syncing blocked apps to AuthProvider...');
+        final currentApps = appController.iosAppTokens;
+        authProvider.setBlockedApps(currentApps);
+        
+        debugPrint('🔄 SkipBlockAppsScreen: Advancing guest setup step...');
+        debugPrint('   - Current step: ${authProvider.guestSetupStep}');
+        authProvider.advanceGuestSetupStep();
+        debugPrint('✅ SkipBlockAppsScreen: Advanced called. New step: ${authProvider.guestSetupStep}');
+      }
     } catch (e) {
+      // Only critical errors block here
       setState(() {
-        _errorMessage = 'Screen Time access is required. Please try again.';
+         // Keep generic error if critical
+         _errorMessage = 'Screen Time access is required. Please try again.';
       });
-      debugPrint('❌ Screen Time setup failed: $e');
+      debugPrint('❌ Critical error in SkipBlockApps: $e');
     } finally {
       if (mounted) {
         setState(() {

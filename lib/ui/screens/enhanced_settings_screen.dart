@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:path_provider/path_provider.dart';
@@ -24,6 +25,8 @@ import 'settings/EditNameScreen.dart';
 import 'settings/EditEmailScreen.dart';
 import 'settings/ChangePasswordScreen.dart';
 import 'auth/FirstWelcomeScreen.dart';
+import 'rating/RatingScreen.dart';
+import 'subscription/SubscriptionCancelledScreen.dart';
 
 /// Premium Logout Button - A sleek pill-shaped logout button with interactive feedback
 class PremiumLogoutButton extends StatefulWidget {
@@ -120,10 +123,30 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
   late AnimationController _shimmerController;
   late Animation<double> _shimmerAnimation;
 
+  // Rating status
+  bool _hasRated = false;
+
+  // Listener for subscription cancellation
+  late VoidCallback _subscriptionCancelledListener;
+
   @override
   void initState() {
     super.initState();
     _initializeAnimations();
+    _loadRatingStatus();
+
+    // Listen for subscription cancellation to show cancellation screen
+    final pushinController = Provider.of<PushinAppController>(context, listen: false);
+    _subscriptionCancelledListener = _onSubscriptionCancelled;
+    pushinController.subscriptionCancelledPlan
+        .addListener(_subscriptionCancelledListener);
+  }
+
+  Future<void> _loadRatingStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _hasRated = prefs.getBool('has_rated_app') ?? false;
+    });
   }
 
   void _initializeAnimations() {
@@ -163,9 +186,63 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
 
   @override
   void dispose() {
+    // Remove listener
+    final pushinController = Provider.of<PushinAppController>(context, listen: false);
+    pushinController.subscriptionCancelledPlan.removeListener(_subscriptionCancelledListener);
+
     _headerController.dispose();
     _shimmerController.dispose();
     super.dispose();
+  }
+
+  /// Called when subscription is cancelled - navigate to cancellation screen
+  void _onSubscriptionCancelled() {
+    final pushinController = Provider.of<PushinAppController>(context, listen: false);
+    final cancelledPlan = pushinController.subscriptionCancelledPlan.value;
+
+    if (cancelledPlan != null && mounted) {
+      debugPrint('😢 Settings: Subscription cancellation detected');
+      debugPrint('   - Cancelled plan: \$cancelledPlan');
+
+      // Clear the state immediately
+      pushinController.clearSubscriptionCancelled();
+
+      // Navigate to cancellation screen
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => SubscriptionCancelledScreen(
+            previousPlan: cancelledPlan,
+            onContinue: () {
+              // Refresh subscription status when user continues
+              pushinController.refreshPlanTier();
+            },
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _launchEmail() async {
+    final Uri emailLaunchUri = Uri(
+      scheme: 'mailto',
+      path: 'support@pushin.app',
+      query: _encodeQueryParameters(<String, String>{
+        'subject': 'Pushin Support Request',
+      }),
+    );
+
+    try {
+      await launchUrl(emailLaunchUri);
+    } catch (e) {
+      debugPrint('Error launching email: \$e');
+    }
+  }
+
+  String? _encodeQueryParameters(Map<String, String> params) {
+    return params.entries
+        .map((MapEntry<String, String> e) =>
+            '\${Uri.encodeComponent(e.key)}=\${Uri.encodeComponent(e.value)}')
+        .join('&');
   }
 
   @override
@@ -174,9 +251,9 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
     final authProvider = Provider.of<AuthStateProvider>(context);
 
     debugPrint('🎯 Settings Screen Build:');
-    debugPrint('   - User authenticated: ${authProvider.isAuthenticated}');
-    debugPrint('   - User email: ${authProvider.currentUser?.email ?? "none"}');
-    debugPrint('   - Plan tier: ${pushinController.planTier}');
+    debugPrint('   - User authenticated: \${authProvider.isAuthenticated}');
+    debugPrint('   - User email: \${authProvider.currentUser?.email ?? "none"}');
+    debugPrint('   - Plan tier: \${pushinController.planTier}');
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -251,7 +328,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                     delay: 100,
                     children: [
                       EnhancedSettingsTile(
-                        icon: Icons.person_outline,
+                        icon: Icons.person,
                         title: 'Edit Name',
                         subtitle: 'Change your display name',
                         onTap: () {
@@ -264,7 +341,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                         },
                       ),
                       EnhancedSettingsTile(
-                        icon: Icons.email_outlined,
+                        icon: Icons.email,
                         title: 'Edit E-Mail',
                         subtitle: 'Change your email address',
                         onTap: () {
@@ -277,7 +354,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                         },
                       ),
                       EnhancedSettingsTile(
-                        icon: Icons.lock_outline,
+                        icon: Icons.lock,
                         title: 'Change Password',
                         subtitle: 'Update your password',
                         onTap: () {
@@ -315,10 +392,53 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                       EnhancedSettingsTile(
                         icon: Icons.emergency,
                         title: 'Emergency Unlock',
-                        subtitle: 'Set timer for urgent access',
+                        subtitle: pushinController.planTier == 'pro' || pushinController.planTier == 'advanced'
+                            ? 'Set timer for urgent access'
+                            : 'Pro Feature',
                         onTap: () => _showEmergencyUnlockDialog(),
                         showDivider: false,
                         iconColor: const Color(0xFFEF4444), // dangerRed color
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+              // Community & Support Section
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: EnhancedSettingsDesignTokens.spacingLarge),
+                  child: EnhancedSettingsSection(
+                    title: 'Community & Support',
+                    icon: Icons.favorite_rounded,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF60A5FA), Color(0xFF3B82F6)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    delay: 400,
+                    children: [
+                      // App Rating Tile (Conditional)
+                      if (!_hasRated)
+                        EnhancedSettingsTile(
+                          icon: Icons.star_rounded,
+                          title: 'Help us Grow',
+                          subtitle: 'Support us with a rating!',
+                          onTap: () => _showRatingScreen(),
+                          iconColor: const Color(0xFF60A5FA), // light blue color
+                        ),
+
+                      // Support Tile
+                      EnhancedSettingsTile(
+                        icon: Icons.mail_rounded,
+                        title: 'Contact Support',
+                        subtitle: 'Questions? Found a bug? Let us know.',
+                        onTap: () => _launchEmail(),
+                        showDivider: false,
+                        iconColor: const Color(0xFF60A5FA),
                       ),
                     ],
                   ),
@@ -336,7 +456,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                     title: 'Privacy & Security',
                     icon: Icons.security,
                     gradient: EnhancedSettingsDesignTokens.successGradient,
-                    delay: 400,
+                    delay: 450,
                     children: [
                       EnhancedSettingsTile(
                         icon: Icons.privacy_tip,
@@ -357,6 +477,8 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
               ),
 
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+
 
               // Manage Subscription Section
               SliverToBoxAdapter(
@@ -463,8 +585,6 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
               SliverToBoxAdapter(
                 child: _buildLogoutButton(),
               ),
-
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
               const SliverToBoxAdapter(
                   child: SizedBox(
@@ -661,7 +781,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
         profileImagePath != null && File(profileImagePath).existsSync();
 
     debugPrint(
-        '🖼️ Building user banner - profileImagePath: $profileImagePath, hasProfileImage: $hasProfileImage');
+        '🖼️ Building user banner - profileImagePath: \$profileImagePath, hasProfileImage: \$hasProfileImage');
 
     return Padding(
       padding: const EdgeInsets.symmetric(
@@ -902,11 +1022,12 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
     final isAuthenticated = authProvider.isAuthenticated;
 
     debugPrint('🧭 BUILD LOGOUT BUTTON:');
-    debugPrint('   - isAuthenticated: $isAuthenticated');
-    debugPrint('   - isGuestMode: ${authProvider.isGuestMode}');
-    debugPrint('   - guestCompletedSetup: ${authProvider.guestCompletedSetup}');
-    debugPrint(
-        '   - currentUser: ${authProvider.currentUser?.email ?? 'null'}');
+    debugPrint('   - isAuthenticated: \$isAuthenticated');
+    debugPrint('   - isGuestMode: \${authProvider.isGuestMode}');
+    debugPrint('   - guestCompletedSetup: \${authProvider.guestCompletedSetup}');
+    final userEmail = authProvider.currentUser?.email ?? "null";
+    // START: Simplified debug print
+    debugPrint('   - currentUser: $userEmail');
 
     return Padding(
       padding: const EdgeInsets.symmetric(
@@ -928,10 +1049,10 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
         final authProvider =
             Provider.of<AuthStateProvider>(context, listen: false);
 
-        debugPrint('   - isAuthenticated: ${authProvider.isAuthenticated}');
-        debugPrint('   - isGuestMode: ${authProvider.isGuestMode}');
+        debugPrint('   - isAuthenticated: \${authProvider.isAuthenticated}');
+        debugPrint('   - isGuestMode: \${authProvider.isGuestMode}');
         debugPrint(
-            '   - isOnboardingCompleted: ${authProvider.isOnboardingCompleted}');
+            '   - isOnboardingCompleted: \${authProvider.isOnboardingCompleted}');
 
         // For all unauthenticated users, navigate to first welcome screen with sign up and sign in buttons
         debugPrint(
@@ -986,12 +1107,43 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
 
   void _showEmergencyUnlockDialog() {
     HapticFeedback.lightImpact();
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const EmergencyUnlockSettingsScreen(),
-      ),
-    );
+    
+    final controller = Provider.of<PushinAppController>(context, listen: false);
+    final planTier = controller.planTier;
+    
+    // Redirect free/guest users to paywall
+    if (planTier != 'pro' && planTier != 'advanced') {
+      Navigator.of(context).push(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              const PaywallScreen(preSelectedPlan: 'pro'),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            // Smooth slide transition from bottom
+            const begin = Offset(0.0, 1.0);
+            const end = Offset.zero;
+            const curve = Curves.easeOutCubic;
+
+            var tween = Tween(begin: begin, end: end)
+                .chain(CurveTween(curve: curve));
+            var offsetAnimation = animation.drive(tween);
+
+            return SlideTransition(
+              position: offsetAnimation,
+              child: child,
+            );
+          },
+          transitionDuration: const Duration(milliseconds: 400),
+        ),
+      );
+    } else {
+      // Pro/Advanced users can access emergency unlock settings
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const EmergencyUnlockSettingsScreen(),
+        ),
+      );
+    }
   }
 
   Future<void> _launchURL(String url) async {
@@ -1002,7 +1154,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open $url')),
+          SnackBar(content: Text('Could not open \$url')),
         );
       }
     }
@@ -1113,7 +1265,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
         await _cropAndSaveImage(image.path);
       }
     } catch (e) {
-      debugPrint('Failed to take photo: $e');
+      debugPrint('Failed to take photo: \$e');
     }
   }
 
@@ -1128,7 +1280,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
         await _cropAndSaveImage(image.path);
       }
     } catch (e) {
-      debugPrint('Failed to pick image: $e');
+      debugPrint('Failed to pick image: \$e');
     }
   }
 
@@ -1167,7 +1319,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
         await _saveProfileImage(croppedFile.path);
       }
     } catch (e) {
-      debugPrint('Failed to crop image: $e');
+      debugPrint('Failed to crop image: \$e');
     }
   }
 
@@ -1175,7 +1327,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
     try {
       // Get app documents directory
       final directory = await getApplicationDocumentsDirectory();
-      final String profileImageDir = '${directory.path}/profile_images';
+      final String profileImageDir = '\${directory.path}/profile_images';
 
       // Create directory if it doesn't exist
       await Directory(profileImageDir).create(recursive: true);
@@ -1183,8 +1335,8 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
       // Generate unique filename
       final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
       final String extension = path.extension(imagePath);
-      final String fileName = 'profile_$timestamp$extension';
-      final String savedPath = '$profileImageDir/$fileName';
+      final String fileName = 'profile_\$timestamp\$extension';
+      final String savedPath = '\$profileImageDir/\$fileName';
 
       // Copy image to permanent location
       await File(imagePath).copy(savedPath);
@@ -1196,7 +1348,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
 
       // TODO: Upload to backend server when ready
     } catch (e) {
-      debugPrint('Failed to save image: $e');
+      debugPrint('Failed to save image: \$e');
     }
   }
 
@@ -1292,6 +1444,22 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
         );
       }
     }
+  }
+
+  void _showRatingScreen() {
+    HapticFeedback.lightImpact();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => RatingScreen(
+          onContinue: () {
+            Navigator.of(context).pop();
+            // Refresh rating status to hide the section
+            _loadRatingStatus();
+          },
+        ),
+        fullscreenDialog: true,
+      ),
+    );
   }
 }
 
@@ -1421,7 +1589,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
             () => _errorMessage = authProvider.errorMessage ?? 'Update failed');
       }
     } catch (e) {
-      setState(() => _errorMessage = 'Update failed: $e');
+      setState(() => _errorMessage = 'Update failed: \$e');
     } finally {
       setState(() => _isLoading = false);
     }
