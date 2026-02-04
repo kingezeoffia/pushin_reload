@@ -1,6 +1,6 @@
 name: pushin_reload
 description: PUSHIN MVP - iOS-first, Android-ready Flutter app for content blocking with workout-based unlock
-version: 0.1.0+1
+version: 1.0.0+1
 publish_to: 'none'
 
 environment:

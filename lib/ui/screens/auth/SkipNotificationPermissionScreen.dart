@@ -70,7 +70,7 @@ class _SkipNotificationPermissionScreenState
           child: SizedBox(
             width: double.infinity,
             child: Text(
-              'Required for automatic app unlocking after workouts',
+              'Required for automatic app unlocking before workouts',
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.white.withOpacity(0.6),

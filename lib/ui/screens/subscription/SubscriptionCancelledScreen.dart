@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 import '../../widgets/pill_navigation_bar.dart';
-import '../../../services/StripeCheckoutService.dart';
+import '../../../services/PaymentService.dart';
 import '../../../state/auth_state_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -79,12 +79,9 @@ class _SubscriptionCancelledScreenState
         return;
       }
 
-      final stripeService = StripeCheckoutService(
-        baseUrl: 'https://pushin-production.up.railway.app/api',
-        isTestMode: true,
-      );
+      final paymentService = PaymentConfig.createService();
 
-      final success = await stripeService.openCustomerPortal(
+      final success = await paymentService.openCustomerPortal(
         userId: currentUser.id.toString(),
       );
 

@@ -7,7 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/AuthenticationService.dart';
-import '../services/StripeCheckoutService.dart';
+import '../services/PaymentService.dart'; // Import central PaymentService
 import '../services/TokenManager.dart';
 
 /// Guest setup steps for state-driven navigation
@@ -1255,11 +1255,12 @@ class AuthStateProvider extends ChangeNotifier {
 
       // 1. Clear subscription cache completely using the service
       // This removes ID, plan, status - everything.
-      final stripeService = StripeCheckoutService(
-        baseUrl: 'https://pushin-production.up.railway.app/api',
-        isTestMode: true,
-      );
-      await stripeService.clearSubscriptionCache();
+      // 1. Clear subscription cache manually
+      // This removes ID, plan, status - everything.
+      await _prefs.remove('cached_subscription_status');
+      if (_currentUser?.id != null) {
+          await _prefs.remove('cached_subscription_status_${_currentUser!.id}');
+      }
 
       // 3. Clear profile image
       await removeProfileImage();
@@ -1411,13 +1412,10 @@ class AuthStateProvider extends ChangeNotifier {
     debugPrint('🔄 ═══════════════════════════════════════════════');
 
     try {
-      final stripeService = StripeCheckoutService(
-        baseUrl: 'https://pushin-production.up.railway.app/api',
-        isTestMode: true,
-      );
+      final paymentService = PaymentConfig.createService();
 
       // Fetch fresh subscription status from server
-      final subscriptionStatus = await stripeService.checkSubscriptionStatus(
+      final subscriptionStatus = await paymentService.checkSubscriptionStatus(
         userId: _currentUser!.id,
       );
 
@@ -1439,7 +1437,7 @@ class AuthStateProvider extends ChangeNotifier {
           currentPeriodEnd: subscriptionStatus.currentPeriodEnd,
           cachedUserId: _currentUser!.id, // Associate with authenticated user
         );
-        await stripeService.saveSubscriptionStatus(statusWithUserId);
+        await paymentService.saveSubscriptionStatus(statusWithUserId);
         debugPrint(
             '✅ Subscription cache updated with userId: ${_currentUser!.id}');
       } else {

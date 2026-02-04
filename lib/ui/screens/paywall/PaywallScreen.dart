@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../../services/StripeCheckoutService.dart';
+import '../../../services/PaymentService.dart';
 import '../../../state/auth_state_provider.dart';
 import '../../../state/pushin_app_controller.dart';
 import '../../widgets/ErrorPopup.dart';
@@ -12,6 +12,7 @@ import '../../navigation/main_tab_navigation.dart';
 import '../auth/SubscriptionSuccessScreen.dart';
 import '../auth/AdvancedUpgradeWelcomeScreen.dart';
 import '../auth/SignUpScreen.dart';
+import '../auth/SignInScreen.dart';
 import '../subscription/SubscriptionCancelledScreen.dart';
 
 /// Paywall Screen - Free Trial with Pro or Advanced plan
@@ -127,11 +128,9 @@ class _PaywallScreenState extends State<PaywallScreen>
     debugPrint('🔄 Continuing purchase after authentication...');
 
     try {
-      debugPrint('🟡 Creating StripeCheckoutService...');
-      final stripeService = StripeCheckoutService(
-        baseUrl: 'https://pushin-production.up.railway.app/api',
-        isTestMode: true,
-      );
+      debugPrint('🟡 Creating PaymentService via Config...');
+      // USE CENTRALIZED CONFIG
+      final paymentService = PaymentConfig.createService();
 
       // Get current user info
       final authProvider = context.read<AuthStateProvider>();
@@ -162,7 +161,7 @@ class _PaywallScreenState extends State<PaywallScreen>
       // Set the planId for fallback subscription status creation
       await pushinController.setPendingCheckoutPlanId(_selectedPlan);
 
-      final success = await stripeService.launchCheckout(
+      final result = await paymentService.launchCheckout(
         userId: userId,
         planId: _selectedPlan,
         billingPeriod: _billingPeriod,
@@ -171,34 +170,57 @@ class _PaywallScreenState extends State<PaywallScreen>
 
       if (!context.mounted) return;
 
-      if (success) {
-        // For real mode, plan tier will be updated via deep link handler
-        // For test mode, simulate payment success immediately since no deep link is triggered
-        if (stripeService.isTestMode) {
-          debugPrint(
-              'TEST MODE: Checkout simulated successfully - triggering payment success flow');
-          // Simulate payment success by creating a subscription status and triggering the callback
-          final simulatedStatus = SubscriptionStatus(
-            isActive: true,
-            planId: _selectedPlan,
-            customerId: 'cus_test_${currentUser.id}',
-            subscriptionId:
-                'sub_test_${currentUser.id}_${DateTime.now().millisecondsSinceEpoch}',
-            currentPeriodEnd: DateTime.now().add(const Duration(days: 30)),
-            cachedUserId: currentUser.id.toString(),
-          );
-
-          // Save the simulated subscription status
-          await stripeService.saveSubscriptionStatus(simulatedStatus);
-
-          // Trigger the payment success callback to update UI state
-          pushinController.paymentSuccessState.value = simulatedStatus;
-          debugPrint(
-              'TEST MODE: Payment success state updated, UI should reflect new plan tier');
-        }
-      } else {
-        _showErrorDialog('Unable to start checkout. Please try again.');
+      switch (result) {
+        case PaymentSuccess():
+           // For real mode, plan tier will be updated via deep link handler.
+           // For test mode, we might need to simulate success if the service is a mock or test service that supports it internally. 
+           // However, StripeCheckoutService in test mode (with real keys) still relies on redirects.
+           // If it was the simulation path in StripeCheckoutService, it returns Success.
+           
+           // We can check if we are in a mode that needs manual simulation trigger using PaymentConfig
+           if (PaymentConfig.currentMode == PaymentMode.stripeTest && 
+               !PaymentConfig.backendUrl.contains('railway.app')) { 
+               // This logic matches the _simulateTestCheckout condition in StripeCheckoutService
+               // But StripeCheckoutService handles the simulation internally now.
+               // If it returns PaymentSuccess, and it was a simulation, we should probably update the state.
+               
+               // WAIT: StripeCheckoutService.launchCheckout returns PaymentSuccess for both real and simulated.
+               // If it was simulated (no real keys), it saved the status locally.
+               // We should probably check if status needs to be forced.
+               
+               // Ideally, the unified flow relies on the deep link or the simulation saving the state.
+               // If simulated, state is saved.
+               // Let's just refresh status? Or trigger success?
+               
+               // If it was a simulation, PaymentSuccess implies it's done. 
+               // If it was a real checkout, PaymentSuccess implies the browser opened.
+               
+               // The original code had specific logic for "isTestMode".
+               // Let's keep it simple: If PaymentSuccess, we assume the user is handling it.
+               // EXCEPT if we are in the "simulation" mode which effectively worked instantly.
+               
+               // To keep previous behavior for test mode simulation:
+               // The service handles saving the subscription.
+               // We just need to trigger the success listener for the UI update.
+               
+               // Re-read status to see if it was instant (simulation)
+               final status = await paymentService.checkSubscriptionStatus(userId: userId);
+               if (status != null && status.isActive && status.planId == _selectedPlan) {
+                   // It was likely a simulation or very fast
+                   pushinController.paymentSuccessState.value = status;
+               }
+           }
+           break;
+           
+        case PaymentFailure(message: final msg):
+          _showErrorDialog(msg);
+          break;
+          
+        case PaymentCancelled():
+          // User cancelled, maybe do nothing or show toast
+          break;
       }
+
     } catch (e) {
       if (!context.mounted) return;
       _showErrorDialog('An error occurred: $e');
@@ -255,12 +277,9 @@ class _PaywallScreenState extends State<PaywallScreen>
   Future<void> _initializeSelectedPlan() async {
     try {
       // First check cached subscription status to get current plan
-      final stripeService = StripeCheckoutService(
-        baseUrl: 'https://pushin-production.up.railway.app/api',
-        isTestMode: true,
-      );
+      final paymentService = PaymentConfig.createService();
 
-      final cachedStatus = await stripeService.getCachedSubscriptionStatus();
+      final cachedStatus = await paymentService.getCachedSubscriptionStatus();
       String? currentPlan;
 
       if (cachedStatus != null && cachedStatus.isActive) {
@@ -382,10 +401,7 @@ class _PaywallScreenState extends State<PaywallScreen>
       debugPrint('🔄 Paywall: Refreshing subscription status from server...');
 
       // Re-check subscription status from server (not just cache)
-      final stripeService = StripeCheckoutService(
-        baseUrl: 'https://pushin-production.up.railway.app/api',
-        isTestMode: true,
-      );
+      final paymentService = PaymentConfig.createService();
 
       final authProvider = context.read<AuthStateProvider>();
       final currentUser = authProvider.currentUser;
@@ -394,12 +410,12 @@ class _PaywallScreenState extends State<PaywallScreen>
 
       if (currentUser != null) {
         // Fetch fresh status from server
-        freshStatus = await stripeService.checkSubscriptionStatus(
+        freshStatus = await paymentService.checkSubscriptionStatus(
           userId: currentUser.id.toString(),
         );
       } else {
         // Fall back to cached for unauthenticated
-        freshStatus = await stripeService.getCachedSubscriptionStatus();
+        freshStatus = await paymentService.getCachedSubscriptionStatus();
       }
 
       String? updatedPlan;
@@ -513,12 +529,10 @@ class _PaywallScreenState extends State<PaywallScreen>
   Future<String> _getNextBestPlan() async {
     try {
       // First check cached subscription (most reliable since backend may fail)
-      final stripeService = StripeCheckoutService(
-        baseUrl: 'https://pushin-production.up.railway.app/api',
-        isTestMode: true,
-      );
+      // First check cached subscription (most reliable since backend may fail)
+      final paymentService = PaymentConfig.createService();
 
-      final cachedStatus = await stripeService.getCachedSubscriptionStatus();
+      final cachedStatus = await paymentService.getCachedSubscriptionStatus();
       if (cachedStatus != null && cachedStatus.isActive) {
         switch (cachedStatus.planId) {
           case 'free':
@@ -538,7 +552,7 @@ class _PaywallScreenState extends State<PaywallScreen>
       final isAuthenticated = authProvider.isAuthenticated;
 
       if (currentUser != null) {
-        final subscriptionStatus = await stripeService.checkSubscriptionStatus(
+        final subscriptionStatus = await paymentService.checkSubscriptionStatus(
           userId: currentUser.id.toString(),
         );
 
@@ -1017,11 +1031,8 @@ class _PaywallScreenState extends State<PaywallScreen>
     setState(() => _isLoading = true);
 
     try {
-      debugPrint('🟡 Creating StripeCheckoutService...');
-      final stripeService = StripeCheckoutService(
-        baseUrl: 'https://pushin-production.up.railway.app/api',
-        isTestMode: true,
-      );
+      debugPrint('🟡 Creating PaymentService via Config...');
+      final paymentService = PaymentConfig.createService();
 
       // Get current user info
       final authProvider = context.read<AuthStateProvider>();
@@ -1085,7 +1096,7 @@ class _PaywallScreenState extends State<PaywallScreen>
       debugPrint(
           '💳 PaywallScreen: Set and persisted pending checkout plan: $backendPlanId');
 
-      final success = await stripeService.launchCheckout(
+      final result = await paymentService.launchCheckout(
         userId: userId,
         planId: backendPlanId, // 'pro' or 'advanced'
         billingPeriod: _billingPeriod, // 'monthly' or 'yearly'
@@ -1094,34 +1105,17 @@ class _PaywallScreenState extends State<PaywallScreen>
 
       if (!context.mounted) return;
 
-      if (success) {
-        // For real mode, plan tier will be updated via deep link handler
-        // For test mode, simulate payment success immediately since no deep link is triggered
-        if (stripeService.isTestMode) {
-          debugPrint(
-              'TEST MODE: Checkout simulated successfully - triggering payment success flow');
-          // Simulate payment success by creating a subscription status and triggering the callback
-          final simulatedStatus = SubscriptionStatus(
-            isActive: true,
-            planId: _selectedPlan,
-            customerId: 'cus_test_${currentUser.id}',
-            subscriptionId:
-                'sub_test_${currentUser.id}_${DateTime.now().millisecondsSinceEpoch}',
-            currentPeriodEnd: DateTime.now().add(const Duration(days: 30)),
-            cachedUserId: currentUser.id.toString(),
-          );
-
-          // Save the simulated subscription status
-          await stripeService.saveSubscriptionStatus(simulatedStatus);
-
-          // Trigger the payment success callback to update UI state
-          final pushinController = context.read<PushinAppController>();
-          pushinController.paymentSuccessState.value = simulatedStatus;
-          debugPrint(
-              'TEST MODE: Payment success state updated, UI should reflect new plan tier');
-        }
-      } else {
-        _showErrorDialog('Unable to start checkout. Please try again.');
+      switch (result) {
+        case PaymentSuccess():
+          // For real mode, plan tier will be updated via deep link handler
+          // For test mode, the service handles it internally or returns success
+           debugPrint('✅ Checkout launched successfully');
+           break;
+        case PaymentFailure(message: final msg):
+           _showErrorDialog(msg);
+           break;
+        case PaymentCancelled():
+           break;
       }
     } catch (e) {
       if (!context.mounted) return;
@@ -1163,12 +1157,10 @@ class _PaywallScreenState extends State<PaywallScreen>
 
       setState(() => _isLoading = true);
 
-      final stripeService = StripeCheckoutService(
-        baseUrl: 'https://pushin-production.up.railway.app/api',
-        isTestMode: true,
-      );
+      // Create payment service via factory
+      final paymentService = PaymentConfig.createService();
 
-      final success = await stripeService.reactivateSubscription(
+      final success = await paymentService.reactivateSubscription(
         userId: currentUser.id.toString(),
         subscriptionId: _currentSubscriptionStatus!.subscriptionId!,
       );
@@ -1223,15 +1215,12 @@ class _PaywallScreenState extends State<PaywallScreen>
 
       setState(() => _isLoading = true);
 
-      final stripeService = StripeCheckoutService(
-        baseUrl: 'https://pushin-production.up.railway.app/api',
-        isTestMode: true,
-      );
+      final paymentService = PaymentConfig.createService();
 
       // CRITICAL: Store current subscription status before opening portal
       // This allows us to detect if the user cancels their subscription
       debugPrint('🏦 Fetching current subscription status...');
-      final currentSubscription = await stripeService.checkSubscriptionStatus(
+      final currentSubscription = await paymentService.checkSubscriptionStatus(
         userId: currentUser.id.toString(),
       );
 
@@ -1244,7 +1233,7 @@ class _PaywallScreenState extends State<PaywallScreen>
       await pushinController.setSubscriptionBeforePortal(currentSubscription);
 
       debugPrint('🏦 Opening portal...');
-      final success = await stripeService.openCustomerPortal(
+      final success = await paymentService.openCustomerPortal(
         userId: currentUser.id.toString(),
       );
 
@@ -1331,46 +1320,139 @@ class _PaywallScreenState extends State<PaywallScreen>
   }
 
   void _showRestorePurchasesDialog() async {
-    // Create payment service
-    final stripeService = StripeCheckoutService(
-      baseUrl: 'https://pushin-production.up.railway.app/api',
-      isTestMode: true,
-    );
+    final authProvider = context.read<AuthStateProvider>();
+    final pushinController = context.read<PushinAppController>();
+
+    // 1. Check if authenticated - guests cannot restore without signing in
+    if (!authProvider.isAuthenticated) {
+      _showSignInPromptForRestore();
+      return;
+    }
+
+    // 2. User is authenticated - try "Smart Restore" (refreshing status from backend)
+    setState(() => _isLoading = true);
+
+    try {
+      debugPrint('🔄 PaywallScreen: Starting Smart Restore...');
+      await pushinController.refreshPlanTier();
+
+      // Check if refresh resulted in an active plan
+      final paymentService = PaymentConfig.createService();
+      final status = await paymentService.getCachedSubscriptionStatus();
+
+      if (status != null && status.isActive && status.planId != 'free') {
+        debugPrint('✅ PaywallScreen: Smart Restore success!');
+        if (mounted) {
+          setState(() => _isLoading = false);
+          
+          // Show success feedback
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ ${status.displayName} restored successfully!'),
+              backgroundColor: Colors.green.shade600,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+
+          // Navigate to main app
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (context) => const MainTabNavigation(),
+            ),
+            (route) => false,
+          );
+          return;
+        }
+      }
+      
+      debugPrint('ℹ️ PaywallScreen: Smart Restore did not find active subscription, showing manual popup');
+    } catch (e) {
+      debugPrint('❌ PaywallScreen: Error during smart restore: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+
+    // 3. Fallback: Show manual email popup if smart restore didn't work
+    if (!mounted) return;
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => RestorePurchasesPopup(
-        paymentService: stripeService,
+        paymentService: PaymentConfig.createService(),
         onDismiss: () => Navigator.pop(context),
         onRestoreComplete: (result) async {
           // Close dialog
           Navigator.pop(context);
 
           if (result.hasActiveSubscription) {
-            // Update app state with restored subscription
-            final pushinController = context.read<PushinAppController>();
-
-            // Update plan tier
-            pushinController.updatePlanTier(
-              result.subscription!.planId,
-              0, // No grace period
-            );
+            // Update plan tier via refreshPlanTier which links subscription to the authenticated user
+            await pushinController.refreshPlanTier();
 
             // Show success and navigate away from paywall
-            await Future.delayed(const Duration(milliseconds: 500));
-
             if (mounted) {
-              // Navigate to main app
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(
-                  builder: (context) => const MainTabNavigation(),
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('✅ ${result.subscription!.displayName} restored!'),
+                  backgroundColor: Colors.green.shade600,
+                  behavior: SnackBarBehavior.floating,
                 ),
-                (route) => false,
               );
+              
+              await Future.delayed(const Duration(milliseconds: 500));
+
+              if (mounted) {
+                // Navigate to main app
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(
+                    builder: (context) => const MainTabNavigation(),
+                  ),
+                  (route) => false,
+                );
+              }
             }
           }
         },
+      ),
+    );
+  }
+
+  void _showSignInPromptForRestore() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text(
+          'Sign In Required',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'Please sign in to restore your subscription. Your purchases are tied to your account email.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6060FF),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const SignInScreen(),
+                ),
+              );
+            },
+            child: const Text('Sign In'),
+          ),
+        ],
       ),
     );
   }

@@ -18,7 +18,7 @@ import '../services/platform/UsageStatsMonitor.dart';
 import '../services/platform/AppBlockingServiceBridge.dart';
 import '../services/platform/IOSSettingsBridge.dart';
 import '../services/DeepLinkHandler.dart';
-import '../services/StripeCheckoutService.dart';
+import '../services/PaymentService.dart';
 import '../services/StreakTrackingService.dart';
 import '../services/IntentHandler.dart';
 import '../services/WorkoutHistoryService.dart';
@@ -47,6 +47,9 @@ class PushinAppController extends ChangeNotifier {
   final WorkoutRewardCalculator _rewardCalculator;
   late final StreakTrackingService _streakTracker;
   late final WorkoutHistoryService _workoutHistoryService;
+  
+  // Payment Service
+  final PaymentService _paymentService = PaymentConfig.createService();
 
   // Platform monitors
   FocusModeService? _focusModeService;
@@ -110,7 +113,7 @@ class PushinAppController extends ChangeNotifier {
   DeepLinkHandler? _deepLinkHandler;
 
   // Emergency Unlock State
-  bool _emergencyUnlockEnabled = true;
+  bool _emergencyUnlockEnabled = false;
   int _emergencyUnlockMinutes = 10;
   int _emergencyUnlocksUsedToday = 0;
   int _maxEmergencyUnlocksPerDay = 3;
@@ -260,17 +263,14 @@ class PushinAppController extends ChangeNotifier {
       print('⚠️ Error incrementing launch count: $e');
     }
 
-    // Initialize Stripe service first (needed for subscription check)
-    final stripeService = StripeCheckoutService(
-      baseUrl: 'https://pushin-production.up.railway.app/api',
-      isTestMode: true,
-    );
+    // Initialize Payment Service using Configuration
+    final paymentService = PaymentConfig.createService();
 
     // Load current plan tier from cached subscription status
-    await _loadCachedPlanTier(stripeService);
+    await _loadCachedPlanTier(paymentService);
 
     _deepLinkHandler = DeepLinkHandler(
-      stripeService: stripeService,
+      stripeService: paymentService,
       getCurrentUserId: () => _authProvider.currentUser?.id,
       onPaymentSuccess: (status) async {
         print('═══════════════════════════════════════════════');
@@ -317,7 +317,7 @@ class PushinAppController extends ChangeNotifier {
               currentPeriodEnd: status.currentPeriodEnd,
               cachedUserId: currentUserId,
             );
-            await stripeService.saveSubscriptionStatus(statusWithUserId);
+            await _paymentService.saveSubscriptionStatus(statusWithUserId);
             print(
                 '✅ Subscription status saved to cache with userId: $currentUserId');
           } catch (e) {
@@ -602,6 +602,23 @@ class PushinAppController extends ChangeNotifier {
             true; // Mark as configured even if 0 apps selected
         await _saveIOSTokens();
         print('User selected ${result.totalSelected} items for blocking');
+
+        // Update blocking state immediately
+        if (_iosAppTokens.isEmpty && _iosCategoryTokens.isEmpty) {
+          print('User cleared all apps - explicitly disabling all restrictions');
+          // Use emergencyDisable to force clear shields even if session state is lost
+          await _focusModeService!.emergencyDisable();
+          _iosBlockingActive = false;
+        } else {
+          // If we are currently in a state that should be blocked, refresh the shield
+          if (_iosBlockingActive ||
+              currentState == PushinState.locked ||
+              currentState == PushinState.expired) {
+            print('User updated apps - refreshing iOS blocking');
+            await _restoreIOSBlocking();
+          }
+        }
+
         notifyListeners();
         return true;
       }
@@ -1421,11 +1438,11 @@ class PushinAppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Load cached plan tier from StripeCheckoutService on startup
-  Future<void> _loadCachedPlanTier(StripeCheckoutService stripeService) async {
+  /// Load cached plan tier from PaymentService on startup
+  Future<void> _loadCachedPlanTier(PaymentService paymentService) async {
     try {
       print('📦 Loading cached subscription status...');
-      final cachedStatus = await stripeService.getCachedSubscriptionStatus();
+      final cachedStatus = await paymentService.getCachedSubscriptionStatus();
 
       if (cachedStatus != null) {
         print('📦 Found cached status:');
@@ -1471,10 +1488,7 @@ class PushinAppController extends ChangeNotifier {
     print('   - currentUser: ${_authProvider.currentUser?.id}');
     print('🔄 ═══════════════════════════════════════════════');
 
-    final stripeService = StripeCheckoutService(
-      baseUrl: 'https://pushin-production.up.railway.app/api',
-      isTestMode: true,
-    );
+    final paymentService = PaymentConfig.createService();
 
     // 1. Handle Unauthenticated State - always free tier
     if (!_authProvider.isAuthenticated) {
@@ -1497,7 +1511,7 @@ class PushinAppController extends ChangeNotifier {
     }
 
     // 2. Check Local Cache
-    final cachedStatus = await stripeService.getCachedSubscriptionStatus();
+    final cachedStatus = await paymentService.getCachedSubscriptionStatus();
     print(
         '📦 Cached status: ${cachedStatus?.planId}, active: ${cachedStatus?.isActive}, cachedUserId: ${cachedStatus?.cachedUserId}');
 
@@ -1529,7 +1543,7 @@ class PushinAppController extends ChangeNotifier {
         cachedUserId: currentUserId,
       );
 
-      await stripeService.saveSubscriptionStatus(claimedStatus);
+      await paymentService.saveSubscriptionStatus(claimedStatus);
       _planTier = claimedStatus.planId;
       _previousPlanTier = _planTier;
       await _usageTracker?.updatePlanTier(_planTier);
@@ -1549,7 +1563,7 @@ class PushinAppController extends ChangeNotifier {
     try {
       print(
           '🌐 Fetching subscription status from server for user: $currentUserId');
-      final freshStatus = await stripeService.checkSubscriptionStatus(
+      final freshStatus = await paymentService.checkSubscriptionStatus(
         userId: currentUserId,
       );
 
@@ -1564,7 +1578,7 @@ class PushinAppController extends ChangeNotifier {
         _planTier = 'free';
         _previousPlanTier = 'free';
         // Cache the 'free' status with user ID to avoid repeated server calls
-        await stripeService.saveSubscriptionStatus(SubscriptionStatus(
+        await paymentService.saveSubscriptionStatus(SubscriptionStatus(
             isActive: false, planId: 'free', cachedUserId: currentUserId));
         await _usageTracker?.updatePlanTier(_planTier);
         print('✅ Confirmed free tier on server.');
@@ -1730,21 +1744,15 @@ class PushinAppController extends ChangeNotifier {
   }
 
   /// Sync emergency unlock state with plan tier
-  /// Automatically enables for pro/advanced, disables for free/guest
+  /// Automatically disabled for free/guest users.
+  /// For Pro/Advanced users, we preserve their manual setting.
   void _syncEmergencyUnlockWithPlanTier() {
-    final shouldBeEnabled = hasEmergencyUnlockAccess;
-    
-    if (_emergencyUnlockEnabled != shouldBeEnabled) {
-      debugPrint('🔄 Syncing emergency unlock with plan tier: $_planTier');
-      debugPrint('   - Was: $_emergencyUnlockEnabled, Now: $shouldBeEnabled');
-      
-      _emergencyUnlockEnabled = shouldBeEnabled;
-      
-      // Save to iOS UserDefaults for extension access
-      IOSSettingsBridge.instance.setEmergencyUnlockEnabled(shouldBeEnabled);
-      
-      debugPrint('✅ Emergency unlock synced to plan tier');
+    // If user lost access (downgraded to free), force disable
+    if (!hasEmergencyUnlockAccess && _emergencyUnlockEnabled) {
+      debugPrint('🔄 Syncing emergency unlock: User lost access, disabling feature');
+      setEmergencyUnlockEnabled(false);
     }
+    // Note: We do NOT auto-enable when upgrading. User must enable manually.
   }
 
   /// Set duration for emergency unlock (in minutes)

@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
-import 'StripeCheckoutService.dart';
+import 'PaymentService.dart';
 
 /// Deep Link Handler for Stripe Checkout returns
 ///
@@ -13,7 +13,7 @@ import 'StripeCheckoutService.dart';
 /// - pushinapp://payment-success?session_id=xxx
 /// - pushinapp://payment-cancel
 class DeepLinkHandler {
-  final StripeCheckoutService stripeService;
+  final PaymentService stripeService;
   final AppLinks _appLinks = AppLinks();
   StreamSubscription<Uri>? _linkSubscription;
 

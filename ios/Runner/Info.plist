@@ -103,6 +103,10 @@
 	</array>
 	<key>com.apple.familycontrols.shield-action-service</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER).ShieldAction</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>PUSHIN needs access to your photo library to let you select a profile picture for your account.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>PUSHIN needs access to microphone for video features.</string>
 	<key>com.apple.familycontrols.shield-configuration-service</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER).ShieldConfiguration</string>
 </dict>

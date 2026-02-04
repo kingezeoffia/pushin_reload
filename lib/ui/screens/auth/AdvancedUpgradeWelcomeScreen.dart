@@ -47,13 +47,13 @@ class AdvancedUpgradeWelcomeScreen extends StatelessWidget {
                           width: 80,
                           height: 80,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF8B5CF6).withOpacity(0.2),
+                            color: const Color(0xFFFBBF24).withOpacity(0.2),
                             borderRadius: BorderRadius.circular(24),
                           ),
                           child: const Icon(
                             Icons.celebration_rounded,
                             size: 40,
-                            color: Color(0xFF8B5CF6),
+                            color: Color(0xFFFBBF24),
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -69,7 +69,7 @@ class AdvancedUpgradeWelcomeScreen extends StatelessWidget {
                         ),
                         ShaderMask(
                           shaderCallback: (bounds) => const LinearGradient(
-                            colors: [Color(0xFF8B5CF6), Color(0xFFA78BFA)],
+                            colors: [Color(0xFFFBBF24), Color(0xFFFCD34D)],
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                           ).createShader(
@@ -218,7 +218,7 @@ class _FeatureItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const accentColor = Color(0xFF8B5CF6); // Purple for Advanced
+    const accentColor = Color(0xFFFBBF24); // Gold/Amber for Advanced
 
     return Container(
       padding: const EdgeInsets.all(16),

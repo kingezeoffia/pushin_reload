@@ -184,7 +184,7 @@ class _HowItWorksNotificationPermissionScreenState
             child: Text(
               _showSettingsPrompt 
                   ? 'Please enable notifications in settings to continue'
-                  : 'Required for automatic app unlocking after workouts',
+                  : 'Required for automatic app unlocking before workouts',
               style: TextStyle(
                 fontSize: 12,
                 color: _showSettingsPrompt ? Colors.orangeAccent : Colors.white.withOpacity(0.6),

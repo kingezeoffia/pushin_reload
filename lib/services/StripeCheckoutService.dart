@@ -22,16 +22,16 @@ class StripeCheckoutService implements PaymentService {
   // Test: https://your-test-backend.up.railway.app/api
   // Prod: Set via environment or update this URL after deployment
   StripeCheckoutService({
-    this.baseUrl =
-        'https://pushin-production.up.railway.app/api', // Update with your Railway domain
-    this.isTestMode = false,
+    required this.baseUrl,
+    required this.isTestMode,
   });
 
   /// Create Stripe Checkout session and launch browser
   ///
-  /// Returns true if checkout was launched successfully
+  /// Returns PaymentResult based on launch status
   /// Requires authenticated user - userId must be provided
-  Future<bool> launchCheckout({
+  @override
+  Future<PaymentResult> launchCheckout({
     required String userId,
     required String planId, // 'pro' or 'advanced'
     required String billingPeriod, // 'monthly' or 'yearly'
@@ -75,7 +75,9 @@ class StripeCheckoutService implements PaymentService {
         print('🔵 StripeCheckoutService: HTTP POST completed');
       } catch (httpError) {
         print('❌ StripeCheckoutService: HTTP POST FAILED: $httpError');
-        return false;
+         return PaymentFailure(
+            message: 'Network error. Please check your connection.',
+            code: 'network_error');
       }
 
       print(
@@ -93,242 +95,162 @@ class StripeCheckoutService implements PaymentService {
             uri,
             mode: LaunchMode.externalApplication, // Opens in browser
           );
-          return true;
+          // Return success indicating the flow started. 
+          // Actual payment confirmation happens via deep link.
+          return const PaymentSuccess(); 
         } else {
           print('Could not launch Stripe Checkout URL');
-          return false;
+           return const PaymentFailure(
+              message: 'Could not open payment page. Please try again.',
+              code: 'launch_error');
         }
       } else {
         print('Failed to create checkout session: ${response.statusCode}');
         print('Response: ${response.body}');
-        return false;
+        
+        String errorMessage = 'Failed to initialize checkout.';
+        try {
+            final errorData = jsonDecode(response.body);
+            if (errorData['message'] != null) {
+                errorMessage = errorData['message'];
+            }
+        } catch (_) {}
+
+        return PaymentFailure(
+            message: errorMessage,
+            code: 'server_error_${response.statusCode}');
       }
     } catch (e) {
       print('Error launching Stripe Checkout: $e');
-      return false;
+      return const PaymentFailure(
+          message: 'An unexpected error occurred.', code: 'unknown_error');
     }
   }
+  
+  // ... other methods ...
 
-  /// Verify payment after return from Stripe Checkout
-  ///
-  /// Called when app receives deep link: pushinapp://payment-success?session_id=...
-  /// Requires authenticated user - userId must be provided
+  /// Verify payment session with backend
+  @override
   Future<SubscriptionStatus?> verifyPayment({
     required String sessionId,
     required String userId,
   }) async {
-    print('🔵 StripeCheckoutService.verifyPayment() called');
-    print('   - sessionId: ${sessionId.substring(0, 20)}...');
-    print('   - userId: $userId');
-
     try {
+      print('🔵 StripeCheckoutService: Verifying payment session: $sessionId');
+      
       final response = await http.post(
         Uri.parse('$baseUrl/stripe/verify-payment'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'sessionId': sessionId,
           'userId': userId,
         }),
-      );
+      ).timeout(const Duration(seconds: 30));
 
-      print('📡 verifyPayment response: ${response.statusCode}');
+      print('📡 StripeCheckoutService: Verify response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        print('✅ verifyPayment success data: $data');
-
-        final status = SubscriptionStatus(
-          isActive: data['isActive'] as bool,
-          planId: data['planId'] as String,
-          customerId: data['customerId'] as String?,
-          subscriptionId: data['subscriptionId'] as String?,
-          currentPeriodEnd: data['currentPeriodEnd'] != null
-              ? DateTime.parse(data['currentPeriodEnd'] as String)
+         final status = SubscriptionStatus(
+          isActive: data['isActive'] ?? false,
+          planId: data['planId'] ?? 'free',
+          customerId: data['customerId'],
+          subscriptionId: data['subscriptionId'],
+          currentPeriodEnd: data['currentPeriodEnd'] != null 
+              ? DateTime.parse(data['currentPeriodEnd']) 
               : null,
-          cachedUserId: userId, // Always associate with the authenticated user
-          cancelAtPeriodEnd: data['cancelAtPeriodEnd'] as bool? ?? false,
+          cachedUserId: userId,
+          cancelAtPeriodEnd: data['cancelAtPeriodEnd'] ?? false,
         );
-
-        // Store locally with user ID for validation
-        await _saveSubscriptionStatus(status);
-
-        print('✅ Subscription status saved with cachedUserId: $userId');
-
+        
+        await saveSubscriptionStatus(status);
         return status;
-      } else {
-        print('❌ Failed to verify payment: ${response.statusCode}');
-        print('   Response body: ${response.body}');
-        return null;
       }
     } catch (e) {
-      print('❌ Error verifying payment: $e');
-      return null;
+      print('❌ StripeCheckoutService: Error verifying payment: $e');
     }
+    return null;
   }
 
-  /// Check current subscription status from backend
-  /// Requires authenticated user - userId must be provided
+  /// Check subscription status from backend
+  @override
   Future<SubscriptionStatus?> checkSubscriptionStatus({
     required String userId,
   }) async {
-    print('🔵 StripeCheckoutService.checkSubscriptionStatus() called');
-    print('   - userId: $userId');
-
+    if (isTestMode && !baseUrl.contains('railway.app')) {
+       // Return cached status in mock/test mode
+       return await getCachedSubscriptionStatus(userId: userId);
+    }
+    
     try {
-      final uri = Uri.parse('$baseUrl/stripe/subscription-status')
-          .replace(queryParameters: {'userId': userId});
-
-      print('🔵 Fetching: $uri');
-
+      // Use configured backend URL
       final response = await http.get(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      );
-
-      print('📡 checkSubscriptionStatus response: ${response.statusCode}');
+        Uri.parse('$baseUrl/stripe/subscription-status/$userId'),
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        print('✅ checkSubscriptionStatus data: $data');
-
         final status = SubscriptionStatus(
-          isActive: data['isActive'] as bool,
-          planId: data['planId'] as String,
-          customerId: data['customerId'] as String?,
-          subscriptionId: data['subscriptionId'] as String?,
-          currentPeriodEnd: data['currentPeriodEnd'] != null
-              ? DateTime.parse(data['currentPeriodEnd'] as String)
+          isActive: data['isActive'] ?? false,
+          planId: data['planId'] ?? 'free',
+          customerId: data['customerId'],
+          subscriptionId: data['subscriptionId'],
+          currentPeriodEnd: data['currentPeriodEnd'] != null 
+              ? DateTime.parse(data['currentPeriodEnd']) 
               : null,
-          cachedUserId: userId, // Always associate with the authenticated user
-          cancelAtPeriodEnd: data['cancelAtPeriodEnd'] as bool? ?? false,
+          cachedUserId: userId,
+          cancelAtPeriodEnd: data['cancelAtPeriodEnd'] ?? false,
         );
-
-        // Update local cache with user ID for validation
-        await _saveSubscriptionStatus(status);
-
-        print('✅ Subscription cache updated with cachedUserId: $userId');
-        print('   - cancelAtPeriodEnd: ${status.cancelAtPeriodEnd}');
-
+        
+        // Update cache
+        await saveSubscriptionStatus(status);
         return status;
-      } else if (response.statusCode == 404) {
-        print('ℹ️ No subscription found for user: $userId');
-        return null;
-      } else {
-        print('❌ Failed to check subscription status: ${response.statusCode}');
-        print('   Response body: ${response.body}');
-        return null;
       }
     } catch (e) {
-      print('❌ Error checking subscription status: $e');
+      print('Error checking subscription status: $e');
+      // Fallback to cache on error
+      return await getCachedSubscriptionStatus(userId: userId);
+    }
+    return null;
+  }
+
+  @override
+  Future<SubscriptionStatus?> getCachedSubscriptionStatus({String? userId}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      String? jsonStr;
+      
+      // Try user-specific cache first if userId provided
+      if (userId != null) {
+        jsonStr = prefs.getString('cached_subscription_status_$userId');
+      }
+      
+      // Fallback to general cache
+      jsonStr ??= prefs.getString('cached_subscription_status');
+      
+      if (jsonStr != null) {
+        final data = jsonDecode(jsonStr);
+        return SubscriptionStatus(
+          isActive: data['isActive'] ?? false,
+          planId: data['planId'] ?? 'free',
+          customerId: data['customerId'],
+          subscriptionId: data['subscriptionId'],
+          currentPeriodEnd: data['currentPeriodEnd'] != null 
+              ? DateTime.parse(data['currentPeriodEnd']) 
+              : null,
+          cachedUserId: data['cachedUserId'],
+          cancelAtPeriodEnd: data['cancelAtPeriodEnd'] ?? false,
+        );
+      }
+      return null;
+    } catch (e) {
+      print('Error reading cached subscription: $e');
       return null;
     }
   }
 
-  /// Get locally cached subscription status
-  Future<SubscriptionStatus?> getCachedSubscriptionStatus() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-
-      // CRITICAL CHANGE: Check if cache actually exists before returning defaults
-      // If planId is missing, we consider the cache invalid/empty
-      if (!prefs.containsKey('subscription_planId')) {
-        return null;
-      }
-
-      final isActive = prefs.getBool('subscription_isActive') ?? false;
-      final planId = prefs.getString('subscription_planId') ?? 'free';
-      final customerId = prefs.getString('subscription_customerId');
-      final subscriptionId = prefs.getString('subscription_subscriptionId');
-      final periodEndStr = prefs.getString('subscription_periodEnd');
-      final cachedUserId = prefs.getString('subscription_cached_user_id');
-
-      return SubscriptionStatus(
-        isActive: isActive,
-        planId: planId,
-        customerId: customerId,
-        subscriptionId: subscriptionId,
-        currentPeriodEnd:
-            periodEndStr != null ? DateTime.tryParse(periodEndStr) : null,
-        cachedUserId: cachedUserId, // Add cached user ID for validation
-      );
-    } catch (e) {
-      print('Error getting cached subscription: $e');
-      return null;
-    }
-  }
-
-  /// Save subscription status locally (public for fallback caching)
-  Future<void> saveSubscriptionStatus(SubscriptionStatus status) async {
-    await _saveSubscriptionStatus(status);
-  }
-
-  /// Completely wipe subscription data
-  Future<void> clearSubscriptionCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('subscription_isActive');
-      await prefs.remove('subscription_planId');
-      await prefs.remove('subscription_customerId');
-      await prefs.remove('subscription_subscriptionId');
-      await prefs.remove('subscription_periodEnd');
-      await prefs.remove('subscription_cached_user_id'); // Ensure ID is wiped
-      print('🧹 Subscription cache completely cleared');
-    } catch (e) {
-      print('Error clearing subscription cache: $e');
-    }
-  }
-
-  /// Save subscription status locally (internal)
-  Future<void> _saveSubscriptionStatus(SubscriptionStatus status) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('subscription_isActive', status.isActive);
-      await prefs.setString('subscription_planId', status.planId);
-
-      // Set or remove customerId
-      if (status.customerId != null) {
-        await prefs.setString('subscription_customerId', status.customerId!);
-      } else {
-        await prefs.remove('subscription_customerId');
-      }
-
-      // Set or remove subscriptionId
-      if (status.subscriptionId != null) {
-        await prefs.setString(
-            'subscription_subscriptionId', status.subscriptionId!);
-      } else {
-        await prefs.remove('subscription_subscriptionId');
-      }
-
-      // Set or remove periodEnd
-      if (status.currentPeriodEnd != null) {
-        await prefs.setString('subscription_periodEnd',
-            status.currentPeriodEnd!.toIso8601String());
-      } else {
-        await prefs.remove('subscription_periodEnd');
-      }
-
-      // Set or remove cached user ID (for validation)
-      if (status.cachedUserId != null) {
-        await prefs.setString(
-            'subscription_cached_user_id', status.cachedUserId!);
-      } else {
-        await prefs.remove('subscription_cached_user_id');
-      }
-
-      print(
-          'Subscription status saved locally: planId=${status.planId}, isActive=${status.isActive}, customerId=${status.customerId}, cachedUserId=${status.cachedUserId}');
-    } catch (e) {
-      print('Error saving subscription status: $e');
-    }
-  }
-
-  /// Cancel subscription (creates cancellation intent)
-  /// Requires authenticated user - userId must be provided
+  /// Cancel subscription
+  @override
   Future<bool> cancelSubscription({
     required String userId,
     required String subscriptionId,
@@ -336,9 +258,7 @@ class StripeCheckoutService implements PaymentService {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/stripe/cancel-subscription'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'userId': userId,
           'subscriptionId': subscriptionId,
@@ -347,104 +267,41 @@ class StripeCheckoutService implements PaymentService {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('Error canceling subscription: $e');
+      print('Error cancelling subscription: $e');
       return false;
     }
   }
-
-  /// Reactivate subscription (remove cancellation)
-  /// Requires authenticated user - userId must be provided
-  Future<bool> reactivateSubscription({
-    required String userId,
-    String? anonymousId,
-    required String subscriptionId,
-  }) async {
+  
+  /// Save subscription status to local cache (PUBLIC)
+  Future<void> saveSubscriptionStatus(SubscriptionStatus status) async {
     try {
-      print('🔄 Reactivating subscription: $subscriptionId');
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/stripe/reactivate-subscription'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'userId': userId,
-          if (anonymousId != null) 'anonymousId': anonymousId,
-          'subscriptionId': subscriptionId,
-        }),
-      );
-
-      print('📡 Reactivate response: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        print('✅ Subscription reactivated successfully');
-        return true;
-      } else {
-        print('❌ Failed to reactivate: ${response.body}');
-        return false;
-      }
-    } catch (e) {
-      print('❌ Error reactivating subscription: $e');
-      return false;
-    }
-  }
-
-  /// Open Stripe Customer Portal for subscription management
-  /// Requires authenticated user - userId must be provided
-  Future<bool> openCustomerPortal({
-    required String userId,
-    String? anonymousId,
-  }) async {
-    try {
-      print('🔵 StripeCheckoutService: Opening customer portal');
-      print('   URL: $baseUrl/stripe/create-portal-session');
-      print('   userId: $userId');
-      if (anonymousId != null) print('   anonymousId: $anonymousId');
-
-      final requestBody = {
-        'userId': userId,
-        if (anonymousId != null) 'anonymousId': anonymousId,
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Serialize status to JSON
+      final jsonMap = {
+        'isActive': status.isActive,
+        'planId': status.planId,
+        'customerId': status.customerId,
+        'subscriptionId': status.subscriptionId,
+        'currentPeriodEnd': status.currentPeriodEnd?.toIso8601String(),
+        'cachedUserId': status.cachedUserId,
+        'cancelAtPeriodEnd': status.cancelAtPeriodEnd,
       };
-
-      final response = await http
-          .post(
-            Uri.parse('$baseUrl/stripe/create-portal-session'),
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode(requestBody),
-          )
-          .timeout(const Duration(seconds: 30));
-
-      print('📡 Portal session response: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final portalUrl = data['url'] as String;
-
-        print('✅ Portal URL received, launching: $portalUrl');
-
-        final uri = Uri.parse(portalUrl);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-          return true;
-        } else {
-          print('❌ Could not launch portal URL');
-          return false;
-        }
-      } else {
-        print('❌ Failed to create portal session: ${response.statusCode}');
-        print('   Response: ${response.body}');
-        return false;
+      
+      await prefs.setString('cached_subscription_status', jsonEncode(jsonMap));
+      print('✅ StripeCheckoutService: Saved subscription status to cache (${status.planId})');
+      
+      // Also cache specifically for this user if userId is available
+      if (status.cachedUserId != null) {
+         await prefs.setString('cached_subscription_status_${status.cachedUserId}', jsonEncode(jsonMap));
       }
     } catch (e) {
-      print('❌ Error opening customer portal: $e');
-      return false;
+      print('❌ StripeCheckoutService: Error saving subscription cache: $e');
     }
   }
 
   /// Simulate Stripe Checkout for testing without real keys
-  Future<bool> _simulateTestCheckout(String userId, String planId,
+  Future<PaymentResult> _simulateTestCheckout(String userId, String planId,
       String billingPeriod, String userEmail) async {
     try {
       print(
@@ -464,13 +321,13 @@ class StripeCheckoutService implements PaymentService {
       );
 
       // Save simulated subscription
-      await _saveSubscriptionStatus(simulatedStatus);
+      await saveSubscriptionStatus(simulatedStatus);
 
       print('TEST MODE: Payment simulated successfully');
-      return true;
+      return const PaymentSuccess();
     } catch (e) {
       print('TEST MODE: Error simulating payment: $e');
-      return false;
+      return const PaymentFailure(message: 'Simulation failed', code: 'test_error');
     }
   }
 
@@ -534,7 +391,7 @@ class StripeCheckoutService implements PaymentService {
             currentPeriodEnd: status.currentPeriodEnd,
             cachedUserId: null, // Will be validated when user logs in
           );
-          await _saveSubscriptionStatus(statusWithUserId);
+          await saveSubscriptionStatus(statusWithUserId);
 
           print(
               '✅ StripeCheckoutService: Subscription restored - ${status.planId}');
@@ -564,7 +421,7 @@ class StripeCheckoutService implements PaymentService {
           success: false,
           errorCode: data['error'] as String?,
           errorMessage:
-              data['message'] as String? ?? 'No active subscriptions found.',
+              data['message'] as String? ?? 'No active subscription found for this email. Please check for typos.',
           expiredSubscriptions: expiredSubs,
         );
       } else if (response.statusCode == 429) {
@@ -604,41 +461,70 @@ class StripeCheckoutService implements PaymentService {
       );
     }
   }
-}
 
-/// Subscription Status Model
-class SubscriptionStatus {
-  final bool isActive;
-  final String planId; // 'free', 'pro', 'advanced'
-  final String? customerId;
-  final String? subscriptionId;
-  final DateTime? currentPeriodEnd;
-  final String? cachedUserId; // User ID this subscription belongs to
-  final bool cancelAtPeriodEnd; // True if subscription is set to cancel
+  /// Open Stripe Customer Portal
+  @override
+  Future<bool> openCustomerPortal({
+    required String userId,
+  }) async {
+    // TEST MODE SIMULATION
+    if (isTestMode && !baseUrl.contains('railway.app')) {
+      print('TEST MODE: Simulating Customer Portal');
+      await Future.delayed(const Duration(seconds: 1));
+      return true; // Pretend we opened it
+    }
 
-  SubscriptionStatus({
-    required this.isActive,
-    required this.planId,
-    this.customerId,
-    this.subscriptionId,
-    this.currentPeriodEnd,
-    this.cachedUserId,
-    this.cancelAtPeriodEnd = false,
-  });
+    try {
+      print('🔵 StripeCheckoutService: Opening customer portal for $userId');
+      
+      final response = await http.post(
+        Uri.parse('$baseUrl/stripe/create-portal-session'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'userId': userId,
+        }),
+      );
 
-  bool get isPaid => planId != 'free' && isActive;
-  bool get isPro => planId == 'pro' && isActive;
-  bool get isAdvanced => planId == 'advanced' && isActive;
-  bool get isCancelling => cancelAtPeriodEnd && isActive; // Active but will cancel
+      print('📡 StripeCheckoutService: Portal response: ${response.statusCode}');
 
-  String get displayName {
-    switch (planId) {
-      case 'pro':
-        return 'Pro Plan';
-      case 'advanced':
-        return 'Advanced Plan';
-      default:
-        return 'Free Plan';
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final url = data['portalUrl'] as String;
+        
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+           await launchUrl(uri, mode: LaunchMode.externalApplication);
+           return true;
+        }
+      }
+    } catch (e) {
+      print('❌ StripeCheckoutService: Error opening portal: $e');
+    }
+    return false;
+  }
+
+  /// Reactivate subscription
+  @override
+  Future<bool> reactivateSubscription({
+    required String userId,
+    required String subscriptionId,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/stripe/reactivate-subscription'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'userId': userId,
+          'subscriptionId': subscriptionId,
+        }),
+      );
+
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error reactivating subscription: $e');
+      return false;
     }
   }
 }
+
+

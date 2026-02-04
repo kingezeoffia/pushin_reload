@@ -18,6 +18,7 @@ import '../theme/enhanced_settings_design_tokens.dart';
 import '../../../state/auth_state_provider.dart';
 import '../../../state/pushin_app_controller.dart';
 import '../../../services/platform/ScreenTimeMonitor.dart';
+import '../../../services/PaymentService.dart';
 import '../../../services/StripeCheckoutService.dart';
 import 'paywall/PaywallScreen.dart';
 import 'settings/EmergencyUnlockSettingsScreen.dart';
@@ -197,10 +198,11 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
 
   /// Called when subscription is cancelled - navigate to cancellation screen
   void _onSubscriptionCancelled() {
+    if (!mounted) return;
     final pushinController = Provider.of<PushinAppController>(context, listen: false);
     final cancelledPlan = pushinController.subscriptionCancelledPlan.value;
 
-    if (cancelledPlan != null && mounted) {
+    if (cancelledPlan != null) {
       debugPrint('😢 Settings: Subscription cancellation detected');
       debugPrint('   - Cancelled plan: \$cancelledPlan');
 
@@ -394,7 +396,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                         title: 'Emergency Unlock',
                         subtitle: pushinController.planTier == 'pro' || pushinController.planTier == 'advanced'
                             ? 'Set timer for urgent access'
-                            : 'Pro Feature',
+                            : 'Only available for Pro / Advanced users',
                         onTap: () => _showEmergencyUnlockDialog(),
                         showDivider: false,
                         iconColor: const Color(0xFFEF4444), // dangerRed color
@@ -435,7 +437,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                       EnhancedSettingsTile(
                         icon: Icons.mail_rounded,
                         title: 'Contact Support',
-                        subtitle: 'Questions? Found a bug? Let us know.',
+                        subtitle: 'Found a bug? Let us know!',
                         onTap: () => _launchEmail(),
                         showDivider: false,
                         iconColor: const Color(0xFF60A5FA),
@@ -502,6 +504,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                         iconColor: const Color(0xFFFFEB3B), // yellow color
                         onTap: () async {
                           HapticFeedback.lightImpact();
+                          if (!mounted) return;
 
                           final controller = Provider.of<PushinAppController>(
                               context,
@@ -544,22 +547,20 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
 
                             if (userId != null) {
                               // Show simple loading feedback
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                      'Opening subscription management...'),
-                                  duration: Duration(seconds: 2),
-                                ),
-                              );
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Opening subscription management...'),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              }
 
-                              final stripeService = StripeCheckoutService(
-                                baseUrl:
-                                    'https://pushin-production.up.railway.app/api',
-                                isTestMode: true,
-                              );
+                              final paymentService = PaymentConfig.createService();
 
                               // Open portal
-                              await stripeService.openCustomerPortal(
+                              await paymentService.openCustomerPortal(
                                 userId: userId,
                               );
                             } else {
@@ -579,7 +580,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                 ),
               ),
 
-              const SliverToBoxAdapter(child: SizedBox(height: 40)),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
               // Logout Button
               SliverToBoxAdapter(
@@ -1107,6 +1108,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
 
   void _showEmergencyUnlockDialog() {
     HapticFeedback.lightImpact();
+    if (!mounted) return;
     
     final controller = Provider.of<PushinAppController>(context, listen: false);
     final planTier = controller.planTier;
@@ -1154,7 +1156,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open \$url')),
+          SnackBar(content: Text('Could not open $url')),
         );
       }
     }
@@ -1263,9 +1265,11 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
 
       if (image != null) {
         await _cropAndSaveImage(image.path);
+      } else {
+        // User cancelled, no action needed
       }
     } catch (e) {
-      debugPrint('Failed to take photo: \$e');
+      debugPrint('Failed to take photo: $e');
     }
   }
 
@@ -1278,9 +1282,11 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
 
       if (image != null) {
         await _cropAndSaveImage(image.path);
+      } else {
+         // User cancelled
       }
     } catch (e) {
-      debugPrint('Failed to pick image: \$e');
+      debugPrint('Failed to pick image: $e');
     }
   }
 
@@ -1319,7 +1325,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
         await _saveProfileImage(croppedFile.path);
       }
     } catch (e) {
-      debugPrint('Failed to crop image: \$e');
+      debugPrint('Failed to crop image: $e');
     }
   }
 
@@ -1327,33 +1333,49 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
     try {
       // Get app documents directory
       final directory = await getApplicationDocumentsDirectory();
-      final String profileImageDir = '\${directory.path}/profile_images';
+      final String profileImageDir = '${directory.path}/profile_images';
 
       // Create directory if it doesn't exist
       await Directory(profileImageDir).create(recursive: true);
 
       // Generate unique filename
       final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
-      final String extension = path.extension(imagePath);
-      final String fileName = 'profile_\$timestamp\$extension';
-      final String savedPath = '\$profileImageDir/\$fileName';
+      // Use a standard extension if original is weird, but try to keep it
+      String extension = path.extension(imagePath);
+      if (extension.isEmpty) extension = '.jpg';
+      
+      final String fileName = 'profile_$timestamp$extension';
+      final String savedPath = '$profileImageDir/$fileName';
 
       // Copy image to permanent location
       await File(imagePath).copy(savedPath);
+
+      if (!mounted) return;
 
       // Update auth provider with new image path
       final authProvider =
           Provider.of<AuthStateProvider>(context, listen: false);
       await authProvider.setProfileImagePath(savedPath);
+      
+      // Force UI rebuild
+      setState(() {});
+
+      if (mounted) {
+        // Force UI rebuild
+        setState(() {});
+      }
+      
+      debugPrint('✅ Image saved successfully to: $savedPath');
 
       // TODO: Upload to backend server when ready
     } catch (e) {
-      debugPrint('Failed to save image: \$e');
+      debugPrint('Failed to save image: $e');
     }
   }
 
   void _handleUpgrade() {
     HapticFeedback.heavyImpact();
+    if (!mounted) return;
 
     // Determine which plan to pre-select based on current plan tier
     final controller = Provider.of<PushinAppController>(context, listen: false);
@@ -1386,6 +1408,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
 
   void _handleLogout() {
     HapticFeedback.lightImpact();
+    if (!mounted) return;
     showGeneralDialog(
       context: context,
       barrierDismissible: false,
@@ -1425,20 +1448,21 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
 
   void _showFocusSessionsDialog() async {
     HapticFeedback.lightImpact();
+    if (!mounted) return;
     try {
       final appController = context.read<PushinAppController>();
 
       // Use the controller's method which handles permission request + picker
       final success = await appController.presentIOSAppPicker();
 
-      if (!success && context.mounted) {
+      if (!success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
               content: Text('Screen Time access is required to block apps')),
         );
       }
     } catch (e) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to open app picker')),
         );
@@ -1448,6 +1472,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
 
   void _showRatingScreen() {
     HapticFeedback.lightImpact();
+    if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => RatingScreen(
@@ -1581,9 +1606,11 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       if (success) {
         widget.onProfileUpdated();
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile updated successfully')),
+          );
+        }
       } else {
         setState(
             () => _errorMessage = authProvider.errorMessage ?? 'Update failed');

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
-import '../../widgets/pill_navigation_bar.dart';
+
 import 'package:pushin_reload/services/ios_rating_service.dart';
 
 /// Rating Screen - Prompts users to rate the app
@@ -42,7 +42,7 @@ class _RatingScreenState extends State<RatingScreen> {
                 padding: EdgeInsets.zero,
                 children: [
                   // Consistent spacing with other screens
-                  SizedBox(height: screenHeight * 0.08),
+                  SizedBox(height: screenHeight * 0.04),
 
                   // Heading
                   Padding(

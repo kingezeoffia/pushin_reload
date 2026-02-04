@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../../state/pushin_app_controller.dart';
 import '../../domain/PushinState.dart';
 import '../../state/auth_state_provider.dart';
-import '../../services/StripeCheckoutService.dart';
+import '../../services/PaymentService.dart';
 import '../widgets/AppBlockOverlay.dart';
 import '../widgets/EmergencyUnlockDialog.dart';
 import '../widgets/GOStepsBackground.dart';
@@ -168,11 +168,7 @@ class _HomeScreenState extends State<HomeScreen>
                             // Check if user has paid subscription for emergency unlock
                             final authProvider =
                                 context.read<AuthStateProvider>();
-                            final stripeService = StripeCheckoutService(
-                              baseUrl:
-                                  'https://pushin-production.up.railway.app/api',
-                              isTestMode: true,
-                            );
+                            final paymentService = PaymentConfig.createService();
 
                             final currentId = authProvider.currentUser?.id;
                             if (currentId == null) {
@@ -190,7 +186,7 @@ class _HomeScreenState extends State<HomeScreen>
                             }
 
                             final subscriptionStatus =
-                                await stripeService.checkSubscriptionStatus(
+                                await paymentService.checkSubscriptionStatus(
                               userId: currentId,
                             );
 

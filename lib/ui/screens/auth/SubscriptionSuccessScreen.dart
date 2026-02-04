@@ -7,7 +7,7 @@ import '../../widgets/pill_navigation_bar.dart';
 import '../../navigation/main_tab_navigation.dart';
 import '../../../state/auth_state_provider.dart';
 import '../../../state/pushin_app_controller.dart';
-import '../../../services/StripeCheckoutService.dart';
+import '../../../services/PaymentService.dart';
 
 /// Subscription Success Screen - Welcome screen shown after successful payment
 ///
@@ -65,7 +65,7 @@ class SubscriptionSuccessScreen extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: (isPro
                                     ? const Color(0xFF60A5FA)
-                                    : const Color(0xFF8B5CF6))
+                                    : const Color(0xFFFBBF24))
                                 .withOpacity(0.2),
                             borderRadius: BorderRadius.circular(24),
                           ),
@@ -74,7 +74,7 @@ class SubscriptionSuccessScreen extends StatelessWidget {
                             size: 40,
                             color: isPro
                                 ? const Color(0xFF60A5FA)
-                                : const Color(0xFF8B5CF6),
+                                : const Color(0xFFFBBF24),
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -96,8 +96,8 @@ class SubscriptionSuccessScreen extends StatelessWidget {
                                     const Color(0xFF93C5FD)
                                   ]
                                 : [
-                                    const Color(0xFF8B5CF6),
-                                    const Color(0xFFA78BFA)
+                                    const Color(0xFFFBBF24),
+                                    const Color(0xFFFCD34D)
                                   ],
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
@@ -280,7 +280,7 @@ class _FeatureItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final accentColor = isPro
         ? const Color(0xFF60A5FA) // Blue for Pro
-        : const Color(0xFF8B5CF6); // Purple for Advanced
+        : const Color(0xFFFBBF24); // Gold/Amber for Advanced
 
     return Container(
       padding: const EdgeInsets.all(16),

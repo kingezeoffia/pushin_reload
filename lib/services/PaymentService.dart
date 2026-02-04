@@ -10,7 +10,7 @@ import 'MockPaymentService.dart';
 ///
 /// Note: All payment methods require authenticated user (userId required)
 abstract class PaymentService {
-  Future<bool> launchCheckout({
+  Future<PaymentResult> launchCheckout({
     required String userId,
     required String planId,
     required String billingPeriod, // 'monthly' or 'yearly'
@@ -39,6 +39,18 @@ abstract class PaymentService {
   Future<RestorePurchaseResult> restoreSubscriptionByEmail({
     required String email,
   });
+
+  /// Save subscription status to local cache
+  Future<void> saveSubscriptionStatus(SubscriptionStatus status);
+
+  /// Open external customer portal for subscription management
+  Future<bool> openCustomerPortal({required String userId});
+
+  /// Reactivate a cancelled subscription
+  Future<bool> reactivateSubscription({
+    required String userId,
+    required String subscriptionId,
+  });
 }
 
 /// Payment Service Factory
@@ -47,20 +59,20 @@ abstract class PaymentService {
 class PaymentServiceFactory {
   static PaymentService create({
     required PaymentMode mode,
-    String? backendUrl,
+    required String backendUrl, // Backend URL is now REQUIRED
   }) {
     switch (mode) {
       case PaymentMode.stripeLive:
         return StripeCheckoutService(
-          baseUrl: backendUrl ?? 'https://api.pushinapp.com/api',
+          baseUrl: backendUrl,
           isTestMode: false,
-        ) as PaymentService;
+        );
 
       case PaymentMode.stripeTest:
         return StripeCheckoutService(
-          baseUrl: backendUrl ?? 'https://your-test-backend.up.railway.app/api',
+          baseUrl: backendUrl,
           isTestMode: true,
-        ) as PaymentService;
+        );
 
       case PaymentMode.mock:
         return MockPaymentServiceAdapter();
@@ -75,22 +87,52 @@ enum PaymentMode {
   mock, // Mock service for development
 }
 
+/// Result of a payment attempt
+sealed class PaymentResult {
+  const PaymentResult();
+}
+
+class PaymentSuccess extends PaymentResult {
+  const PaymentSuccess();
+}
+
+class PaymentFailure extends PaymentResult {
+  final String message;
+  final String? code;
+  
+  const PaymentFailure({
+    required this.message,
+    this.code,
+  });
+}
+
+class PaymentCancelled extends PaymentResult {
+  const PaymentCancelled();
+}
+
+
 /// Adapter to make MockPaymentService compatible with PaymentService interface
 class MockPaymentServiceAdapter implements PaymentService {
   final MockPaymentService _mockService = MockPaymentService();
 
   @override
-  Future<bool> launchCheckout({
+  Future<PaymentResult> launchCheckout({
     required String userId,
     required String planId,
     required String billingPeriod,
     required String userEmail,
-  }) {
-    return _mockService.launchMockCheckout(
+  }) async {
+    final success = await _mockService.launchMockCheckout(
       userId: userId,
       planId: planId,
       userEmail: userEmail,
     );
+    
+    if (success) {
+      return const PaymentSuccess();
+    } else {
+      return const PaymentFailure(message: 'Mock payment failed');
+    }
   }
 
   @override
@@ -112,10 +154,14 @@ class MockPaymentServiceAdapter implements PaymentService {
   }
 
   @override
-  Future<SubscriptionStatus?> getCachedSubscriptionStatus() {
+  Future<SubscriptionStatus?> getCachedSubscriptionStatus({String? userId}) {
     // Mock service needs userId, so this is not directly supported
     // In real usage, you'd pass userId through the app state
-    throw UnimplementedError('Use checkSubscriptionStatus with userId instead');
+    // But we can try to return if mock service has a way, else null
+    if (userId != null) {
+       return _mockService.getCachedSubscriptionStatus(userId: userId);
+    }
+    return Future.value(null);
   }
 
   @override
@@ -128,6 +174,14 @@ class MockPaymentServiceAdapter implements PaymentService {
       subscriptionId: subscriptionId,
     );
   }
+  
+  @override
+  Future<void> saveSubscriptionStatus(SubscriptionStatus status) async {
+     // Mock service likely handles this internally or we can just ignore
+     // OR ideally implement it if we want consistency.
+     // For now, no-op or simple print
+     print('MockPaymentServiceAdapter: saveSubscriptionStatus called (no-op)');
+  }
 
   @override
   Future<RestorePurchaseResult> restoreSubscriptionByEmail({
@@ -135,14 +189,30 @@ class MockPaymentServiceAdapter implements PaymentService {
   }) {
     return _mockService.restoreMockSubscriptionByEmail(email: email);
   }
+
+  @override
+  Future<bool> openCustomerPortal({required String userId}) async {
+    print('MockPaymentServiceAdapter: openCustomerPortal called (simulated)');
+    await Future.delayed(const Duration(seconds: 1));
+    return true;
+  }
+
+  @override
+  Future<bool> reactivateSubscription({
+    required String userId,
+    required String subscriptionId,
+  }) async {
+    print('MockPaymentServiceAdapter: reactivateSubscription called (simulated)');
+    await Future.delayed(const Duration(seconds: 1));
+    return true;
+  }
 }
 
 /// Configuration Helper
 class PaymentConfig {
   static PaymentMode get currentMode {
-    // You can read this from environment variables, shared preferences, etc.
     const modeString =
-        String.fromEnvironment('PAYMENT_MODE', defaultValue: 'mock');
+        String.fromEnvironment('PAYMENT_MODE', defaultValue: 'stripe_test');
     switch (modeString) {
       case 'stripe_live':
         return PaymentMode.stripeLive;
@@ -155,10 +225,18 @@ class PaymentConfig {
   }
 
   static String get backendUrl {
-    return const String.fromEnvironment(
+    // Default to production URL if not specified, BUT force user to check this
+    // for production builds.
+    const url = String.fromEnvironment(
       'BACKEND_URL',
       defaultValue: 'https://pushin-production.up.railway.app/api',
     );
+    
+    if (url.isEmpty) {
+       // Fallback or throw error depending on strictness
+       return 'https://pushin-production.up.railway.app/api'; 
+    }
+    return url;
   }
 
   static PaymentService createService() {
@@ -168,26 +246,6 @@ class PaymentConfig {
     );
   }
 }
-
-/* USAGE EXAMPLES:
-
-// 1. Using Configuration (Recommended)
-final paymentService = PaymentConfig.createService();
-
-// 2. Manual Configuration
-final paymentService = PaymentServiceFactory.create(
-  mode: PaymentMode.mock, // or PaymentMode.stripeTest
-  backendUrl: 'https://your-backend-url/api',
-);
-
-// 3. Flutter Build Configuration
-flutter run --dart-define=PAYMENT_MODE=stripe_test --dart-define=BACKEND_URL=https://test-api.example.com/api
-
-// 4. Switch modes easily
-// - Development: PaymentMode.mock or PaymentMode.stripeTest
-// - Production: PaymentMode.stripeLive
-
-*/
 
 /// Result of restore purchase attempt
 class RestorePurchaseResult {
@@ -226,5 +284,42 @@ class ExpiredSubscription {
       planId: json['planId'] as String,
       expiredOn: DateTime.parse(json['expiredOn'] as String),
     );
+  }
+}
+
+/// Subscription Status Model
+class SubscriptionStatus {
+  final bool isActive;
+  final String planId; // 'free', 'pro', 'advanced'
+  final String? customerId;
+  final String? subscriptionId;
+  final DateTime? currentPeriodEnd;
+  final String? cachedUserId; // User ID this subscription belongs to
+  final bool cancelAtPeriodEnd; // True if subscription is set to cancel
+
+  SubscriptionStatus({
+    required this.isActive,
+    required this.planId,
+    this.customerId,
+    this.subscriptionId,
+    this.currentPeriodEnd,
+    this.cachedUserId,
+    this.cancelAtPeriodEnd = false,
+  });
+
+  bool get isPaid => planId != 'free' && isActive;
+  bool get isPro => planId == 'pro' && isActive;
+  bool get isAdvanced => planId == 'advanced' && isActive;
+  bool get isCancelling => cancelAtPeriodEnd && isActive; // Active but will cancel
+
+  String get displayName {
+    switch (planId) {
+      case 'pro':
+        return 'Pro Plan';
+      case 'advanced':
+        return 'Advanced Plan';
+      default:
+        return 'Free Plan';
+    }
   }
 }
