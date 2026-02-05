@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../state/pushin_app_controller.dart';
+import '../../../domain/PushinState.dart';
 
 /// Sleek, minimal GreetingCard matching onboarding aesthetic
 /// - Clean typography
@@ -175,17 +176,35 @@ class _GreetingCardState extends State<GreetingCard>
   }
 
   Widget _buildMotivationalMessage() {
+    // Watch controller for state changes
+    final controller = context.watch<PushinAppController>();
+    final isUnlocked = controller.currentState == PushinState.unlocked;
+
+    // Define content based on state
+    final String text = isUnlocked
+        ? 'Enjoy your hard earned screen time'
+        : 'Complete a workout to unlock your apps';
+    
+    final String iconAsset = isUnlocked
+        ? 'assets/icons/unlocked_icon.png'
+        : 'assets/icons/locked_icon.png';
+
+    final Color iconColor = isUnlocked
+        ? const Color(0xFF4ADE80).withOpacity(0.9) // Green
+        : const Color(0xFFEF4444).withOpacity(0.9); // Red
+
     return Row(
       children: [
-        Icon(
-          Icons.fitness_center_rounded,
-          size: 16,
-          color: const Color(0xFF4ADE80).withOpacity(0.9),
+        Image.asset(
+          iconAsset,
+          width: 16,
+          height: 16,
+          color: iconColor,
         ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            'Complete a workout to unlock your apps',
+            text,
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w400,

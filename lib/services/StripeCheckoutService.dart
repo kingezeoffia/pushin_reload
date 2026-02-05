@@ -201,6 +201,12 @@ class StripeCheckoutService implements PaymentService {
           cachedUserId: userId,
           cancelAtPeriodEnd: data['cancelAtPeriodEnd'] ?? false,
         );
+
+        print('📡 Server Subscription Status Detail:');
+        print('   - isActive: ${status.isActive}');
+        print('   - planId: ${status.planId}');
+        print('   - expiry: ${status.currentPeriodEnd}');
+        print('   - cancelAtPeriodEnd: ${status.cancelAtPeriodEnd}');
         
         // Update cache
         await saveSubscriptionStatus(status);
@@ -486,15 +492,24 @@ class StripeCheckoutService implements PaymentService {
       );
 
       print('📡 StripeCheckoutService: Portal response: ${response.statusCode}');
+      print('   Body: ${response.body}'); // Debugging: Print full body
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final url = data['portalUrl'] as String;
+        // Backend might return 'portalUrl' or just 'url'
+        final url = (data['portalUrl'] ?? data['url']) as String?; // Safe nullable cast
         
-        final uri = Uri.parse(url);
-        if (await canLaunchUrl(uri)) {
-           await launchUrl(uri, mode: LaunchMode.externalApplication);
-           return true;
+        if (url != null) {
+          final uri = Uri.parse(url);
+          print('🔵 StripeCheckoutService: Launching portal URL: $url');
+          print('   - LaunchMode: externalApplication (Platform browser)');
+          
+          if (await canLaunchUrl(uri)) {
+             await launchUrl(uri, mode: LaunchMode.externalApplication);
+             return true;
+          }
+        } else {
+          print('❌ StripeCheckoutService: "portalUrl" is missing or null in response');
         }
       }
     } catch (e) {

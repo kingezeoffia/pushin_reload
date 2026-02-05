@@ -242,7 +242,7 @@ class _HowItWorksBlockAppsScreenState extends State<HowItWorksBlockAppsScreen> {
                     child: Column(
                       children: [
                         _ValuePoint(
-                          icon: Icons.block,
+                          icon: Icons.lock_rounded,
                           text: 'Block distracting apps',
                         ),
                         SizedBox(height: 16),

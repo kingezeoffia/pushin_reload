@@ -103,7 +103,7 @@ class ShieldNotificationMonitor {
   Future<void> _showWorkoutNotification(String notificationId) async {
     try {
       await _notificationService.showWorkoutReminder(
-        title: 'Earn Screen Time',
+        title: 'Earn Screen Time 📱',
         body: 'Complete a quick workout to unblock your apps',
         badgeNumber: null, // Let system handle badge
       );

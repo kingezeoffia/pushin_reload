@@ -14,6 +14,7 @@ import '../auth/AdvancedUpgradeWelcomeScreen.dart';
 import '../auth/SignUpScreen.dart';
 import '../auth/SignInScreen.dart';
 import '../subscription/SubscriptionCancelledScreen.dart';
+import '../../widgets/SubscriptionCancellationBanner.dart';
 
 /// Paywall Screen - Free Trial with Pro or Advanced plan
 ///
@@ -373,23 +374,15 @@ class _PaywallScreenState extends State<PaywallScreen>
       debugPrint(
           '🔄 Paywall: Plan tier changed from $_currentSubscriptionPlan to $newPlanTier');
 
-      // If a plan was pre-selected (e.g., from dashboard) or manually selected by user,
-      // only override it if the user's subscription actually upgraded (not just initialized)
-      if (_hasPreSelectedPlan || _hasUserManuallySelectedPlan) {
-        // Only refresh if the user actually became a paid subscriber
-        // Don't override pre-selected or manually selected plans with "next best plan" logic
-        final wasFree = _currentSubscriptionPlan == null ||
-            _currentSubscriptionPlan == 'free';
-
-        if (wasFree && newPlanTier != 'free') {
-          // User became a paid subscriber - refresh to show current plan
-          _refreshSubscriptionStatus();
+      // Update state explicitly from controller, avoiding network race conditions
+      setState(() {
+        _currentSubscriptionPlan = newPlanTier;
+        
+        // Only update selected plan if user hasn't manually selected one AND no plan was pre-selected
+        if (!_hasUserManuallySelectedPlan && !_hasPreSelectedPlan) {
+            _selectedPlan = _getNextBestPlanSync(newPlanTier);
         }
-        // If user was already paid or still free, keep the selected plan
-      } else {
-        // No pre-selected or manual plan - normal refresh behavior
-        _refreshSubscriptionStatus();
-      }
+      });
     }
   }
 
@@ -400,11 +393,11 @@ class _PaywallScreenState extends State<PaywallScreen>
     try {
       debugPrint('🔄 Paywall: Refreshing subscription status from server...');
 
-      // Re-check subscription status from server (not just cache)
+      // Re-check subscription status from server
       final paymentService = PaymentConfig.createService();
-
       final authProvider = context.read<AuthStateProvider>();
       final currentUser = authProvider.currentUser;
+      final pushinController = context.read<PushinAppController>(); // Get controller
 
       SubscriptionStatus? freshStatus;
 
@@ -424,7 +417,23 @@ class _PaywallScreenState extends State<PaywallScreen>
         updatedPlan = freshStatus.planId;
         debugPrint('🔄 Paywall: Refreshed subscription status');
         debugPrint('   - Plan: $updatedPlan');
-        debugPrint('   - cancelAtPeriodEnd: ${freshStatus.cancelAtPeriodEnd}');
+      }
+
+      // CRITICAL FIX: Trust PushinAppController if it shows a paid plan, 
+      // even if the server response (freshStatus) is still stale or 'free'.
+      // This prevents the badge from flickering back to "Free" immediately after upgrade.
+      final controllerPlan = pushinController.planTier;
+      if ((controllerPlan == 'pro' || controllerPlan == 'advanced') && 
+          (updatedPlan == null || updatedPlan == 'free')) {
+        debugPrint('🛡️ Paywall: Overriding stale server status ($updatedPlan) with controller status ($controllerPlan)');
+        updatedPlan = controllerPlan;
+        
+        // Create a synthetic status if needed to ensure logic works
+        if (freshStatus == null || !freshStatus.isActive) {
+             // We don't have a real status object, but we know the user is paid.
+             // We can keep specific verified fields null if we want, but the PLAN ID is key for the badge.
+             // Relying on updatedPlan for the badge is the main fix.
+        }
       }
 
       // Check if subscription was just cancelled
@@ -447,8 +456,7 @@ class _PaywallScreenState extends State<PaywallScreen>
         // Show cancellation screen if subscription was just cancelled
         if (wasNotCancelling && isNowCancelling) {
           debugPrint('🚨 CANCELLATION DETECTED in _refreshSubscriptionStatus!');
-          debugPrint('   - Previous plan: ${previousStatus?.planId}');
-
+          
           // Small delay to ensure state update completes
           Future.delayed(const Duration(milliseconds: 500), () {
             if (mounted) {
@@ -745,7 +753,26 @@ class _PaywallScreenState extends State<PaywallScreen>
                             ),
                           ),
 
+
                           SizedBox(height: screenHeight * 0.03),
+
+                          // Cancellation Banner
+                          if (_currentSubscriptionStatus?.cancelAtPeriodEnd ==
+                                  true &&
+                              _currentSubscriptionStatus?.currentPeriodEnd !=
+                                  null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 24),
+                              child: SubscriptionCancellationBanner(
+                                periodEndDate:
+                                    _currentSubscriptionStatus!.currentPeriodEnd!,
+                                planName:
+                                    _currentSubscriptionPlan == 'advanced'
+                                        ? 'Advanced'
+                                        : 'Pro',
+                                onReactivate: _handleReactivateSubscription,
+                              ),
+                            ),
 
                           // Free Version Card
                           _PlanCard(
@@ -761,7 +788,7 @@ class _PaywallScreenState extends State<PaywallScreen>
                             isSelected: _selectedPlan == 'free',
                             isPopular: false,
                             isCurrentPlan:
-                                false, // Free plan doesn't show as "current"
+                                _currentSubscriptionPlan == 'free' || _currentSubscriptionPlan == null,
                             onTap: _isInitializingPlan
                                 ? null
                                 : () {

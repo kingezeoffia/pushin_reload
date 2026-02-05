@@ -120,14 +120,14 @@ class NewUserWelcomeScreen extends StatelessWidget {
                     child: Column(
                       children: [
                         _RuleItem(
-                          icon: Icons.fitness_center,
+                          icon: Icons.auto_awesome,
                           title: 'Smart Workout Tracking',
                           description:
                               'AI-powered rep counting and form guidance',
                         ),
                         const SizedBox(height: 16),
                         _RuleItem(
-                          icon: Icons.block,
+                          icon: Icons.lock_rounded,
                           title: 'App Blocking',
                           description:
                               'Stay focused with customizable restrictions',

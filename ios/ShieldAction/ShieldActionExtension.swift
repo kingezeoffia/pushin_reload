@@ -108,8 +108,8 @@ class ShieldActionExtension: ShieldActionDelegate, NSExtensionRequestHandling {
 
                 // Create notification content with MAXIMUM priority
                 let content = UNMutableNotificationContent()
-                content.title = "🏋️ Earn Screen Time"
-                content.body = "Tap to start your workout and unlock apps"
+                content.title = "Earn Screen Time 📱"
+                content.body = "Tap to start your workout!"
                 content.sound = .defaultCritical // CRITICAL sound for maximum attention
                 content.badge = 1
                 content.interruptionLevel = .critical // iOS 15+ critical interruption

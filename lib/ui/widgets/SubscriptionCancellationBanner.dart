@@ -24,8 +24,8 @@ class SubscriptionCancellationBanner extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Colors.orange.shade400,
-            Colors.orange.shade600,
+            Colors.red.shade500,
+            Colors.red.shade700,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -33,7 +33,7 @@ class SubscriptionCancellationBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.orange.withOpacity(0.3),
+            color: Colors.red.withOpacity(0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -164,7 +164,7 @@ class SubscriptionCancellationBanner extends StatelessWidget {
                     onPressed: onReactivate,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
-                      foregroundColor: Colors.orange.shade700,
+                      foregroundColor: Colors.red.shade700,
                       elevation: 0,
                       shadowColor: Colors.transparent,
                       shape: RoundedRectangleBorder(

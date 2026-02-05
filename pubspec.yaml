@@ -106,4 +106,12 @@ dev_dependencies:
   hive_generator: ^2.0.1
   build_runner: ^2.4.7
   flutter_native_splash: ^2.4.2
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  remove_alpha_ios: true
+  image_path: "assets/icons/appstore_pushin_icon.png"
+  image_path_ios_dark_transparent: "assets/icons/appstore_pushin_icon_dark.png"
 

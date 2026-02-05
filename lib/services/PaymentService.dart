@@ -26,7 +26,7 @@ abstract class PaymentService {
     required String userId,
   });
 
-  Future<SubscriptionStatus?> getCachedSubscriptionStatus();
+  Future<SubscriptionStatus?> getCachedSubscriptionStatus({String? userId});
 
   Future<bool> cancelSubscription({
     required String userId,

@@ -296,13 +296,13 @@ class _HowItWorksNotificationPermissionScreenState
                     child: Column(
                       children: [
                         _ValuePoint(
-                          icon: Icons.lock_open_rounded,
+                          icon: Icons.vpn_key_rounded,
                           title: 'Automatic Unlocking',
                           description: 'Apps unlock automatically after you complete your workout',
                         ),
                         SizedBox(height: 16),
                         _ValuePoint(
-                          icon: Icons.fitness_center_rounded,
+                          icon: Icons.notifications_rounded,
                           title: 'Workout Reminders',
                           description: 'Get notified when it\'s time to unlock your apps',
                         ),

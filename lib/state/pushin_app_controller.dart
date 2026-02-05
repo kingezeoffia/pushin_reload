@@ -111,6 +111,7 @@ class PushinAppController extends ChangeNotifier {
 
   // Deep link handler
   DeepLinkHandler? _deepLinkHandler;
+  DeepLinkHandler? get deepLinkHandler => _deepLinkHandler;
 
   // Emergency Unlock State
   bool _emergencyUnlockEnabled = false;
@@ -137,6 +138,9 @@ class PushinAppController extends ChangeNotifier {
   List<String> get iosAppTokens => _iosAppTokens;
   List<String> get iosCategoryTokens => _iosCategoryTokens;
   bool get hasIOSBlockingConfigured => _iosBlockingConfigured;
+
+  // Screen Time Authorization Getter
+  bool get isScreenTimeAuthorized => _focusModeService?.isAuthorized ?? false;
 
   // Default blocked apps (common distracting apps)
   static const List<Map<String, String>> defaultBlockedApps = [
@@ -271,7 +275,7 @@ class PushinAppController extends ChangeNotifier {
 
     _deepLinkHandler = DeepLinkHandler(
       stripeService: paymentService,
-      getCurrentUserId: () => _authProvider.currentUser?.id,
+      getCurrentUserId: () => _authProvider.currentUser?.id?.toString(),
       onPaymentSuccess: (status) async {
         print('═══════════════════════════════════════════════');
         print('💰 PAYMENT SUCCESS CALLBACK');
@@ -315,7 +319,7 @@ class PushinAppController extends ChangeNotifier {
               customerId: status.customerId,
               subscriptionId: status.subscriptionId,
               currentPeriodEnd: status.currentPeriodEnd,
-              cachedUserId: currentUserId,
+              cachedUserId: currentUserId.toString(),
             );
             await _paymentService.saveSubscriptionStatus(statusWithUserId);
             print(
@@ -951,8 +955,7 @@ class PushinAppController extends ChangeNotifier {
         print('⚠️ No current workout found for history recording');
       }
 
-      // Record workout completion for streak and rating
-      await recordWorkoutCompletion();
+
 
       // Complete workout in core - this transitions to UNLOCKED state
       _core.completeWorkout(now);
@@ -999,22 +1002,12 @@ class PushinAppController extends ChangeNotifier {
       await recordWorkoutCompletion();
 
       // Increment workout count for rating prompts (first workout trigger)
-      try {
-        final ratingService = await RatingService.create();
-        await ratingService.incrementWorkoutCount();
-        debugPrint('⭐ Workout count incremented to ${ratingService.workoutCount}');
-        
-        // Trigger rating check callback after increment completes
-        // This ensures the UI can check the rating conditions with the updated count
-        if (onCheckWorkoutRating != null) {
-          debugPrint('⭐ Calling onCheckWorkoutRating callback');
-          // Use post-frame callback to ensure UI is ready
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            onCheckWorkoutRating?.call();
-          });
-        }
-      } catch (e) {
-        debugPrint('⚠️ Error updating rating service: $e');
+      // Trigger rating check callback
+      if (onCheckWorkoutRating != null) {
+        debugPrint('⭐ Calling onCheckWorkoutRating callback');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          onCheckWorkoutRating?.call();
+        });
       }
 
       notifyListeners();
@@ -1511,14 +1504,14 @@ class PushinAppController extends ChangeNotifier {
     }
 
     // 2. Check Local Cache
-    final cachedStatus = await paymentService.getCachedSubscriptionStatus();
+    final cachedStatus = await paymentService.getCachedSubscriptionStatus(userId: currentUserId.toString()); // FIX: Pass userId to check specific cache first
     print(
         '📦 Cached status: ${cachedStatus?.planId}, active: ${cachedStatus?.isActive}, cachedUserId: ${cachedStatus?.cachedUserId}');
 
     // 3. Validate Cache - must belong to current user
     if (cachedStatus != null &&
         cachedStatus.isActive &&
-        cachedStatus.cachedUserId == currentUserId) {
+        cachedStatus.cachedUserId == currentUserId.toString()) {
       _planTier = cachedStatus.planId;
       _previousPlanTier = _planTier;
       await _usageTracker?.updatePlanTier(_planTier);
@@ -1540,7 +1533,7 @@ class PushinAppController extends ChangeNotifier {
         customerId: cachedStatus.customerId,
         subscriptionId: cachedStatus.subscriptionId,
         currentPeriodEnd: cachedStatus.currentPeriodEnd,
-        cachedUserId: currentUserId,
+        cachedUserId: currentUserId.toString(),
       );
 
       await paymentService.saveSubscriptionStatus(claimedStatus);
@@ -1553,7 +1546,7 @@ class PushinAppController extends ChangeNotifier {
     }
 
     // 5. Cache is missing, inactive, or belongs to different user - fetch from server
-    if (cachedStatus != null && cachedStatus.cachedUserId != currentUserId) {
+    if (cachedStatus != null && cachedStatus.cachedUserId != currentUserId.toString()) {
       print(
           '⚠️ Cache belongs to different user (${cachedStatus.cachedUserId}). Fetching fresh data...');
     } else {
@@ -1563,9 +1556,14 @@ class PushinAppController extends ChangeNotifier {
     try {
       print(
           '🌐 Fetching subscription status from server for user: $currentUserId');
-      final freshStatus = await paymentService.checkSubscriptionStatus(
-        userId: currentUserId,
-      );
+      final currentUser = _authProvider.currentUser;
+      SubscriptionStatus? freshStatus;
+      if (currentUser != null) {
+        // Fetch fresh status from server
+        freshStatus = await paymentService.checkSubscriptionStatus(
+          userId: currentUser.id.toString(),
+        );
+      }
 
       if (freshStatus != null && freshStatus.isActive) {
         _planTier = freshStatus.planId;
@@ -1579,7 +1577,7 @@ class PushinAppController extends ChangeNotifier {
         _previousPlanTier = 'free';
         // Cache the 'free' status with user ID to avoid repeated server calls
         await paymentService.saveSubscriptionStatus(SubscriptionStatus(
-            isActive: false, planId: 'free', cachedUserId: currentUserId));
+            isActive: false, planId: 'free', cachedUserId: currentUserId.toString()));
         await _usageTracker?.updatePlanTier(_planTier);
         print('✅ Confirmed free tier on server.');
       }

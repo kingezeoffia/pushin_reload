@@ -323,8 +323,7 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid>
                                   : app.name;
                           return AppUsageData(
                             name: displayName,
-                            usageTime:
-                                double.parse(app.usageHours.toStringAsFixed(1)),
+                            usageTime: app.usageHours,
                             icon: Icons.apps, // Placeholder - not used anymore
                           );
                         }).toList(),
@@ -648,6 +647,12 @@ class _MostUsedAppsWidgetState extends State<MostUsedAppsWidget>
     super.dispose();
   }
 
+  String _formatDuration(double hoursDecimal) {
+    final int hours = hoursDecimal.floor();
+    final int minutes = ((hoursDecimal - hours) * 60).round();
+    return '$hours:${minutes.toString().padLeft(2, '0')}h';
+  }
+
   Widget _buildAppIcon(String appName) {
     // Try to load actual app icon image
     String? assetPath = _getAppIconAssetPath(appName);
@@ -917,7 +922,7 @@ class _MostUsedAppsWidgetState extends State<MostUsedAppsWidget>
                         text: TextSpan(
                           children: [
                             TextSpan(
-                              text: '${app.usageTime}h',
+                              text: _formatDuration(app.usageTime),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,

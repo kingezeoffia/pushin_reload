@@ -396,7 +396,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                         title: 'Emergency Unlock',
                         subtitle: pushinController.planTier == 'pro' || pushinController.planTier == 'advanced'
                             ? 'Set timer for urgent access'
-                            : 'Only available for Pro / Advanced users',
+                            : 'Available in PUSHIN Pro',
                         onTap: () => _showEmergencyUnlockDialog(),
                         showDivider: false,
                         iconColor: const Color(0xFFEF4444), // dangerRed color
@@ -548,16 +548,31 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                             if (userId != null) {
                               // Show simple loading feedback
                               if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                        'Opening subscription management...'),
-                                    duration: Duration(seconds: 2),
-                                  ),
-                                );
+                                try {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                          'Opening subscription management...'),
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                } catch (e) {
+                                  debugPrint('⚠️ Error showing snackbar: $e');
+                                }
                               }
 
                               final paymentService = PaymentConfig.createService();
+                              
+                              print('🔧 EnhancedSettings: Opening portal for user: $userId');
+                              print('   - Current Plan Tier: $planTier');
+
+                              // Set subscription status before opening portal (handled in DeepLinkHandler)
+                              // This allows us to detect changes when they return
+                              final deepLinkHandler = controller.deepLinkHandler;
+                              if (deepLinkHandler != null) {
+                                final cachedStatus = await paymentService.getCachedSubscriptionStatus(userId: userId);
+                                deepLinkHandler.setSubscriptionBeforePortal(cachedStatus);
+                              }
 
                               // Open portal
                               await paymentService.openCustomerPortal(
@@ -580,7 +595,8 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                 ),
               ),
 
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
               // Logout Button
               SliverToBoxAdapter(
@@ -590,7 +606,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
               const SliverToBoxAdapter(
                   child: SizedBox(
                       height:
-                          112)), // Navigation pill (64px) + margin (8px) + extra spacing (40px)
+                          128)), // Navigation pill (64px) + margin (8px) + extra spacing (56px)
             ],
           ),
         ),
@@ -1451,6 +1467,17 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
     if (!mounted) return;
     try {
       final appController = context.read<PushinAppController>();
+      
+      // Show loading feedback if Screen Time permission not yet granted
+      // This helps users know something is happening while the system dialog prepares
+      if (!appController.isScreenTimeAuthorized && mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Loading Screen Time options...'),
+              duration: Duration(seconds: 2), // Short duration as the picker should appear soon
+            ),
+          );
+      }
 
       // Use the controller's method which handles permission request + picker
       final success = await appController.presentIOSAppPicker();

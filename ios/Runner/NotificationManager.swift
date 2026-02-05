@@ -204,7 +204,7 @@ class NotificationManager: NSObject {
     /// Schedule workout notification with given ID
     func scheduleWorkoutNotification(withId notificationId: String) -> String? {
         let content = UNMutableNotificationContent()
-        content.title = "Earn Screen Time"
+        content.title = "Earn Screen Time 📱"
         content.body = "Complete a quick workout to unblock your apps"
         content.sound = .default
         content.badge = NSNumber(value: UIApplication.shared.applicationIconBadgeNumber + 1)

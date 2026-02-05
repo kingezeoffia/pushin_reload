@@ -255,6 +255,7 @@ class _RatingScreenState extends State<RatingScreen> {
                     _SubmitButton(
                       onTap: _selectedStars > 0 ? _handleSubmit : null,
                       isLoading: _isSubmitting,
+                      ratingRequested: _ratingRequested,
                     ),
                     const SizedBox(height: 12),
                     TextButton(
@@ -291,7 +292,15 @@ class _RatingScreenState extends State<RatingScreen> {
     widget.onContinue();
   }
 
+  bool _ratingRequested = false;
+
   void _handleSubmit() async {
+    // If we've already requested a rating, this button acts as "Continue"
+    if (_ratingRequested) {
+      widget.onContinue();
+      return;
+    }
+
     if (_selectedStars == 0 || _isSubmitting) return;
 
     setState(() {
@@ -303,7 +312,7 @@ class _RatingScreenState extends State<RatingScreen> {
     // Mark as rated
     await _markAsRated();
 
-    // Show native iOS rating popup instead of redirecting to App Store
+    // Show native iOS rating popup
     try {
       await IOSRatingService.requestNativeRating();
       debugPrint('⭐ RatingScreen: Native iOS rating popup requested');
@@ -311,8 +320,13 @@ class _RatingScreenState extends State<RatingScreen> {
       debugPrint('⭐ RatingScreen: Error requesting native rating: $e');
     }
 
-    // Close the screen
-    widget.onContinue();
+    // Instead of auto-closing, we switch the button to "Continue"
+    if (mounted) {
+      setState(() {
+        _isSubmitting = false;
+        _ratingRequested = true;
+      });
+    }
   }
 
   Future<void> _markAsRated() async {
@@ -326,10 +340,12 @@ class _RatingScreenState extends State<RatingScreen> {
 class _SubmitButton extends StatelessWidget {
   final VoidCallback? onTap;
   final bool isLoading;
+  final bool ratingRequested;
 
   const _SubmitButton({
     required this.onTap,
     this.isLoading = false,
+    this.ratingRequested = false,
   });
 
   @override
@@ -369,7 +385,7 @@ class _SubmitButton extends StatelessWidget {
                   ),
                 )
               : Text(
-                  "Submit Rating",
+                  ratingRequested ? "Continue" : "Submit Rating",
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
