@@ -43,12 +43,14 @@ class AuthUser {
   final String? email;
   final String? name;
   final String? profileImagePath;
+  final String? profilePictureServer; // Base64 encoded string from server
 
   const AuthUser({
     required this.id,
     this.email,
     this.name,
     this.profileImagePath,
+    this.profilePictureServer,
   });
 
   /// Create AuthUser from JSON
@@ -58,6 +60,7 @@ class AuthUser {
       email: json['email'] as String?,
       name: json['name'] as String?,
       profileImagePath: json['profile_image_path'] as String?,
+      profilePictureServer: json['profile_picture'] as String?, // Map from DB column/API field
     );
   }
 
@@ -68,6 +71,7 @@ class AuthUser {
       'email': email,
       'name': name,
       'profile_image_path': profileImagePath,
+      'profile_picture': profilePictureServer,
     };
   }
 }
@@ -235,6 +239,7 @@ class AuthStateProvider extends ChangeNotifier {
                 email: email,
                 name: name,
                 profileImagePath: _profileImagePath,
+                profilePictureServer: null, // Will be fetched on refresh
               );
               isUserAuthenticated = true;
               debugPrint('🚀 OPTIMISTIC START: Restored user from token: $email');
@@ -297,6 +302,7 @@ class AuthStateProvider extends ChangeNotifier {
                 name: user.firstname,
                 profileImagePath:
                     _profileImagePath, // Now properly restored before this point
+                profilePictureServer: user.profilePicture,
               );
               // Save to cache for next time
               _saveCurrentUser(_currentUser!);
@@ -406,6 +412,7 @@ class AuthStateProvider extends ChangeNotifier {
           email: user.email,
           name: user.firstname,
           profileImagePath: _profileImagePath,
+          profilePictureServer: user.profilePicture, // Map from API
         );
 
         // Check if anything changed before notifying
@@ -549,6 +556,7 @@ class AuthStateProvider extends ChangeNotifier {
     String? email,
     String? name,
     String? password,
+    String? profilePicture,
   }) async {
     if (_currentUser == null) {
       _errorMessage = 'Not authenticated';
@@ -567,6 +575,7 @@ class AuthStateProvider extends ChangeNotifier {
         email: email,
         name: name,
         password: password,
+        profilePicture: profilePicture,
       );
 
       if (result.success && result.data != null) {
@@ -579,6 +588,7 @@ class AuthStateProvider extends ChangeNotifier {
           email: updatedUser.email,
           name: updatedUser.firstname,
           profileImagePath: _profileImagePath,
+          profilePictureServer: updatedUser.profilePicture, // Update from server response
         );
         
         // Update cache

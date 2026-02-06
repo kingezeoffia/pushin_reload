@@ -395,6 +395,7 @@ class AuthenticationService {
     String? email,
     String? name,
     String? password,
+    String? profilePicture,
   }) async {
     try {
       final accessToken = await _tokenManager.getAccessToken();
@@ -406,6 +407,7 @@ class AuthenticationService {
       if (email != null) requestBody['email'] = email;
       if (name != null) requestBody['name'] = name;
       if (password != null) requestBody['password'] = password;
+      if (profilePicture != null) requestBody['profilePicture'] = profilePicture;
 
       debugPrint(
           '🔄 AuthenticationService.updateProfile() - sending request: $requestBody');

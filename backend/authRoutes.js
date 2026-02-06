@@ -399,6 +399,12 @@ router.put('/me', authenticateToken, async (req, res) => {
       updates.password = password;
     }
 
+    // Process profile picture
+    if (req.body.profilePicture !== undefined) {
+      // Basic validation for Base64 image string could be added here
+      updates.profile_picture = req.body.profilePicture;
+    }
+
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({
         success: false,

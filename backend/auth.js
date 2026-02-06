@@ -464,7 +464,7 @@ async function refreshAccessToken(pool, refreshToken) {
  */
 async function getUserProfile(pool, userId) {
   const result = await pool.query(
-    'SELECT id, email, firstname, created_at FROM users WHERE id = $1',
+    'SELECT id, email, firstname, profile_picture, created_at FROM users WHERE id = $1',
     [userId]
   );
 
@@ -508,6 +508,12 @@ async function updateUserProfile(pool, userId, updates) {
     paramIndex++;
   }
 
+  if (updates.profile_picture !== undefined) {
+    updateFields.push(`profile_picture = $${paramIndex}`);
+    updateValues.push(updates.profile_picture);
+    paramIndex++;
+  }
+
   if (updateFields.length === 0) {
     throw new Error('No valid fields to update');
   }
@@ -519,7 +525,7 @@ async function updateUserProfile(pool, userId, updates) {
     UPDATE users
     SET ${updateFields.join(', ')}, updated_at = NOW()
     WHERE id = $${paramIndex}
-    RETURNING id, email, firstname, created_at, updated_at
+    RETURNING id, email, firstname, profile_picture, created_at, updated_at
   `;
 
   const result = await pool.query(query, updateValues);

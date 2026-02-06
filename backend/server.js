@@ -758,6 +758,101 @@ app.post('/api/stripe/reactivate-subscription', async (req, res) => {
   }
 });
 
+// 4c. Upgrade Subscription (Pro -> Advanced)
+app.post('/api/stripe/upgrade-subscription', async (req, res) => {
+  try {
+    const { userId, newPlanId, billingPeriod } = req.body;
+
+    console.log('Upgrading subscription:', { userId, newPlanId, billingPeriod });
+
+    if (!userId || !newPlanId) {
+      return res.status(400).json({
+        error: 'Missing required fields: userId and newPlanId'
+      });
+    }
+
+    // Convert userId to INTEGER
+    const userIdInt = parseInt(userId, 10);
+    if (isNaN(userIdInt)) {
+      return res.status(400).json({ error: 'Invalid userId' });
+    }
+
+    // Get active subscription from database
+    const subResult = await pool.query(
+      'SELECT subscription_id FROM subscriptions WHERE user_id = $1 AND is_active = true LIMIT 1',
+      [userIdInt]
+    );
+
+    if (subResult.rows.length === 0) {
+      return res.status(404).json({ error: 'No active subscription found to upgrade' });
+    }
+
+    const subscriptionId = subResult.rows[0].subscription_id;
+
+    // Get price ID for new plan
+    // Default to 'monthly' if not provided
+    const period = billingPeriod || 'monthly';
+    const planKey = `${newPlanId}_${period}`;
+
+    // Determine price ID (test or live)
+    const priceIds = process.env.NODE_ENV === 'test' ? {
+      'pro_monthly': process.env.STRIPE_TEST_PRICE_PRO_MONTHLY,
+      'pro_yearly': process.env.STRIPE_TEST_PRICE_PRO_YEARLY,
+      'advanced_monthly': process.env.STRIPE_TEST_PRICE_ADVANCED_MONTHLY,
+      'advanced_yearly': process.env.STRIPE_TEST_PRICE_ADVANCED_YEARLY,
+    } : {
+      'pro_monthly': process.env.STRIPE_PRICE_PRO_MONTHLY,
+      'pro_yearly': process.env.STRIPE_PRICE_PRO_YEARLY,
+      'advanced_monthly': process.env.STRIPE_PRICE_ADVANCED_MONTHLY,
+      'advanced_yearly': process.env.STRIPE_PRICE_ADVANCED_YEARLY,
+    };
+
+    const newPriceId = priceIds[planKey];
+    if (!newPriceId) {
+      return res.status(400).json({ error: `Invalid plan/billing combination: ${planKey}` });
+    }
+
+    // Retrieve subscription from Stripe to get the item ID
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const itemId = subscription.items.data[0].id;
+
+    // Update subscription in Stripe
+    // proration_behavior: 'always_invoice' ensures immediate charge for upgrade
+    const updatedSubscription = await stripe.subscriptions.update(subscriptionId, {
+      items: [{
+        id: itemId,
+        price: newPriceId,
+      }],
+      metadata: {
+        planId: newPlanId,
+        billingPeriod: period,
+      },
+      proration_behavior: 'always_invoice',
+    });
+
+    // Update local database
+    await pool.query(
+      `UPDATE subscriptions SET 
+       plan_id = $1, 
+       updated_at = NOW() 
+       WHERE subscription_id = $2`,
+      [newPlanId, subscriptionId]
+    );
+
+    console.log('✅ Subscription upgraded successfully to:', newPlanId);
+
+    res.json({
+      success: true,
+      planId: newPlanId,
+      subscriptionId: updatedSubscription.id,
+    });
+
+  } catch (error) {
+    console.error('❌ Error upgrading subscription:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 5. Create Customer Portal Session
 app.post('/api/stripe/create-portal-session', async (req, res) => {
   try {

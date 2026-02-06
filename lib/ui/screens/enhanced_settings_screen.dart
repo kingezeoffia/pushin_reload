@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'dart:io';
+import 'dart:convert'; // Added for Base64 encoding
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -905,11 +906,49 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                                 ],
                               ),
                               child: ClipOval(
-                                child: Image.file(
-                                  File(profileImagePath!),
-                                  width: 60,
-                                  height: 60,
-                                  fit: BoxFit.cover,
+                                child: Builder(
+                                  builder: (context) {
+                                    final profilePictureServer = authProvider.currentUser?.profilePictureServer;
+                                    
+                                    if (profilePictureServer != null) {
+                                      try {
+                                        final bytes = base64Decode(profilePictureServer);
+                                        return Image.memory(
+                                          bytes,
+                                          width: 60,
+                                          height: 60,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) {
+                                            if (hasProfileImage) {
+                                              return Image.file(
+                                                File(profileImagePath!),
+                                                width: 60,
+                                                height: 60,
+                                                fit: BoxFit.cover,
+                                              );
+                                            }
+                                            return const Icon(Icons.person, color: Color(0xFFD4FF00));
+                                          },
+                                        );
+                                      } catch (e) {
+                                        // Fallback to local
+                                      }
+                                    }
+                                    
+                                    if (hasProfileImage) {
+                                      return Image.file(
+                                        File(profileImagePath!),
+                                        width: 60,
+                                        height: 60,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                           return const Icon(Icons.person, color: Color(0xFFD4FF00));
+                                        },
+                                      );
+                                    }
+                                    
+                                    return const Icon(Icons.person, color: Color(0xFFD4FF00));
+                                  }
                                 ),
                               ),
                             ),
@@ -1430,7 +1469,25 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
       // Update auth provider with new image path
       final authProvider =
           Provider.of<AuthStateProvider>(context, listen: false);
+      // Still set local path for immediate feedback/offline support
       await authProvider.setProfileImagePath(savedPath);
+      
+      // Upload to server if user is logged in
+      if (authProvider.currentUser != null) {
+        debugPrint('☁️ Uploading profile picture to server...');
+        final bytes = await File(savedPath).readAsBytes();
+        final base64Image = base64Encode(bytes);
+        
+        final success = await authProvider.updateProfile(
+          profilePicture: base64Image,
+        );
+        
+        if (success) {
+          debugPrint('✅ Profile picture uploaded to server successfully');
+        } else {
+          debugPrint('❌ Failed to upload profile picture to server');
+        }
+      }
       
       // Force UI rebuild
       setState(() {});
@@ -1442,7 +1499,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
       
       debugPrint('✅ Image saved successfully to: $savedPath');
 
-      // TODO: Upload to backend server when ready
+
     } catch (e) {
       debugPrint('Failed to save image: $e');
     }
