@@ -203,6 +203,61 @@ async function initDatabase() {
 // Initialize database on startup
 initDatabase();
 
+// Migration: Fix any subscriptions that might have been stored with wrong user_id
+// This handles edge cases from before the INTEGER fix was applied
+async function migrateSubscriptionUserIds() {
+  try {
+    console.log('🔄 Running subscription user_id migration check...');
+
+    // Find subscriptions where user_id might be mismatched
+    // This query finds subscriptions where user_id exists but doesn't match any user
+    const orphanedSubs = await pool.query(`
+      SELECT s.id, s.subscription_id, s.customer_id, s.plan_id
+      FROM subscriptions s
+      LEFT JOIN users u ON s.user_id = u.id
+      WHERE s.is_active = true AND u.id IS NULL
+    `);
+
+    if (orphanedSubs.rows.length > 0) {
+      console.log(`⚠️ Found ${orphanedSubs.rows.length} orphaned subscriptions - attempting to fix via Stripe metadata`);
+
+      for (const sub of orphanedSubs.rows) {
+        try {
+          // Try to get the correct user from Stripe subscription metadata
+          const stripeSub = await stripe.subscriptions.retrieve(sub.subscription_id);
+          const customer = await stripe.customers.retrieve(stripeSub.customer);
+
+          if (customer.email) {
+            // Find user by email
+            const userResult = await pool.query(
+              'SELECT id FROM users WHERE email = $1',
+              [customer.email]
+            );
+
+            if (userResult.rows.length > 0) {
+              const correctUserId = userResult.rows[0].id;
+              await pool.query(
+                'UPDATE subscriptions SET user_id = $1, updated_at = NOW() WHERE id = $2',
+                [correctUserId, sub.id]
+              );
+              console.log(`✅ Fixed subscription ${sub.subscription_id} -> user_id ${correctUserId}`);
+            }
+          }
+        } catch (e) {
+          console.error(`❌ Could not fix subscription ${sub.subscription_id}:`, e.message);
+        }
+      }
+    } else {
+      console.log('✅ No orphaned subscriptions found - all user_id references are valid');
+    }
+  } catch (e) {
+    console.error('❌ Migration check error:', e.message);
+  }
+}
+
+// Run migration after database init (delayed to ensure tables exist)
+setTimeout(migrateSubscriptionUserIds, 5000);
+
 // ===========================
 // AUTHENTICATION ROUTES
 // ===========================
@@ -328,6 +383,17 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
       });
     }
 
+    // CRITICAL FIX: Convert userId to INTEGER for PostgreSQL
+    // Flutter sends userId as STRING, but database column is INTEGER
+    const userIdInt = userId ? parseInt(userId, 10) : null;
+    if (userId && isNaN(userIdInt)) {
+      console.error('❌ Invalid userId - not a number:', userId);
+      return res.status(400).json({
+        error: 'Invalid userId - must be numeric'
+      });
+    }
+    console.log('✅ Parsed userId:', userId, '→', userIdInt);
+
     // Retrieve the checkout session from Stripe
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ['subscription'],
@@ -337,7 +403,7 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
 
     if (session.payment_status === 'paid') {
       const subscription = session.subscription;
-      const isAnonymous = !userId && anonymousId;
+      const isAnonymous = !userIdInt && anonymousId;
 
       // Store subscription in appropriate table
       if (isAnonymous) {
@@ -360,18 +426,22 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
         );
       } else {
         // Regular authenticated subscription
+        // CRITICAL: Use userIdInt (INTEGER) not userId (STRING)
+        console.log('💾 Storing subscription for user_id (INTEGER):', userIdInt);
         await pool.query(
           `INSERT INTO subscriptions (user_id, customer_id, subscription_id, plan_id, current_period_end, is_active, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT (subscription_id)
            DO UPDATE SET
+             user_id = EXCLUDED.user_id,
              plan_id = EXCLUDED.plan_id,
              current_period_end = EXCLUDED.current_period_end,
              is_active = EXCLUDED.is_active,
              updated_at = EXCLUDED.updated_at`,
-          [userId, session.customer, subscription.id, session.metadata.planId,
+          [userIdInt, session.customer, subscription.id, session.metadata.planId,
             new Date(subscription.current_period_end * 1000), true, new Date()]
         );
+        console.log('✅ Subscription stored with user_id:', userIdInt);
       }
 
       console.log(`✅ Payment verified and stored ${isAnonymous ? '(anonymous)' : '(authenticated)'}`);
@@ -383,6 +453,7 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
         subscriptionId: subscription.id,
         currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
         isAnonymous: isAnonymous,
+        userId: userIdInt, // Return the INTEGER userId for verification
       });
     } else {
       console.log('⚠️ Payment not completed');
@@ -400,26 +471,118 @@ app.post('/api/stripe/verify-payment', async (req, res) => {
   }
 });
 
-// 3. Check Subscription Status
+// 3. Check Subscription Status (supports both query params and path params)
+// Path param version: GET /api/stripe/subscription-status/:userId
+app.get('/api/stripe/subscription-status/:userId', async (req, res) => {
+  const userId = req.params.userId;
+  console.log('📱 Subscription status check (path param) for userId:', userId);
+
+  // Delegate to the shared handler
+  return handleSubscriptionStatusCheck(req, res, userId, null);
+});
+
+// Query param version: GET /api/stripe/subscription-status?userId=X&anonymousId=Y
 app.get('/api/stripe/subscription-status', async (req, res) => {
+  const { userId, anonymousId } = req.query;
+  console.log('📱 Subscription status check (query param) for:', { userId, anonymousId });
+
+  if (!userId && !anonymousId) {
+    return res.status(400).json({ error: 'Missing userId or anonymousId parameter' });
+  }
+
+  return handleSubscriptionStatusCheck(req, res, userId, anonymousId);
+});
+
+// Shared handler for subscription status checks
+async function handleSubscriptionStatusCheck(req, res, userId, anonymousId) {
   try {
-    const { userId, anonymousId } = req.query;
+    console.log('🔍 Checking subscription status for:', { userId, anonymousId });
 
-    console.log('Checking subscription status for:', { userId, anonymousId });
-
-    if (!userId && !anonymousId) {
-      return res.status(400).json({ error: 'Missing userId or anonymousId parameter' });
+    // CRITICAL FIX: Convert userId to INTEGER for PostgreSQL query
+    const userIdInt = userId ? parseInt(userId, 10) : null;
+    if (userId && isNaN(userIdInt)) {
+      console.error('❌ Invalid userId for subscription check:', userId);
+      return res.status(400).json({ error: 'Invalid userId - must be numeric' });
     }
+    console.log('✅ Parsed userId for query:', userId, '→', userIdInt);
 
     let subscriptionResult;
     let isAnonymous = false;
 
-    if (userId) {
-      // Check authenticated user subscription
+    if (userIdInt) {
+      // Check authenticated user subscription using INTEGER
+      console.log('🔍 Querying subscriptions table for user_id (INTEGER):', userIdInt);
       subscriptionResult = await pool.query(
         'SELECT * FROM subscriptions WHERE user_id = $1 AND is_active = true ORDER BY updated_at DESC LIMIT 1',
-        [userId]
+        [userIdInt]
       );
+      console.log('📊 Query returned', subscriptionResult.rows.length, 'rows');
+
+      // INDUSTRY STANDARD FALLBACK: If no subscription found by user_id,
+      // try to find by email (handles edge cases like data migration, reinstalls)
+      if (subscriptionResult.rows.length === 0) {
+        console.log('⚠️ No subscription by user_id, trying email fallback...');
+
+        // Get user's email from users table
+        const userResult = await pool.query(
+          'SELECT email FROM users WHERE id = $1',
+          [userIdInt]
+        );
+
+        if (userResult.rows.length > 0) {
+          const userEmail = userResult.rows[0].email;
+          console.log('📧 Looking up subscription by email:', userEmail);
+
+          // Check subscriptions table (via users join)
+          subscriptionResult = await pool.query(
+            `SELECT s.* FROM subscriptions s
+             INNER JOIN users u ON s.user_id = u.id
+             WHERE u.email = $1 AND s.is_active = true
+             ORDER BY s.updated_at DESC LIMIT 1`,
+            [userEmail]
+          );
+
+          // If still not found, check anonymous_subscriptions table
+          if (subscriptionResult.rows.length === 0) {
+            console.log('📧 Checking anonymous_subscriptions by email...');
+            const anonResult = await pool.query(
+              `SELECT * FROM anonymous_subscriptions
+               WHERE email = $1 AND is_active = true AND linked_user_id IS NULL
+               ORDER BY updated_at DESC LIMIT 1`,
+              [userEmail]
+            );
+
+            if (anonResult.rows.length > 0) {
+              console.log('✅ Found anonymous subscription - linking to user');
+              const anonSub = anonResult.rows[0];
+
+              // Link the anonymous subscription to this user
+              await pool.query(
+                'UPDATE anonymous_subscriptions SET linked_user_id = $1, updated_at = NOW() WHERE id = $2',
+                [userIdInt, anonSub.id]
+              );
+
+              // Create a proper subscription record for this user
+              await pool.query(
+                `INSERT INTO subscriptions (user_id, customer_id, subscription_id, plan_id, current_period_end, is_active, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+                 ON CONFLICT (subscription_id) DO UPDATE SET
+                   user_id = EXCLUDED.user_id,
+                   is_active = EXCLUDED.is_active,
+                   updated_at = NOW()`,
+                [userIdInt, anonSub.customer_id, anonSub.subscription_id, anonSub.plan_id, anonSub.current_period_end, true]
+              );
+
+              // Re-query to get the newly linked subscription
+              subscriptionResult = await pool.query(
+                'SELECT * FROM subscriptions WHERE user_id = $1 AND is_active = true ORDER BY updated_at DESC LIMIT 1',
+                [userIdInt]
+              );
+              console.log('✅ Anonymous subscription linked and retrieved');
+            }
+          }
+        }
+      }
     } else {
       // Check anonymous subscription
       subscriptionResult = await pool.query(
@@ -430,7 +593,7 @@ app.get('/api/stripe/subscription-status', async (req, res) => {
     }
 
     if (subscriptionResult.rows.length === 0) {
-      console.log('No subscription found');
+      console.log('❌ No subscription found (tried user_id and email fallback)');
       return res.json({
         isActive: false,
         planId: 'free',
@@ -444,27 +607,66 @@ app.get('/api/stripe/subscription-status', async (req, res) => {
     const subscriptionData = subscriptionResult.rows[0];
 
     // Fetch latest subscription status from Stripe
-    const subscription = await stripe.subscriptions.retrieve(subscriptionData.subscription_id);
+    let subscription;
+    let isActive = false;
+    let willCancelAtPeriodEnd = false;
+    let currentPeriodEnd = subscriptionData.current_period_end;
 
-    const isActive = subscription.status === 'active';
-    const willCancelAtPeriodEnd = subscription.cancel_at_period_end || false;
+    try {
+      subscription = await stripe.subscriptions.retrieve(subscriptionData.subscription_id);
+      isActive = subscription.status === 'active';
+      willCancelAtPeriodEnd = subscription.cancel_at_period_end || false;
+      currentPeriodEnd = new Date(subscription.current_period_end * 1000);
 
-    // Update database with latest status
-    const tableName = isAnonymous ? 'anonymous_subscriptions' : 'subscriptions';
-    await pool.query(
-      `UPDATE ${tableName} SET is_active = $1, current_period_end = $2, updated_at = $3 WHERE subscription_id = $4`,
-      [isActive, new Date(subscription.current_period_end * 1000), new Date(), subscriptionData.subscription_id]
-    );
+      // Update database with latest status from Stripe
+      const tableName = isAnonymous ? 'anonymous_subscriptions' : 'subscriptions';
+      await pool.query(
+        `UPDATE ${tableName} SET is_active = $1, current_period_end = $2, updated_at = $3 WHERE subscription_id = $4`,
+        [isActive, currentPeriodEnd, new Date(), subscriptionData.subscription_id]
+      );
 
-    console.log('Subscription status:', subscription.status);
-    console.log('Cancel at period end:', willCancelAtPeriodEnd);
+      console.log('✅ Stripe subscription verified:', subscription.status);
+    } catch (stripeError) {
+      // Handle case where subscription doesn't exist in Stripe (deleted, invalid, etc.)
+      console.error('⚠️ Stripe subscription not found or error:', stripeError.message);
+
+      // If subscription doesn't exist in Stripe, it's no longer valid
+      if (stripeError.code === 'resource_missing') {
+        console.log('   Subscription was deleted from Stripe - marking as inactive');
+        const tableName = isAnonymous ? 'anonymous_subscriptions' : 'subscriptions';
+        await pool.query(
+          `UPDATE ${tableName} SET is_active = false, updated_at = $1 WHERE subscription_id = $2`,
+          [new Date(), subscriptionData.subscription_id]
+        );
+
+        // Return free status since subscription is invalid
+        return res.json({
+          isActive: false,
+          planId: 'free',
+          customerId: null,
+          subscriptionId: null,
+          currentPeriodEnd: null,
+          isAnonymous: isAnonymous,
+        });
+      }
+
+      // For other Stripe errors, use database values but mark as potentially stale
+      console.log('   Using database values (Stripe unavailable)');
+      isActive = subscriptionData.is_active;
+    }
+
+    console.log('✅ Returning subscription status:', {
+      isActive,
+      planId: subscriptionData.plan_id,
+      userId: userId,
+    });
 
     res.json({
       isActive,
       planId: subscriptionData.plan_id,
       customerId: subscriptionData.customer_id,
       subscriptionId: subscriptionData.subscription_id,
-      currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
+      currentPeriodEnd: currentPeriodEnd instanceof Date ? currentPeriodEnd.toISOString() : currentPeriodEnd,
       isAnonymous: isAnonymous,
       recoveryToken: isAnonymous ? subscriptionData.recovery_token : null,
       cancelAtPeriodEnd: willCancelAtPeriodEnd,
@@ -473,7 +675,7 @@ app.get('/api/stripe/subscription-status', async (req, res) => {
     console.error('❌ Error checking subscription:', error);
     res.status(500).json({ error: error.message });
   }
-});
+}
 
 // 4. Cancel Subscription
 app.post('/api/stripe/cancel-subscription', async (req, res) => {
@@ -487,6 +689,9 @@ app.post('/api/stripe/cancel-subscription', async (req, res) => {
         error: 'Missing required fields: either userId or anonymousId, and subscriptionId'
       });
     }
+
+    // Convert userId to INTEGER
+    const userIdInt = userId ? parseInt(userId, 10) : null;
 
     // Cancel at period end (user keeps access until billing period ends)
     const subscription = await stripe.subscriptions.update(subscriptionId, {
