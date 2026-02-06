@@ -335,16 +335,21 @@ class FocusModeService extends ChangeNotifier {
       _authStatus == AuthorizationStatus.denied;
   bool get hasActiveSession => _sessionState == FocusSessionState.active;
 
-  // MARK: - Private Methods
-
-  Future<void> _checkAuthorizationStatus() async {
+  Future<void> checkAuthorizationStatus() async {
     try {
       final response = await _screenTimeService.getAuthorizationStatus();
       _authStatus = response.status;
+      notifyListeners();
     } catch (e) {
       _handleError(e);
       _authStatus = AuthorizationStatus.notDetermined;
     }
+  }
+
+  // MARK: - Private Methods
+
+  Future<void> _checkAuthorizationStatus() async {
+    return checkAuthorizationStatus();
   }
 
   void _handleError(dynamic error) {

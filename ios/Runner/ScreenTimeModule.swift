@@ -4,6 +4,7 @@ import ManagedSettings
 import DeviceActivity
 import SwiftUI
 import UIKit
+import WidgetKit
 
 #if canImport(ActivityKit)
 import ActivityKit
@@ -114,6 +115,17 @@ class ScreenTimeModule {
                 print("📁 Container URL exists: \(containerURL.path)")
             } else {
                 print("📁 Container URL is also nil - App Group definitely not provisioned")
+            }
+        }
+        
+        // Check for Canary Log
+        if let store = UserDefaults(suiteName: appGroupSuiteName) {
+            let lastRun = store.double(forKey: "DEBUG_LAST_RUN")
+            if lastRun > 0 {
+                let date = Date(timeIntervalSince1970: lastRun)
+                print("🐣 CANARY ALIVE: Extension last ran at \(date)")
+            } else {
+                print("🥚 CANARY SILENT: No execution timestamp found (Extension has not run yet or cannot write)")
             }
         }
     }
@@ -732,13 +744,14 @@ class ScreenTimeModule {
         let totalMinutesToday = store.double(forKey: "screen_time_total_minutes_today")
         let lastUpdateTimestamp = store.double(forKey: "screen_time_last_update")
 
-        // Check if data is fresh (updated within last hour)
-        let now = Date().timeIntervalSince1970
-        let isDataFresh = lastUpdateTimestamp > 0 && (now - lastUpdateTimestamp) < 3600
+        // RELAXED FRESHNESS CHECK:
+        // Use real data if we have ANY update timestamp, even if it's 0 minutes.
+        // Screen Time report extension might return 0 if no usage today.
+        // Only fallback to mock data if we have NEVER successfully read data (timestamp is 0).
+        let hasRealData = lastUpdateTimestamp > 0
 
-        if !isDataFresh || totalMinutesToday == 0 {
-            // No fresh data available - return mock data for development
-            // In production, this would wait for the DeviceActivityReport extension
+        if !hasRealData {
+            // No data EVER collected - return mock data for initial state
             return [
                 "success": true,
                 "data": [
@@ -818,7 +831,7 @@ class ScreenTimeModule {
             print("❌ Failed to parse app usage data: \(error)")
         }
 
-        // Fallback to mock data
+    // Fallback to mock data ONLY if no data exists
         return [
             "success": true,
             "data": [
@@ -1381,15 +1394,27 @@ class ScreenTimeChannelHandler {
             result(response)
 
         case "getTodayScreenTime":
+            // Trigger data collection if needed
+            if #available(iOS 14.0, *) {
+                WidgetCenter.shared.reloadAllTimelines()
+            }
             let response = module.getTodayScreenTime()
             result(response)
 
         case "getMostUsedApps":
             let limit = (call.arguments as? [String: Any])?["limit"] as? Int ?? 3
+            // Force a widget reload to ensure fresh data in background
+            if #available(iOS 14.0, *) {
+                WidgetCenter.shared.reloadAllTimelines()
+            }
             let response = module.getMostUsedApps(limit: limit)
             result(response)
 
         case "startScreenTimeMonitoring":
+            // Trigger initial data collection
+            if #available(iOS 14.0, *) {
+                WidgetCenter.shared.reloadAllTimelines()
+            }
             let response = module.startScreenTimeMonitoring()
             result(response)
 

@@ -7,6 +7,7 @@ class RatingService {
   static const String _prefsKeyHasRated = 'has_rated_app';
   static const String _prefsKeyLaunchCount = 'app_launch_count';
   static const String _prefsKeyWorkoutCount = 'completed_workout_count';
+  static const String _prefsKeyLastPrompt = 'last_rating_prompt_timestamp';
 
   final SharedPreferences _prefs;
 
@@ -24,6 +25,8 @@ class RatingService {
   int get launchCount => _prefs.getInt(_prefsKeyLaunchCount) ?? 0;
 
   int get workoutCount => _prefs.getInt(_prefsKeyWorkoutCount) ?? 0;
+
+  int get lastPromptTimestamp => _prefs.getInt(_prefsKeyLastPrompt) ?? 0;
 
   // --- Actions ---
 
@@ -47,6 +50,13 @@ class RatingService {
     debugPrint('⭐ RatingService: App marked as rated');
   }
 
+  /// Mark that we showed the prompt (but user didn't necessarily rate)
+  Future<void> markAsPrompted() async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await _prefs.setInt(_prefsKeyLastPrompt, now);
+    debugPrint('⭐ RatingService: Marked as prompted at $now');
+  }
+
   // --- Triggers ---
 
   /// Show rating screen if user hasn't rated yet.
@@ -58,7 +68,21 @@ class RatingService {
       return;
     }
 
+    // Check cooldown (unless forced)
+    if (!force) {
+      final lastPrompt = DateTime.fromMillisecondsSinceEpoch(lastPromptTimestamp);
+      final difference = DateTime.now().difference(lastPrompt);
+      // 2 days cooldown
+      if (difference.inDays < 2 && lastPromptTimestamp > 0) {
+        debugPrint('⭐ RatingService: Cooldown active (last prompt: ${difference.inHours}h ago), skipping');
+        return;
+      }
+    }
+
     debugPrint('⭐ RatingService: Showing rating screen');
+    
+    // Mark as prompted immediately to prevent double-triggering
+    await markAsPrompted();
     
     // We navigate to the rating screen
     // Using push (not pushReplacement) so we can return to where we were
@@ -107,12 +131,14 @@ class RatingService {
       return;
     }
 
-    // "First workout" means workoutCount == 1 (after increment)
-    if (workoutCount == 1) {
-      debugPrint('⭐ RatingService: ✅ Triggering rating due to 1st workout');
-      await showRatingIfNeeded(context);
+    // "First workout" check - now more robust
+    // Check if user has done AT LEAST one workout AND we haven't prompted them yet
+    // This handles cases where count might be > 1 but missed the first prompt
+    if (workoutCount >= 1 && lastPromptTimestamp == 0) {
+       debugPrint('⭐ RatingService: ✅ Triggering rating (workoutCount: $workoutCount, never prompted before)');
+       await showRatingIfNeeded(context);
     } else {
-      debugPrint('⭐ RatingService: Not the 1st workout (count: $workoutCount), skipping');
+      debugPrint('⭐ RatingService: Not triggering rating (count: $workoutCount, lastPrompt: $lastPromptTimestamp)');
     }
   }
 

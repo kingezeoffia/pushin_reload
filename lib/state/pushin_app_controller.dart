@@ -273,6 +273,20 @@ class PushinAppController extends ChangeNotifier {
     // Load current plan tier from cached subscription status
     await _loadCachedPlanTier(paymentService);
 
+    // CRITICAL FOR PERSISTENCE: If user is already authenticated on app start,
+    // sync subscription from server to ensure it persists across app deletion.
+    // This handles the case where user reinstalls the app and is auto-logged in.
+    if (_authProvider.isAuthenticated && _authProvider.currentUser?.id != null) {
+      print('🔄 User already authenticated on app start - syncing subscription from server');
+      // Use forceServerFetch to bypass cache and get fresh data from server
+      // This is fire-and-forget - don't await to avoid blocking app startup
+      refreshPlanTier(forceServerFetch: true).then((_) {
+        print('✅ Initial subscription sync from server completed');
+      }).catchError((e) {
+        print('⚠️ Initial subscription sync failed (will retry later): $e');
+      });
+    }
+
     _deepLinkHandler = DeepLinkHandler(
       stripeService: paymentService,
       getCurrentUserId: () => _authProvider.currentUser?.id?.toString(),
@@ -587,13 +601,20 @@ class PushinAppController extends ChangeNotifier {
     if (_focusModeService == null) return false;
 
     try {
+      // Force a status check to ensure we have the latest truth from Screen Time
+      await _focusModeService!.checkAuthorizationStatus();
+
       // First ensure we have Screen Time permission
       if (!_focusModeService!.isAuthorized) {
+        print('Screen Time not authorized, requesting permission...');
         final authResult =
             await _focusModeService!.requestScreenTimePermission();
+        
         if (authResult != AuthorizationResult.granted) {
-          print('Screen Time permission not granted');
+          print('Screen Time permission not granted: $authResult');
           return false;
+        } else {
+           print('Screen Time permission granted!');
         }
       }
 
@@ -614,9 +635,9 @@ class PushinAppController extends ChangeNotifier {
           await _focusModeService!.emergencyDisable();
           _iosBlockingActive = false;
         } else {
-          // If we are currently in a state that should be blocked, refresh the shield
-          if (_iosBlockingActive ||
-              currentState == PushinState.locked ||
+          // Only restore blocking if in locked/expired state
+          // Don't re-block if user is in unlocked state (temporary access after workout)
+          if (currentState == PushinState.locked ||
               currentState == PushinState.expired) {
             print('User updated apps - refreshing iOS blocking');
             await _restoreIOSBlocking();
@@ -1322,8 +1343,173 @@ class PushinAppController extends ChangeNotifier {
 
   /// Call this when app comes to foreground to check if overlay should show.
   /// This should be called from the Flutter lifecycle observer.
+  /// Also syncs subscription status from server to ensure persistence across devices.
   void onAppResumed() {
     _updateOverlayForState();
+
+    // Sync subscription status from server on app resume
+    // This ensures subscriptions persist across app deletion/device changes
+    _syncSubscriptionOnResume();
+  }
+
+  // Track last sync time to avoid excessive server calls
+  DateTime? _lastSubscriptionSyncTime;
+  static const Duration _freeSyncInterval = Duration(hours: 6); // Sync free users every 6 hours
+  static const Duration _paidSyncInterval = Duration(minutes: 30); // Sync paid users more frequently
+
+  /// Sync subscription status from server when app resumes.
+  /// This is critical for cross-device sync and ensuring subscriptions
+  /// persist after app reinstallation.
+  ///
+  /// For FREE users: Syncs periodically (every 6 hours) to check if they subscribed elsewhere
+  /// For PAID users: Syncs more frequently (every 30 mins) to catch expirations/changes
+  Future<void> _syncSubscriptionOnResume() async {
+    // Only sync if user is authenticated
+    if (!_authProvider.isAuthenticated) {
+      return;
+    }
+
+    final currentUserId = _authProvider.currentUser?.id;
+    if (currentUserId == null) {
+      return;
+    }
+
+    try {
+      print('🔄 Checking subscription sync on app resume...');
+
+      // Check if cached subscription is expired before fetching
+      final cachedStatus = await _paymentService.getCachedSubscriptionStatus(userId: currentUserId.toString());
+
+      // Determine if we need to sync based on cached status
+      final bool shouldSync = _shouldSyncSubscription(cachedStatus);
+
+      if (!shouldSync) {
+        print('⏭️ Skipping subscription sync (recently synced or no changes expected)');
+        return;
+      }
+
+      if (cachedStatus != null && cachedStatus.currentPeriodEnd != null && cachedStatus.isActive) {
+        // Check if paid subscription has expired
+        if (DateTime.now().isAfter(cachedStatus.currentPeriodEnd!)) {
+          print('⚠️ Cached subscription has expired (${cachedStatus.currentPeriodEnd}), forcing server refresh');
+          await _fetchAndUpdateSubscription(currentUserId.toString());
+          return;
+        }
+      }
+
+      // Fetch fresh status from server (non-blocking, runs in background)
+      _fetchAndUpdateSubscription(currentUserId.toString());
+
+    } catch (e) {
+      print('❌ Error syncing subscription on resume: $e');
+    }
+  }
+
+  /// Determine if we should sync subscription based on cache status and last sync time
+  bool _shouldSyncSubscription(SubscriptionStatus? cachedStatus) {
+    final now = DateTime.now();
+
+    // Always sync if never synced before
+    if (_lastSubscriptionSyncTime == null) {
+      print('📡 First sync - will fetch from server');
+      return true;
+    }
+
+    // Determine sync interval based on plan tier
+    final bool isFreeUser = cachedStatus == null ||
+                            !cachedStatus.isActive ||
+                            cachedStatus.planId == 'free';
+
+    final syncInterval = isFreeUser ? _freeSyncInterval : _paidSyncInterval;
+    final timeSinceLastSync = now.difference(_lastSubscriptionSyncTime!);
+
+    if (timeSinceLastSync >= syncInterval) {
+      print('📡 Sync interval passed (${timeSinceLastSync.inMinutes} mins) - will fetch from server');
+      return true;
+    }
+
+    // For paid users approaching expiry, sync more aggressively
+    if (!isFreeUser && cachedStatus?.currentPeriodEnd != null) {
+      final timeUntilExpiry = cachedStatus!.currentPeriodEnd!.difference(now);
+      if (timeUntilExpiry.inHours <= 24) {
+        print('📡 Subscription expiring soon (${timeUntilExpiry.inHours}h) - will fetch from server');
+        return true;
+      }
+    }
+
+    print('⏭️ Last sync was ${timeSinceLastSync.inMinutes} mins ago, interval is ${syncInterval.inMinutes} mins');
+    return false;
+  }
+
+  /// Fetch subscription status from server and update local state
+  /// Handles both paid and free users, caching status appropriately
+  Future<void> _fetchAndUpdateSubscription(String userId) async {
+    try {
+      final freshStatus = await _paymentService.checkSubscriptionStatus(userId: userId);
+
+      // Update last sync time on successful server response
+      _lastSubscriptionSyncTime = DateTime.now();
+
+      if (freshStatus != null) {
+        print('✅ Server subscription sync:');
+        print('   - planId: ${freshStatus.planId}');
+        print('   - isActive: ${freshStatus.isActive}');
+        print('   - currentPeriodEnd: ${freshStatus.currentPeriodEnd}');
+
+        // Determine new plan tier (free if not active or planId is 'free')
+        final newPlanTier = (freshStatus.isActive && freshStatus.planId != 'free')
+            ? freshStatus.planId
+            : 'free';
+
+        // Update plan tier if different
+        if (_planTier != newPlanTier) {
+          print('🔄 Plan tier changed: $_planTier -> $newPlanTier');
+          _previousPlanTier = _planTier;
+          _planTier = newPlanTier;
+          await _usageTracker?.updatePlanTier(_planTier);
+          _syncEmergencyUnlockWithPlanTier();
+          notifyListeners();
+        }
+
+        // Cache the status with user ID (for both free and paid users)
+        // This ensures proper cross-device sync and avoids unnecessary future API calls
+        final statusToCache = SubscriptionStatus(
+          isActive: freshStatus.isActive,
+          planId: freshStatus.planId,
+          customerId: freshStatus.customerId,
+          subscriptionId: freshStatus.subscriptionId,
+          currentPeriodEnd: freshStatus.currentPeriodEnd,
+          cachedUserId: userId,
+          cancelAtPeriodEnd: freshStatus.cancelAtPeriodEnd,
+        );
+        await _paymentService.saveSubscriptionStatus(statusToCache);
+        print('✅ Subscription status cached for user: $userId (plan: ${freshStatus.planId})');
+      } else {
+        // Server returned null - this now only happens if BOTH server failed AND cache was empty
+        // Be conservative: if user currently has a paid plan, don't downgrade based on missing data
+        if (_planTier != 'free') {
+          print('⚠️ Server returned null but user has paid plan ($_planTier) - keeping current plan');
+          print('   Not downgrading to free without explicit server confirmation');
+          // Don't update sync time since we didn't get valid data
+          return;
+        }
+
+        print('ℹ️ Server returned no subscription and no cached data - user is free tier');
+
+        // Only cache free status if user was already free (don't create a free cache entry that could block future subscriptions)
+        if (_planTier == 'free') {
+          await _paymentService.saveSubscriptionStatus(SubscriptionStatus(
+            isActive: false,
+            planId: 'free',
+            cachedUserId: userId,
+          ));
+          print('✅ Free tier status cached for user: $userId');
+        }
+      }
+    } catch (e) {
+      print('❌ Error fetching subscription from server: $e');
+      // Keep using cached data on error - don't update last sync time
+    }
   }
 
   /// Get today's usage summary
@@ -1432,6 +1618,7 @@ class PushinAppController extends ChangeNotifier {
   }
 
   /// Load cached plan tier from PaymentService on startup
+  /// Includes proactive expiry checking to ensure subscriptions don't persist past their end date
   Future<void> _loadCachedPlanTier(PaymentService paymentService) async {
     try {
       print('📦 Loading cached subscription status...');
@@ -1442,14 +1629,35 @@ class PushinAppController extends ChangeNotifier {
         print('   - planId: ${cachedStatus.planId}');
         print('   - isActive: ${cachedStatus.isActive}');
         print('   - customerId: ${cachedStatus.customerId}');
+        print('   - currentPeriodEnd: ${cachedStatus.currentPeriodEnd}');
+        print('   - cachedUserId: ${cachedStatus.cachedUserId}');
       } else {
         print('📦 No cached subscription status found');
       }
 
       if (cachedStatus != null && cachedStatus.isActive) {
-        _planTier = cachedStatus.planId;
-        _previousPlanTier = _planTier; // Initialize previous tier
-        print('✅ Loaded cached plan tier: $_planTier');
+        // CRITICAL: Validate subscription hasn't expired locally
+        final isExpired = _isSubscriptionExpired(cachedStatus);
+
+        if (isExpired) {
+          print('⚠️ Cached subscription has EXPIRED - reverting to free tier');
+          print('   - Expiry was: ${cachedStatus.currentPeriodEnd}');
+          print('   - Current time: ${DateTime.now()}');
+
+          _planTier = 'free';
+          _previousPlanTier = cachedStatus.planId; // Remember what they had
+
+          // Clear the stale cache entry
+          await paymentService.saveSubscriptionStatus(SubscriptionStatus(
+            isActive: false,
+            planId: 'free',
+            cachedUserId: cachedStatus.cachedUserId,
+          ));
+        } else {
+          _planTier = cachedStatus.planId;
+          _previousPlanTier = _planTier; // Initialize previous tier
+          print('✅ Loaded cached plan tier: $_planTier');
+        }
 
         // Also update the usage tracker with the plan tier
         await _usageTracker?.updatePlanTier(_planTier);
@@ -1470,15 +1678,45 @@ class PushinAppController extends ChangeNotifier {
     }
   }
 
+  /// Check if a subscription has expired based on currentPeriodEnd
+  /// Returns true if the subscription is past its end date
+  bool _isSubscriptionExpired(SubscriptionStatus status) {
+    if (!status.isActive) {
+      return true;
+    }
+
+    final periodEnd = status.currentPeriodEnd;
+    if (periodEnd == null) {
+      // No expiry date set - this could be a legacy cache entry
+      // In production, subscriptions should always have an end date
+      // Be conservative: don't mark as expired if we don't know
+      print('⚠️ Subscription has no expiry date - assuming valid (legacy cache)');
+      return false;
+    }
+
+    final now = DateTime.now();
+    final isExpired = now.isAfter(periodEnd);
+
+    if (isExpired) {
+      print('📅 Subscription expired: $periodEnd < $now');
+    }
+
+    return isExpired;
+  }
+
   /// Refresh plan tier from cached subscription status
   ///
   /// Call this after login/logout to ensure the UI shows the correct subscription tier
   /// Requires authenticated user - subscriptions are only available after sign up
-  Future<void> refreshPlanTier() async {
+  ///
+  /// [forceServerFetch] - If true, bypasses local cache and fetches directly from server.
+  /// Use this after login to ensure subscription persists across logout/reinstall.
+  Future<void> refreshPlanTier({bool forceServerFetch = false}) async {
     print('🔄 ═══════════════════════════════════════════════');
     print('🔄 refreshPlanTier() called');
     print('   - isAuthenticated: ${_authProvider.isAuthenticated}');
     print('   - currentUser: ${_authProvider.currentUser?.id}');
+    print('   - forceServerFetch: $forceServerFetch');
     print('🔄 ═══════════════════════════════════════════════');
 
     final paymentService = PaymentConfig.createService();
@@ -1503,6 +1741,16 @@ class PushinAppController extends ChangeNotifier {
       return;
     }
 
+    // CRITICAL: If forceServerFetch is true, skip cache and go directly to server
+    // This ensures subscriptions persist across logout/app deletion
+    if (forceServerFetch) {
+      print('🌐 FORCE SERVER FETCH: Bypassing cache to get subscription from server');
+      await _fetchAndUpdateSubscription(currentUserId.toString());
+      _syncEmergencyUnlockWithPlanTier();
+      notifyListeners();
+      return;
+    }
+
     // 2. Check Local Cache
     final cachedStatus = await paymentService.getCachedSubscriptionStatus(userId: currentUserId.toString()); // FIX: Pass userId to check specific cache first
     print(
@@ -1510,39 +1758,69 @@ class PushinAppController extends ChangeNotifier {
 
     // 3. Validate Cache - must belong to current user
     if (cachedStatus != null &&
-        cachedStatus.isActive &&
         cachedStatus.cachedUserId == currentUserId.toString()) {
-      _planTier = cachedStatus.planId;
-      _previousPlanTier = _planTier;
-      await _usageTracker?.updatePlanTier(_planTier);
-      print('✅ Restored plan from cache (user match): $_planTier');
-      notifyListeners();
-      return;
+
+      // 3a. Handle cached PAID subscription
+      if (cachedStatus.isActive && cachedStatus.planId != 'free') {
+        // Check if subscription has expired
+        if (_isSubscriptionExpired(cachedStatus)) {
+          print('⚠️ Cached subscription has expired - will fetch fresh from server');
+          // Fall through to server fetch below
+        } else {
+          _planTier = cachedStatus.planId;
+          _previousPlanTier = _planTier;
+          await _usageTracker?.updatePlanTier(_planTier);
+          print('✅ Restored PAID plan from cache (user match, not expired): $_planTier');
+          notifyListeners();
+          return;
+        }
+      }
+
+      // 3b. Handle cached FREE user status
+      // Respect cached free status to avoid unnecessary server calls
+      // The periodic sync on app resume will catch if they subscribed elsewhere
+      if (!cachedStatus.isActive || cachedStatus.planId == 'free') {
+        _planTier = 'free';
+        _previousPlanTier = 'free';
+        await _usageTracker?.updatePlanTier(_planTier);
+        print('✅ Restored FREE tier from cache (user match): $_planTier');
+        notifyListeners();
+        return;
+      }
     }
 
     // 4. Handle legacy cache with no user ID - claim it for current user
+    // This also handles subscriptions restored by email before the user logged in
     if (cachedStatus != null &&
         cachedStatus.isActive &&
         cachedStatus.cachedUserId == null) {
-      print(
-          '🔗 Linking legacy subscription (no cachedUserId) to user $currentUserId');
 
-      final claimedStatus = SubscriptionStatus(
-        isActive: cachedStatus.isActive,
-        planId: cachedStatus.planId,
-        customerId: cachedStatus.customerId,
-        subscriptionId: cachedStatus.subscriptionId,
-        currentPeriodEnd: cachedStatus.currentPeriodEnd,
-        cachedUserId: currentUserId.toString(),
-      );
+      // Validate the subscription isn't expired before claiming it
+      if (_isSubscriptionExpired(cachedStatus)) {
+        print('⚠️ Legacy subscription has expired - not claiming');
+        // Fall through to server fetch below
+      } else {
+        print(
+            '🔗 Linking legacy subscription (no cachedUserId) to user $currentUserId');
 
-      await paymentService.saveSubscriptionStatus(claimedStatus);
-      _planTier = claimedStatus.planId;
-      _previousPlanTier = _planTier;
-      await _usageTracker?.updatePlanTier(_planTier);
-      print('✅ Legacy subscription linked: $_planTier');
-      notifyListeners();
-      return;
+        final claimedStatus = SubscriptionStatus(
+          isActive: cachedStatus.isActive,
+          planId: cachedStatus.planId,
+          customerId: cachedStatus.customerId,
+          subscriptionId: cachedStatus.subscriptionId,
+          currentPeriodEnd: cachedStatus.currentPeriodEnd,
+          cachedUserId: currentUserId.toString(),
+          cancelAtPeriodEnd: cachedStatus.cancelAtPeriodEnd,
+        );
+
+        await paymentService.saveSubscriptionStatus(claimedStatus);
+        _planTier = claimedStatus.planId;
+        _previousPlanTier = _planTier;
+        await _usageTracker?.updatePlanTier(_planTier);
+        print('✅ Legacy subscription linked: $_planTier');
+        notifyListeners();
+        return;
+      }
     }
 
     // 5. Cache is missing, inactive, or belongs to different user - fetch from server
@@ -1566,10 +1844,30 @@ class PushinAppController extends ChangeNotifier {
       }
 
       if (freshStatus != null && freshStatus.isActive) {
-        _planTier = freshStatus.planId;
-        _previousPlanTier = _planTier;
+        // Validate the subscription hasn't expired
+        if (_isSubscriptionExpired(freshStatus)) {
+          print('⚠️ Server returned expired subscription - treating as free');
+          _planTier = 'free';
+          _previousPlanTier = freshStatus.planId;
+        } else {
+          _planTier = freshStatus.planId;
+          _previousPlanTier = _planTier;
+          print('✅ Server fetch success. Plan: $_planTier');
+
+          // CRITICAL: Save with user ID for cross-device persistence
+          final statusWithUserId = SubscriptionStatus(
+            isActive: freshStatus.isActive,
+            planId: freshStatus.planId,
+            customerId: freshStatus.customerId,
+            subscriptionId: freshStatus.subscriptionId,
+            currentPeriodEnd: freshStatus.currentPeriodEnd,
+            cachedUserId: currentUserId.toString(),
+            cancelAtPeriodEnd: freshStatus.cancelAtPeriodEnd,
+          );
+          await paymentService.saveSubscriptionStatus(statusWithUserId);
+          print('✅ Subscription saved to cache with userId: $currentUserId');
+        }
         await _usageTracker?.updatePlanTier(_planTier);
-        print('✅ Server fetch success. Plan: $_planTier');
       } else {
         // User is confirmed free on server
         print('ℹ️ No active subscription on server for user $currentUserId');

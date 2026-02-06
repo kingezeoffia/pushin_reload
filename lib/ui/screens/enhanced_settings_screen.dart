@@ -500,7 +500,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                       EnhancedSettingsTile(
                         icon: Icons.sync,
                         title: 'Edit Subscription',
-                        subtitle: 'Upgrade or downgrade your plan',
+                        subtitle: 'Manage billing and plan',
                         iconColor: const Color(0xFFFFEB3B), // yellow color
                         onTap: () async {
                           HapticFeedback.lightImpact();
@@ -511,7 +511,7 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                               listen: false);
                           final planTier = controller.planTier;
 
-                          // For free users, show paywall as before
+                          // For free users, show paywall to upgrade
                           if (planTier == 'free') {
                             Navigator.of(context).push(
                               PageRouteBuilder(
@@ -545,26 +545,48 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                                 listen: false);
                             final userId = authProvider.currentUser?.id;
 
+                            // Capture ScaffoldMessenger before async operations to avoid widget lifecycle issues
+                            final scaffoldMessenger = ScaffoldMessenger.of(context);
+                            final navigator = Navigator.of(context, rootNavigator: true);
+
                             if (userId != null) {
-                              // Show simple loading feedback
+                              // Show loading dialog
                               if (mounted) {
-                                try {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                          'Opening subscription management...'),
-                                      duration: Duration(seconds: 2),
+                                showDialog(
+                                  context: context,
+                                  barrierDismissible: false,
+                                  builder: (context) => Center(
+                                    child: Container(
+                                      padding: const EdgeInsets.all(24),
+                                      decoration: BoxDecoration(
+                                        color: EnhancedSettingsDesignTokens.cardDark,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const CircularProgressIndicator(
+                                            color: Color(0xFFFFEB3B),
+                                          ),
+                                          const SizedBox(height: 16),
+                                          Text(
+                                            'Opening subscription portal...',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  );
-                                } catch (e) {
-                                  debugPrint('⚠️ Error showing snackbar: $e');
-                                }
+                                  ),
+                                );
                               }
 
                               final paymentService = PaymentConfig.createService();
-                              
-                              print('🔧 EnhancedSettings: Opening portal for user: $userId');
-                              print('   - Current Plan Tier: $planTier');
+
+                              debugPrint('🔧 EnhancedSettings: Opening portal for user: $userId');
+                              debugPrint('   - Current Plan Tier: $planTier');
 
                               // Set subscription status before opening portal (handled in DeepLinkHandler)
                               // This allows us to detect changes when they return
@@ -574,16 +596,53 @@ class _EnhancedSettingsScreenState extends State<EnhancedSettingsScreen>
                                 deepLinkHandler.setSubscriptionBeforePortal(cachedStatus);
                               }
 
-                              // Open portal
-                              await paymentService.openCustomerPortal(
+                              // Open portal and handle result
+                              final success = await paymentService.openCustomerPortal(
                                 userId: userId,
                               );
+
+                              // Dismiss loading dialog
+                              if (mounted) {
+                                navigator.pop();
+                              }
+
+                              // Show error if portal failed to open
+                              if (!success && mounted) {
+                                scaffoldMessenger.showSnackBar(
+                                  SnackBar(
+                                    content: const Text(
+                                      'Unable to open subscription portal. Your subscription data may be out of sync. Please try again.',
+                                    ),
+                                    backgroundColor: EnhancedSettingsDesignTokens.dangerRed,
+                                    duration: const Duration(seconds: 4),
+                                    action: SnackBarAction(
+                                      label: 'Retry',
+                                      textColor: Colors.white,
+                                      onPressed: () async {
+                                        // Retry opening portal
+                                        final retrySuccess = await paymentService.openCustomerPortal(
+                                          userId: userId,
+                                        );
+                                        if (!retrySuccess) {
+                                          scaffoldMessenger.showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Still unable to open portal. Please check your internet connection.'),
+                                              duration: Duration(seconds: 3),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                );
+                              }
                             } else {
-                              // Fallback if no user ID (shouldn't happen for paid users normally)
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                    builder: (context) =>
-                                        const PaywallScreen()),
+                              // No user ID - user might need to sign in
+                              scaffoldMessenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Please sign in to manage your subscription.'),
+                                  duration: Duration(seconds: 3),
+                                ),
                               );
                             }
                           }

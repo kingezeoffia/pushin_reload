@@ -43,6 +43,7 @@ post_install do |installer|
     # Set minimum iOS deployment target for all pods
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+      config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
     end
   end
 
@@ -50,7 +51,10 @@ post_install do |installer|
   # This removes the -f flag from readlink in the generated framework scripts
   # because readlink on macOS (BSD) does not support -f.
   puts "Fixing readlink -f issue in Pods scripts..."
-  Dir.glob(File.join("Pods", "Target Support Files", "Pods-*", "Pods-*-frameworks.sh")).each do |f|
+  # Fix for "Command PhaseScriptExecution failed with a nonzero exit code"
+  # This patch handles the "readlink -f" issue common in Flutter iOS builds
+  puts "Fixing readlink -f issue in Pods scripts..."
+  Dir.glob(File.join("Pods", "Target Support Files", "Pods-*", "*.sh")).each do |f|
     puts "Patching #{f}"
     text = File.read(f)
     new_contents = text.gsub('source="$(readlink -f "${source}")"', 'source="$(readlink "${source}")"')

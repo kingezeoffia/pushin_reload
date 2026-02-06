@@ -9,6 +9,7 @@ import '../widgets/AppBlockOverlay.dart';
 import '../widgets/EmergencyUnlockDialog.dart';
 import '../widgets/GOStepsBackground.dart';
 import '../widgets/PressAnimationButton.dart';
+import '../widgets/screentime_report_trigger.dart';
 import 'enhanced_settings_screen.dart';
 import 'paywall/PaywallScreen.dart';
 import 'workout/RepCounterScreen.dart';
@@ -126,6 +127,9 @@ class _HomeScreenState extends State<HomeScreen>
         blackRatio: 0.28,
         child: Stack(
           children: [
+            // Invisible trigger for iOS Data Collection
+            const ScreenTimeReportTrigger(),
+
             // Main content
             Consumer<PushinAppController>(
               builder: (context, controller, _) {

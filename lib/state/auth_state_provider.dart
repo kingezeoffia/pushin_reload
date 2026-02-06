@@ -1242,6 +1242,11 @@ class AuthStateProvider extends ChangeNotifier {
       final success = await _authService.logout();
       debugPrint('🧹 _authService.logout() returned: $success');
 
+      // CRITICAL FIX: Save user ID BEFORE clearing _currentUser
+      // This ensures we can clear the user-specific subscription cache
+      final userIdToClear = _currentUser?.id;
+      debugPrint('🧹 User ID to clear subscription cache for: $userIdToClear');
+
       // Clear user state
       debugPrint('🧹 Clearing user state...');
       _currentUser = null;
@@ -1252,20 +1257,26 @@ class AuthStateProvider extends ChangeNotifier {
 
       // CRITICAL: Clear all subscription-related cached data
       // This prevents subscription data from persisting across different user accounts
+      // NOTE: This only clears LOCAL cache - subscription data remains on server
+      // and will be fetched again when user logs back in
 
-      // 1. Clear subscription cache completely using the service
-      // This removes ID, plan, status - everything.
-      // 1. Clear subscription cache manually
-      // This removes ID, plan, status - everything.
+      // 1. Clear general subscription cache
       await _prefs.remove('cached_subscription_status');
-      if (_currentUser?.id != null) {
-          await _prefs.remove('cached_subscription_status_${_currentUser!.id}');
+
+      // 2. Clear user-specific subscription cache (using saved ID)
+      if (userIdToClear != null) {
+          await _prefs.remove('cached_subscription_status_$userIdToClear');
+          debugPrint('🧹 Cleared user-specific cache for user: $userIdToClear');
       }
 
-      // 3. Clear profile image
+      // 3. Clear cached user data
+      await _prefs.remove(_currentUserKey);
+      debugPrint('🧹 Cleared cached user data');
+
+      // 5. Clear profile image
       await removeProfileImage();
 
-      // 4. CRITICAL FIX: Reset onboarding state to force user back to auth screens
+      // 6. Reset onboarding state to force user back to auth screens
       // This ensures the router shows WelcomeScreen instead of MainTabNavigation
       _isOnboardingCompleted = false;
       _onboardingStep = OnboardingStep.fitnessLevel;
@@ -1273,7 +1284,7 @@ class AuthStateProvider extends ChangeNotifier {
       await _prefs.setInt(
           _onboardingStepKey, OnboardingStep.fitnessLevel.index);
 
-      // 5. Clear guest mode state
+      // 7. Clear guest mode state
       _isGuestMode = false;
       _guestCompletedSetup = false;
       _guestSetupStep = GuestSetupStep.appsSelection;
@@ -1282,7 +1293,7 @@ class AuthStateProvider extends ChangeNotifier {
       await _prefs.setInt(
           _guestSetupStepKey, GuestSetupStep.appsSelection.index);
 
-      // 6. Clear any sign-up/sign-in screen flags
+      // 8. Clear any sign-up/sign-in screen flags
       _showSignUpScreen = false;
       _showSignInScreen = false;
 
@@ -1318,7 +1329,7 @@ class AuthStateProvider extends ChangeNotifier {
           '🔔 Calling notifyListeners() to trigger router rebuild to WelcomeScreen...');
       notifyListeners();
 
-      // 7. Notify that auth state changed so plan tier can be refreshed to 'free'
+      // 9. Notify that auth state changed so plan tier can be refreshed to 'free'
       // This is called ONCE after all state is cleared
       debugPrint(
           '🔄 Notifying PushinAppController to refresh plan tier to free...');
@@ -1399,6 +1410,7 @@ class AuthStateProvider extends ChangeNotifier {
   }
 
   /// Fetch fresh subscription status from server and update cache
+  /// Also handles linking orphaned subscriptions (from guest restore) to authenticated users
   Future<void> _fetchFreshSubscriptionStatus() async {
     if (_currentUser == null) {
       debugPrint('⚠️ _fetchFreshSubscriptionStatus called but no current user');
@@ -1414,7 +1426,11 @@ class AuthStateProvider extends ChangeNotifier {
     try {
       final paymentService = PaymentConfig.createService();
 
-      // Fetch fresh subscription status from server
+      // STEP 1: Check for orphaned subscriptions (from guest restore operations)
+      // These have no cachedUserId and should be linked to the authenticated user
+      await _linkOrphanedSubscription(paymentService);
+
+      // STEP 2: Fetch fresh subscription status from server
       final subscriptionStatus = await paymentService.checkSubscriptionStatus(
         userId: _currentUser!.id,
       );
@@ -1449,6 +1465,47 @@ class AuthStateProvider extends ChangeNotifier {
     } catch (e, stackTrace) {
       debugPrint('❌ Error fetching fresh subscription status: $e');
       debugPrint('   Stack trace: $stackTrace');
+    }
+  }
+
+  /// Link orphaned subscriptions (from guest restore) to the authenticated user
+  /// This handles the case where a guest user restores a subscription by email,
+  /// then later signs up/logs in - the subscription should be linked to their account
+  Future<void> _linkOrphanedSubscription(PaymentService paymentService) async {
+    try {
+      // Get the general cache (not user-specific)
+      final generalCache = await paymentService.getCachedSubscriptionStatus();
+
+      if (generalCache == null) {
+        return;
+      }
+
+      // Check if this is an orphaned subscription (no user ID, but active)
+      if (generalCache.isActive &&
+          generalCache.cachedUserId == null &&
+          generalCache.planId != 'free') {
+        debugPrint('🔗 Found orphaned subscription from guest restore:');
+        debugPrint('   - planId: ${generalCache.planId}');
+        debugPrint('   - customerId: ${generalCache.customerId}');
+        debugPrint('   - Linking to user: ${_currentUser!.id}');
+
+        // Link the subscription to the current user
+        final linkedStatus = SubscriptionStatus(
+          isActive: generalCache.isActive,
+          planId: generalCache.planId,
+          customerId: generalCache.customerId,
+          subscriptionId: generalCache.subscriptionId,
+          currentPeriodEnd: generalCache.currentPeriodEnd,
+          cachedUserId: _currentUser!.id, // NOW linked to authenticated user
+          cancelAtPeriodEnd: generalCache.cancelAtPeriodEnd,
+        );
+
+        await paymentService.saveSubscriptionStatus(linkedStatus);
+        debugPrint('✅ Orphaned subscription linked to user ${_currentUser!.id}');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error checking for orphaned subscription: $e');
+      // Non-fatal - continue with normal flow
     }
   }
 

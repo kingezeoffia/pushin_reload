@@ -221,13 +221,49 @@ class DeepLinkHandler {
     } else {
       // Backend verification failed, but Stripe DID redirect to success URL
       // This means the payment was successful on Stripe's side
-      // Show success screen with a fallback - backend will sync later
-      print('💳 ⚠️ Backend verification failed, creating fallback status');
+      // Attempt one retry before falling back
+      print('💳 ⚠️ Initial verification failed, attempting retry...');
+
+      // Wait a moment and retry (server might need time to process webhook)
+      await Future.delayed(const Duration(seconds: 2));
+
+      final retryStatus = await stripeService.verifyPayment(
+        sessionId: sessionId,
+        userId: effectiveUserId,
+      );
+
+      if (retryStatus != null && retryStatus.isActive) {
+        print('💳 ✅ PAYMENT VERIFIED ON RETRY!');
+        print('💳   Plan: ${retryStatus.planId}');
+        onPaymentSuccess?.call(retryStatus);
+        print('💳 ✅ onPaymentSuccess callback completed');
+        return;
+      }
+
+      // Still failed - use fallback with explicit plan ID check
+      print('💳 ⚠️ Backend verification failed after retry, creating fallback status');
       print('   - usedPlanId: $usedPlanId');
 
+      // CRITICAL: Only use fallback if we have a confirmed plan ID
+      // Do NOT default to 'pro' without confirmation - this could give wrong access
+      if (usedPlanId == null) {
+        print('💳 ❌ No plan ID available for fallback - cannot create subscription');
+        print('💳    User should check their subscription status later');
+        // Still trigger success so user sees confirmation, but with free tier
+        // This is safer than assuming they bought pro/advanced
+        final safeStatus = SubscriptionStatus(
+          isActive: false,
+          planId: 'free',
+          cachedUserId: effectiveUserId,
+        );
+        onPaymentSuccess?.call(safeStatus);
+        return;
+      }
+
+      // We have a confirmed plan ID from the checkout flow
       final fallbackStatus = SubscriptionStatus(
         isActive: true,
-        planId: usedPlanId ?? 'pro', // Use selected plan or default to pro
+        planId: usedPlanId, // Use ONLY the confirmed plan ID
         customerId: effectiveUserId,
         subscriptionId: sessionId,
         currentPeriodEnd: DateTime.now().add(const Duration(days: 30)),
@@ -237,9 +273,10 @@ class DeepLinkHandler {
       // Cache the fallback status
       await stripeService.saveSubscriptionStatus(fallbackStatus);
       print('💳 Cached fallback subscription with userId: $effectiveUserId');
+      print('💳 ⚠️ Note: This will be synced with server on next app launch');
 
       onPaymentSuccess?.call(fallbackStatus);
-      print('💳 ✅ onPaymentSuccess callback completed (with fallback)');
+      print('💳 ✅ onPaymentSuccess callback completed (with verified fallback)');
     }
   }
 

@@ -334,8 +334,17 @@ class _WorkoutCompletionScreenState extends State<WorkoutCompletionScreen>
                           child: Opacity(
                             opacity: _fadeAnimation.value,
                             child: PressAnimationButton(
-                              onTap: () {
+                              onTap: () async {
                                 HapticFeedback.mediumImpact();
+                                
+                                // Trigger rating check immediately before navigating back
+                                if (context.mounted) {
+                                  print('⭐ WorkoutCompletionScreen: Checking rating (Continue pressed)');
+                                  final s = await RatingService.create();
+                                  if (context.mounted) {
+                                    await s.checkWorkoutRating(context);
+                                  }
+                                }
                                 
                                 if (context.mounted) {
                                   // Unwind stack to WorkoutSelection (if available) or Home (for QuickStart)

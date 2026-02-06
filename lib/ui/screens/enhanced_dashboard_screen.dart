@@ -8,7 +8,6 @@ import '../widgets/workouts/stats_widgets_grid.dart';
 import '../widgets/GOStepsBackground.dart';
 import 'settings/EditNameScreen.dart';
 import 'paywall/PaywallScreen.dart';
-import '../../services/rating_service.dart';
 
 class EnhancedDashboardScreen extends StatefulWidget {
   const EnhancedDashboardScreen({super.key});
@@ -30,19 +29,8 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
   void initState() {
     super.initState();
     _initializeActivityAnimation();
-    _checkRating();
   }
 
-  Future<void> _checkRating() async {
-    // Wait a short delay to ensure UI is ready
-    await Future.delayed(const Duration(milliseconds: 1000));
-    if (mounted) {
-      final s = await RatingService.create();
-      if (mounted) {
-        await s.checkWorkoutRating(context);
-      }
-    }
-  }
 
   void _initializeActivityAnimation() {
     _activityAnimationController = AnimationController(

@@ -6,6 +6,7 @@ import '../../widgets/GOStepsBackground.dart';
 import '../../widgets/PressAnimationButton.dart';
 
 import 'package:pushin_reload/services/ios_rating_service.dart';
+import 'package:pushin_reload/services/rating_service.dart';
 
 /// Rating Screen - Prompts users to rate the app
 ///
@@ -204,7 +205,7 @@ class _RatingScreenState extends State<RatingScreen> {
                     name: 'Nguyen T.',
                     imageAsset: 'assets/images/reviews/IMG_2731.png',
                     review: 'Great concept. This might be a game changer for me!',
-                    stars: 4.5,
+                    stars: 5,
                     avatarColor: Color(0xFFA7F3D0),
                   ),
                   const _ReviewCard(
@@ -289,6 +290,10 @@ class _RatingScreenState extends State<RatingScreen> {
   void _handleSkip() async {
     HapticFeedback.mediumImpact();
     // Don't mark as rated so the prompt shows again later
+    // But do mark as prompted so we don't ask again immediately
+    final s = await RatingService.create();
+    await s.markAsPrompted();
+    
     widget.onContinue();
   }
 

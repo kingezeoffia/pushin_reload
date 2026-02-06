@@ -56,8 +56,19 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid>
   late PushinAppController _controller;
 
   // Screen time data
-  double _totalScreenTimeMinutes = 319.0; // Default 5.3167 hours (5h 19min)
+  // Screen time data
+  double _totalScreenTimeMinutes = 0;
   List<AppUsageInfo> _mostUsedApps = [];
+  
+  // Mock data for non-advanced users (Teaser)
+  final double _mockTotalMinutes = 319.0; // 5h 19m
+  final List<AppUsageInfo> _mockMostUsedApps = [
+    AppUsageInfo(name: 'Instagram', usageMinutes: 150, bundleId: 'com.instagram.app'),
+    AppUsageInfo(name: 'YouTube', usageMinutes: 108, bundleId: 'com.google.ios.youtube'),
+    AppUsageInfo(name: 'TikTok', usageMinutes: 72, bundleId: 'com.zhiliaoapp.musically'),
+    AppUsageInfo(name: 'Facebook', usageMinutes: 68, bundleId: 'com.facebook.facebook'),
+  ];
+
   bool _screenTimeLoading = true;
   bool _screenTimeIsMockData = false;
 
@@ -309,7 +320,8 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid>
                         ),
                       )
                     : MostUsedAppsWidget(
-                        apps: (_mostUsedApps.toList()
+                        apps: ((isAdvanced ? _mostUsedApps : _mockMostUsedApps)
+                                .toList()
                               ..sort((a, b) =>
                                   b.usageHours.compareTo(a.usageHours)))
                             .map((app) {
@@ -345,7 +357,7 @@ class _StatsWidgetsGridState extends State<StatsWidgetsGrid>
                         ),
                       )
                     : ScreentimeWidget(
-                        hoursUsed: _totalScreenTimeMinutes / 60.0,
+                        hoursUsed: (isAdvanced ? _totalScreenTimeMinutes : _mockTotalMinutes) / 60.0,
                         dailyLimit: 8.0,
                         compact: isSmallScreen,
                       ),
@@ -863,7 +875,7 @@ class _MostUsedAppsWidgetState extends State<MostUsedAppsWidget>
         ),
         const SizedBox(width: 10),
         const Text(
-          'Most Used Apps (soon)',
+          'Most Used Apps',
           style: TextStyle(
             color: Colors.white,
             fontSize: 15,

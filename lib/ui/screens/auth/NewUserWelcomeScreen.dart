@@ -135,7 +135,7 @@ class NewUserWelcomeScreen extends StatelessWidget {
                         const SizedBox(height: 16),
                         _RuleItem(
                           icon: Icons.emergency,
-                          title: 'Emergency Access',
+                          title: 'Emergency Unlock',
                           description:
                               'Three unlocks per day when you need them',
                         ),

@@ -35,3 +35,6 @@ Thumbs.db
 # Local setup
 .local_cache/
 .local_cocoapods/
+
+# Logs
+*.log

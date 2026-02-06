@@ -63,9 +63,11 @@ void main() async {
     });
 
     // Set up callback to refresh plan tier when auth state changes
+    // CRITICAL: forceServerFetch ensures subscription persists across logout/app deletion
+    // This fetches directly from the server instead of relying on local cache
     authProvider.onAuthStateChanged = () async {
-      debugPrint('🔄 Auth state changed - refreshing plan tier');
-      await pushinController.refreshPlanTier();
+      debugPrint('🔄 Auth state changed - refreshing plan tier from SERVER');
+      await pushinController.refreshPlanTier(forceServerFetch: true);
     };
 
     debugPrint('✅ All providers initialized');

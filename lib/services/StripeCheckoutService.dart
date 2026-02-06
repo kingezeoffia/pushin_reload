@@ -173,20 +173,39 @@ class StripeCheckoutService implements PaymentService {
   }
 
   /// Check subscription status from backend
+  ///
+  /// PRODUCTION NOTES:
+  /// - This method is CRITICAL for subscription persistence across logout/reinstall
+  /// - It fetches the subscription from the server (PostgreSQL + Stripe)
+  /// - Falls back to cache on network errors to prevent false "free" status
+  /// - The userId is used as a path parameter: /subscription-status/{userId}
   @override
   Future<SubscriptionStatus?> checkSubscriptionStatus({
     required String userId,
   }) async {
+    print('🔍 ═══════════════════════════════════════════════');
+    print('🔍 checkSubscriptionStatus() called');
+    print('   - userId: $userId');
+    print('   - baseUrl: $baseUrl');
+    print('   - isTestMode: $isTestMode');
+    print('🔍 ═══════════════════════════════════════════════');
+
     if (isTestMode && !baseUrl.contains('railway.app')) {
        // Return cached status in mock/test mode
+       print('🧪 Test mode - returning cached status');
        return await getCachedSubscriptionStatus(userId: userId);
     }
-    
+
     try {
-      // Use configured backend URL
+      // Use configured backend URL with userId as path parameter
+      final url = '$baseUrl/stripe/subscription-status/$userId';
+      print('📡 Fetching from server: $url');
+
       final response = await http.get(
-        Uri.parse('$baseUrl/stripe/subscription-status/$userId'),
-      ).timeout(const Duration(seconds: 10));
+        Uri.parse(url),
+      ).timeout(const Duration(seconds: 15)); // Increased timeout for reliability
+
+      print('📡 Server response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -195,29 +214,56 @@ class StripeCheckoutService implements PaymentService {
           planId: data['planId'] ?? 'free',
           customerId: data['customerId'],
           subscriptionId: data['subscriptionId'],
-          currentPeriodEnd: data['currentPeriodEnd'] != null 
-              ? DateTime.parse(data['currentPeriodEnd']) 
+          currentPeriodEnd: data['currentPeriodEnd'] != null
+              ? DateTime.parse(data['currentPeriodEnd'])
               : null,
           cachedUserId: userId,
           cancelAtPeriodEnd: data['cancelAtPeriodEnd'] ?? false,
         );
 
-        print('📡 Server Subscription Status Detail:');
+        print('✅ Server returned subscription:');
         print('   - isActive: ${status.isActive}');
         print('   - planId: ${status.planId}');
+        print('   - subscriptionId: ${status.subscriptionId}');
         print('   - expiry: ${status.currentPeriodEnd}');
         print('   - cancelAtPeriodEnd: ${status.cancelAtPeriodEnd}');
-        
-        // Update cache
+
+        // CRITICAL: Always save to cache with userId for persistence
         await saveSubscriptionStatus(status);
+        print('✅ Subscription cached for user: $userId');
+
         return status;
+      } else if (response.statusCode == 404) {
+        // 404 typically means no subscription found - this is a valid "free" response
+        print('ℹ️ No subscription found on server (404) - user is on free tier');
+        final freeStatus = SubscriptionStatus(
+          isActive: false,
+          planId: 'free',
+          cachedUserId: userId,
+        );
+        await saveSubscriptionStatus(freeStatus);
+        return freeStatus;
+      } else {
+        // Server returned non-200/404 response - fall back to cache to preserve valid subscriptions
+        print('⚠️ Server returned unexpected status: ${response.statusCode}');
+        print('   Response body: ${response.body}');
+        print('   Falling back to cached subscription status');
+        return await getCachedSubscriptionStatus(userId: userId);
       }
+    } on TimeoutException catch (e) {
+      print('⏱️ Timeout fetching subscription status: $e');
+      print('   Falling back to cached subscription status');
+      return await getCachedSubscriptionStatus(userId: userId);
+    } on http.ClientException catch (e) {
+      print('🌐 Network error fetching subscription status: $e');
+      print('   Falling back to cached subscription status');
+      return await getCachedSubscriptionStatus(userId: userId);
     } catch (e) {
-      print('Error checking subscription status: $e');
-      // Fallback to cache on error
+      print('❌ Error checking subscription status: $e');
+      print('   Falling back to cached subscription status');
+      // Fallback to cache on any error
       return await getCachedSubscriptionStatus(userId: userId);
     }
-    return null;
   }
 
   @override
@@ -279,10 +325,15 @@ class StripeCheckoutService implements PaymentService {
   }
   
   /// Save subscription status to local cache (PUBLIC)
+  ///
+  /// PRODUCTION NOTES:
+  /// - This caches subscription status locally for offline access and fast startup
+  /// - Always caches both general and user-specific versions
+  /// - The user-specific cache ensures subscriptions persist across logout/login
   Future<void> saveSubscriptionStatus(SubscriptionStatus status) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Serialize status to JSON
       final jsonMap = {
         'isActive': status.isActive,
@@ -293,13 +344,25 @@ class StripeCheckoutService implements PaymentService {
         'cachedUserId': status.cachedUserId,
         'cancelAtPeriodEnd': status.cancelAtPeriodEnd,
       };
-      
-      await prefs.setString('cached_subscription_status', jsonEncode(jsonMap));
-      print('✅ StripeCheckoutService: Saved subscription status to cache (${status.planId})');
-      
-      // Also cache specifically for this user if userId is available
+
+      final jsonStr = jsonEncode(jsonMap);
+
+      // Save to general cache (for backwards compatibility and quick access)
+      await prefs.setString('cached_subscription_status', jsonStr);
+
+      // CRITICAL: Also cache specifically for this user if userId is available
+      // This ensures subscription persists across logout/login cycles
       if (status.cachedUserId != null) {
-         await prefs.setString('cached_subscription_status_${status.cachedUserId}', jsonEncode(jsonMap));
+         await prefs.setString('cached_subscription_status_${status.cachedUserId}', jsonStr);
+         print('💾 Subscription cached:');
+         print('   - userId: ${status.cachedUserId}');
+         print('   - planId: ${status.planId}');
+         print('   - isActive: ${status.isActive}');
+         print('   - expiry: ${status.currentPeriodEnd}');
+      } else {
+         print('💾 Subscription cached (general, no userId):');
+         print('   - planId: ${status.planId}');
+         print('   - isActive: ${status.isActive}');
       }
     } catch (e) {
       print('❌ StripeCheckoutService: Error saving subscription cache: $e');
@@ -482,7 +545,7 @@ class StripeCheckoutService implements PaymentService {
 
     try {
       print('🔵 StripeCheckoutService: Opening customer portal for $userId');
-      
+
       final response = await http.post(
         Uri.parse('$baseUrl/stripe/create-portal-session'),
         headers: {'Content-Type': 'application/json'},
@@ -498,18 +561,47 @@ class StripeCheckoutService implements PaymentService {
         final data = jsonDecode(response.body);
         // Backend might return 'portalUrl' or just 'url'
         final url = (data['portalUrl'] ?? data['url']) as String?; // Safe nullable cast
-        
+
         if (url != null) {
           final uri = Uri.parse(url);
           print('🔵 StripeCheckoutService: Launching portal URL: $url');
           print('   - LaunchMode: externalApplication (Platform browser)');
-          
+
           if (await canLaunchUrl(uri)) {
              await launchUrl(uri, mode: LaunchMode.externalApplication);
              return true;
           }
         } else {
           print('❌ StripeCheckoutService: "portalUrl" is missing or null in response');
+        }
+      } else if (response.statusCode == 500 || response.statusCode == 404) {
+        // Handle "No such customer" or customer not found errors
+        try {
+          final errorData = jsonDecode(response.body);
+          final errorMessage = errorData['error'] as String? ?? '';
+
+          if (errorMessage.contains('No such customer') ||
+              errorMessage.contains('customer') ||
+              response.statusCode == 404) {
+            print('⚠️ StripeCheckoutService: Customer not found in Stripe');
+            print('   Clearing invalid cached subscription and refreshing...');
+
+            // Clear the invalid cached subscription data
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.remove('cached_subscription_status');
+            await prefs.remove('cached_subscription_status_$userId');
+
+            // Try to refresh subscription status from server
+            // This will either confirm free tier or find a valid subscription
+            final refreshedStatus = await checkSubscriptionStatus(userId: userId);
+            print('🔄 Refreshed subscription status: ${refreshedStatus?.planId ?? 'free'}');
+
+            // Return false to indicate portal couldn't open
+            // The UI should handle this by showing an appropriate message
+            return false;
+          }
+        } catch (parseError) {
+          print('❌ Error parsing error response: $parseError');
         }
       }
     } catch (e) {

@@ -125,6 +125,9 @@ class NativeLiquidGlassView: NSObject, FlutterPlatformView {
   /// Track if native liquid glass plugin has been registered
   private var nativeLiquidGlassRegistered = false
 
+  /// Track if screen time report factory has been registered
+  private var screenTimeReportFactoryRegistered = false
+
   /// Find Flutter view controller recursively (handles Mac Catalyst nested hierarchy)
   private func findFlutterViewController(in viewController: UIViewController?) -> FlutterViewController? {
     guard let vc = viewController else { return nil }
@@ -200,6 +203,9 @@ class NativeLiquidGlassView: NSObject, FlutterPlatformView {
 
       // Initialize Rating platform channel
       self.setupRatingChannel(controller: flutterController)
+
+      // Initialize Screen Time Report Factory (Native View for Data Trigger)
+      self.setupScreenTimeReportFactory(controller: flutterController)
 
       self.platformChannelsSetup = true
       print("📱 PUSHIN - Screen Time, iOS Settings, Native Liquid Glass, and Rating integration active")
@@ -419,6 +425,27 @@ class NativeLiquidGlassView: NSObject, FlutterPlatformView {
     }
 
     print("✨ Rating method channel registered")
+  }
+
+  private func setupScreenTimeReportFactory(controller: FlutterViewController? = nil) {
+    // Prevent duplicate registration
+    guard !screenTimeReportFactoryRegistered else {
+      print("⚠️ Screen Time Report Factory already registered, skipping duplicate registration")
+      return
+    }
+
+    let flutterController = controller ?? findFlutterViewController(in: window?.rootViewController)
+    guard let controller = flutterController else {
+        return
+    }
+
+    let factory = ScreenTimeReportFactory(messenger: controller.binaryMessenger)
+    controller.registrar(forPlugin: "com.pushin.screentime_report")?.register(factory, withId: "com.pushin.screentime_report")
+    
+    // Mark as registered to prevent duplicates
+    screenTimeReportFactoryRegistered = true
+
+    print("✨ Screen Time Report Factory registered")
   }
 
   // MARK: - UNUserNotificationCenterDelegate

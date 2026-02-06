@@ -774,33 +774,36 @@ class _PaywallScreenState extends State<PaywallScreen>
                               ),
                             ),
 
-                          // Free Version Card
-                          _PlanCard(
-                            planName: 'Free',
-                            monthlyPrice: '0 €',
-                            yearlyPrice: '0 €',
-                            isYearly: _billingPeriod == 'yearly',
-                            features: const [
-                              '3 hours of app blocking per day',
-                              '1 workout',
-                              'Basic Progress Tracking',
-                            ],
-                            isSelected: _selectedPlan == 'free',
-                            isPopular: false,
-                            isCurrentPlan:
-                                _currentSubscriptionPlan == 'free' || _currentSubscriptionPlan == null,
-                            onTap: _isInitializingPlan
-                                ? null
-                                : () {
-                                    HapticFeedback.lightImpact();
-                                    setState(() {
-                                      _selectedPlan = 'free';
-                                      _hasUserManuallySelectedPlan = true;
-                                    });
-                                  },
-                          ),
-
-                          const SizedBox(height: 16),
+                          // Free Version Card - ONLY show for Free users or non-subscribers
+                          if (_currentSubscriptionPlan == 'free' ||
+                              _currentSubscriptionPlan == null) ...[
+                            _PlanCard(
+                              planName: 'Free',
+                              monthlyPrice: '0 €',
+                              yearlyPrice: '0 €',
+                              isYearly: _billingPeriod == 'yearly',
+                              features: const [
+                                '3 hours of app blocking per day',
+                                '1 workout',
+                                'Basic Progress Tracking',
+                              ],
+                              isSelected: _selectedPlan == 'free',
+                              isPopular: false,
+                              isCurrentPlan:
+                                  _currentSubscriptionPlan == 'free' ||
+                                      _currentSubscriptionPlan == null,
+                              onTap: _isInitializingPlan
+                                  ? null
+                                  : () {
+                                      HapticFeedback.lightImpact();
+                                      setState(() {
+                                        _selectedPlan = 'free';
+                                        _hasUserManuallySelectedPlan = true;
+                                      });
+                                    },
+                            ),
+                            const SizedBox(height: 16),
+                          ],
 
                           // Plan Cards
                           _PlanCard(
@@ -938,9 +941,11 @@ class _PaywallScreenState extends State<PaywallScreen>
                     isCurrentPlan: _selectedPlan == _currentSubscriptionPlan,
                     onTap: _isInitializingPlan
                         ? null
-                        : () => _selectedPlan == _currentSubscriptionPlan
-                            ? _handleManageSubscription()
-                            : _handleSubscribe(context),
+                        : () => (_selectedPlan == 'free')
+                            ? _skipTrial() // Direct skip for free plan
+                            : _selectedPlan == _currentSubscriptionPlan
+                                ? _handleManageSubscription()
+                                : _handleSubscribe(context),
                   ),
                   const SizedBox(height: 12),
                   GestureDetector(
@@ -2045,12 +2050,12 @@ class _StartTrialButton extends StatelessWidget {
                     strokeWidth: 2,
                   ),
                 )
-              : Text(
-                  isCurrentPlan
-                      ? 'Manage Subscription'
-                      : planName == 'free'
-                          ? 'Continue for Free'
-                          : 'Start Free Trial — ${planName.toUpperCase()}',
+                : Text(
+                    planName == 'free'
+                        ? 'Continue with Free Plan'
+                        : isCurrentPlan
+                            ? 'Manage Subscription'
+                            : 'Start Free Trial — ${planName.toUpperCase()}',
                   style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
